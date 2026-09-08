@@ -5,10 +5,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   CircleDollarSign,
-  Plus,
   ShoppingBag,
-  TrendingDown,
-  TrendingUp,
   Users,
   Utensils,
   Wallet,
@@ -27,7 +24,6 @@ import { cn } from '@/lib/utils';
 import { OnboardingTour } from '@/components/onboarding-tour';
 import { DashboardFab } from '@/components/dashboard-fab';
 import { format } from 'date-fns';
-import { useAuth } from '@/lib/auth-context';
 import { Link } from 'wouter';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { DashboardAnalytics } from '@/components/dashboard-analytics';
@@ -168,77 +164,36 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
 }
 
 export default function Dashboard() {
-  const { stats, members, mealLogs, getMemberStats } = useMeal();
+  const { stats, members, mealLogs } = useMeal();
   const [openExpense, setOpenExpense] = useState(false);
   const [openMeal, setOpenMeal] = useState(false);
-  const { canManageExpenses, canOperateMeals } = useAuth();
 
   const totalSpent = stats.totalMealExpenses + stats.totalFixedExpenses;
   const spentPct = stats.totalDeposits > 0 ? Math.min(100, Math.round((totalSpent / stats.totalDeposits) * 100)) : 0;
   const mealPct = totalSpent > 0 ? Math.round((stats.totalMealExpenses / totalSpent) * 100) : 0;
   const fixedPct = totalSpent > 0 ? 100 - mealPct : 0;
 
-  // Member balance snapshot
-  const memberBalances = members.map((m) => getMemberStats(m.id).balance);
-  const membersWithDue = memberBalances.filter((b) => b < 0).length;
-  const totalDueAmount = memberBalances.filter((b) => b < 0).reduce((sum, b) => sum + Math.abs(b), 0);
-  const membersWithSurplus = memberBalances.filter((b) => b > 0).length;
-
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-5 pb-24">
       <OnboardingTour />
-
-      {/* Top Quick Actions Bar (Desktop / Tablet) */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Mess Overview
-          </h1>
-          <p className="text-xs text-muted-foreground sm:text-sm">
-            Live financial liquidity, meal metrics, and cost breakdown
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {canManageExpenses && (
-            <Button
-              size="sm"
-              onClick={() => setOpenExpense(true)}
-              className="h-9 gap-1.5 font-medium shadow-xs"
-            >
-              <Plus className="h-4 w-4" /> Add Expense
-            </Button>
-          )}
-          {canOperateMeals && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setOpenMeal(true)}
-              className="h-9 gap-1.5 font-medium shadow-xs"
-            >
-              <Utensils className="h-4 w-4" /> Log Meals
-            </Button>
-          )}
-        </div>
-      </div>
 
       {/* Primary Financial & Meal Command Center */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Hero Card: Cash Liquidity & Fund Utilization */}
-        <Card className="relative overflow-hidden border-none bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-xl lg:col-span-2">
+        <Card className="relative overflow-hidden border-none bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-lg lg:col-span-2">
           {/* Subtle decorative background blur glow */}
-          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 h-56 w-56 rounded-full bg-teal-400/10 blur-2xl" />
+          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-teal-400/10 blur-2xl" />
 
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-1 pt-4 px-4 sm:px-5">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-100/90">
-                <Wallet className="h-4 w-4 text-emerald-200" />
+              <CardTitle className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-100/90">
+                <Wallet className="h-3.5 w-3.5 text-emerald-200" />
                 Remaining Cash in Hand
               </CardTitle>
               <span
                 className={cn(
-                  'rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide backdrop-blur-md',
+                  'rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md',
                   stats.remainingCash >= 0
                     ? 'bg-emerald-400/20 text-emerald-100 border border-emerald-300/30'
                     : 'bg-rose-500/30 text-rose-100 border border-rose-400/40'
@@ -249,25 +204,23 @@ export default function Dashboard() {
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
-              <div className="flex items-baseline gap-2">
-                <span className="font-heading text-4xl font-extrabold tracking-tight md:text-5xl">
-                  {formatCurrency(stats.remainingCash)}
-                </span>
-              </div>
+          <CardContent className="space-y-2.5 px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-1">
+              <span className="font-heading text-3xl font-extrabold tracking-tight sm:text-4xl">
+                {formatCurrency(stats.remainingCash)}
+              </span>
               <p className="text-xs text-emerald-100/80 font-medium">
-                of <strong className="text-white font-bold">{formatCurrency(stats.totalDeposits)}</strong> collected deposits
+                of <strong className="text-white font-bold">{formatCurrency(stats.totalDeposits)}</strong> collected
               </p>
             </div>
 
             {/* Fund deployment progress bar */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-[11px] text-emerald-100/80 font-medium">
-                <span>Funds Deployed: {formatCurrency(totalSpent)}</span>
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-emerald-100/80 font-medium">
+                <span>Deployed: {formatCurrency(totalSpent)}</span>
                 <span>{spentPct}% utilized</span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-black/20 backdrop-blur-xs">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/25 backdrop-blur-xs">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-emerald-200 to-teal-100 transition-all duration-700"
                   style={{ width: `${spentPct}%` }}
@@ -276,27 +229,27 @@ export default function Dashboard() {
             </div>
 
             {/* Breakdown Sub-boxes */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
+            <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+              <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-100">Meal Cost</p>
-                  <span className="rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Meal Cost</p>
+                  <span className="rounded-md bg-emerald-400/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-100">
                     {mealPct}%
                   </span>
                 </div>
-                <p className="mt-1 font-heading text-xl font-bold tracking-tight text-white">
+                <p className="mt-0.5 font-heading text-lg font-bold tracking-tight text-white">
                   {formatCurrency(stats.totalMealExpenses)}
                 </p>
               </div>
 
-              <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
+              <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-100">Fixed Cost</p>
-                  <span className="rounded-md bg-purple-400/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Fixed Cost</p>
+                  <span className="rounded-md bg-purple-400/20 px-1.5 py-0.2 text-[9px] font-bold text-purple-100">
                     {fixedPct}%
                   </span>
                 </div>
-                <p className="mt-1 font-heading text-xl font-bold tracking-tight text-white">
+                <p className="mt-0.5 font-heading text-lg font-bold tracking-tight text-white">
                   {formatCurrency(stats.totalFixedExpenses)}
                 </p>
               </div>
@@ -306,29 +259,24 @@ export default function Dashboard() {
 
         {/* Card 2: Meal Economy & Consumption */}
         <Card className="glass-card border border-border/70 shadow-sm flex flex-col justify-between">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4 sm:px-5">
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Current Meal Rate
             </CardTitle>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Utensils className="h-4 w-4" />
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Utensils className="h-3.5 w-3.5" />
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-4">
-            <div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-heading text-3xl font-extrabold text-foreground md:text-4xl">
-                  {formatCurrency(stats.currentMealRate)}
-                </span>
-                <span className="text-xs text-muted-foreground font-medium">/ meal</span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Blended effective cost per meal for this active cycle
-              </p>
+          <CardContent className="space-y-3 px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-heading text-3xl font-extrabold text-foreground sm:text-4xl">
+                {formatCurrency(stats.currentMealRate)}
+              </span>
+              <span className="text-xs text-muted-foreground font-medium">/ meal</span>
             </div>
 
-            <div className="space-y-2.5 border-t pt-3.5 text-xs">
+            <div className="space-y-2 border-t pt-2.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
                   <Utensils className="h-3.5 w-3.5 text-emerald-500" /> Total Meals:
@@ -356,27 +304,6 @@ export default function Dashboard() {
               </div>
             </div>
           </CardContent>
-
-          {/* Member Balance Health Mini-Strip */}
-          <div className="border-t bg-muted/25 px-4 py-2.5 text-[11px] rounded-b-xl flex items-center justify-between">
-            <span className="text-muted-foreground">
-              {membersWithDue > 0 ? (
-                <strong className="text-amber-600 dark:text-amber-400 font-semibold">
-                  {membersWithDue} member{membersWithDue === 1 ? '' : 's'} owe {formatCurrency(totalDueAmount)}
-                </strong>
-              ) : (
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                  All accounts settled / up to date
-                </span>
-              )}
-            </span>
-            <Link
-              href="/app/members"
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground underline underline-offset-2"
-            >
-              Details
-            </Link>
-          </div>
         </Card>
       </section>
 

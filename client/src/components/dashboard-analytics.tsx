@@ -17,7 +17,6 @@ import {
   YAxis,
 } from 'recharts';
 import {
-  ArrowUpRight,
   BarChart3,
   Calendar,
   CheckCircle2,
@@ -31,8 +30,6 @@ import {
   Utensils,
   Wallet,
 } from 'lucide-react';
-import { Link } from 'wouter';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useMeal, type CycleDeposit, type Expense, type MealLog } from '@/lib/meal-context';
@@ -405,12 +402,6 @@ export function DashboardAnalytics() {
               <CircleDollarSign className="mr-1 h-3 w-3" /> Cash
             </ToggleGroupItem>
           </ToggleGroup>
-
-          <Button variant="outline" size="sm" asChild className="h-8 gap-1.5 text-xs">
-            <Link href="/app/reports">
-              Reports <ArrowUpRight className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
         </div>
       </div>
 
