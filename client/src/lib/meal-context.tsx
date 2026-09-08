@@ -116,6 +116,7 @@ export interface CycleDetails {
 interface MealContextType {
   members: Member[];
   expenses: Expense[];
+  deposits: CycleDeposit[];
   mealLogs: MealLog[];
   cycles: Cycle[];
   activeCycleChangelogEntries: ChangelogEntry[];
@@ -2113,6 +2114,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       value={{
         members,
         expenses,
+        deposits: activeDetails?.deposits ?? [],
         mealLogs,
         cycles,
         activeCycleChangelogEntries,

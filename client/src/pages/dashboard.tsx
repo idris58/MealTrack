@@ -2,46 +2,40 @@ import { useMeal } from '@/lib/meal-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  Archive,
+  ArrowUpRight,
   CalendarDays,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  Loader2,
-  Pencil,
-  RefreshCcw,
+  CircleDollarSign,
+  Plus,
   ShoppingBag,
-  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Users,
   Utensils,
   Wallet,
-  X,
-  AlertTriangle,
-  Play,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { OnboardingTour } from '@/components/onboarding-tour';
 import { DashboardFab } from '@/components/dashboard-fab';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { useAuth } from '@/lib/auth-context';
 import { Link } from 'wouter';
 import { MealCountEditor } from '@/components/meal-count-editor';
+import { DashboardAnalytics } from '@/components/dashboard-analytics';
 
 const expenseSchema = z.object({
   amount: z.preprocess(
-    (value) => value === '' ? undefined : value,
-    z.coerce.number({ invalid_type_error: 'Amount is required' }).positive('Amount must be greater than zero'),
+    (value) => (value === '' ? undefined : value),
+    z.coerce.number({ invalid_type_error: 'Amount is required' }).positive('Amount must be greater than zero')
   ),
   description: z.string().min(2, 'Description is required'),
   type: z.enum(['meal', 'fixed']),
@@ -54,7 +48,7 @@ function formatMealCount(value: number) {
 }
 
 function formatCurrency(amount: number) {
-  return `৳${amount.toFixed(0)}`;
+  return `৳${amount.toFixed(2)}`;
 }
 
 function QuickAddExpense({ onClose }: { onClose: () => void }) {
@@ -79,7 +73,7 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
         <FormField
           control={form.control}
           name="type"
@@ -87,10 +81,14 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
             <FormItem>
               <FormLabel>Expense Type</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                </FormControl>
                 <SelectContent>
-                  <SelectItem value="meal">Meal (Grocery/Food)</SelectItem>
-                  <SelectItem value="fixed">Fixed (Bills/Utilities)</SelectItem>
+                  <SelectItem value="meal">Meal (Grocery / Food)</SelectItem>
+                  <SelectItem value="fixed">Fixed (Bills / Utilities)</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -103,7 +101,9 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Description</FormLabel>
-              <FormControl><Input placeholder="e.g., Rice, WiFi Bill" {...field} /></FormControl>
+              <FormControl>
+                <Input placeholder="e.g., Grocery Shopping, WiFi Bill" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -112,7 +112,10 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
           <label className="text-sm font-medium">Date</label>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className={cn('w-full justify-start py-2 text-left text-sm font-normal', !date && 'text-muted-foreground')}>
+              <Button
+                variant="outline"
+                className={cn('w-full justify-start py-2 text-left text-sm font-normal', !date && 'text-muted-foreground')}
+              >
                 <CalendarDays className="mr-2 h-4 w-4" />
                 {date ? format(date, 'PPP') : <span>Pick a date</span>}
               </Button>
@@ -121,7 +124,9 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
               <Calendar
                 mode="single"
                 selected={date}
-                onSelect={(d) => { if (d) { setDate(d); } }}
+                onSelect={(d) => {
+                  if (d) setDate(d);
+                }}
                 initialFocus
                 className="p-3"
               />
@@ -134,7 +139,9 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Amount (৳)</FormLabel>
-              <FormControl><Input type="number" step="0.01" placeholder="0.00" {...field} /></FormControl>
+              <FormControl>
+                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -145,476 +152,238 @@ function QuickAddExpense({ onClose }: { onClose: () => void }) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Who Shopped?</FormLabel>
-              <FormControl><Input placeholder="Shopper's Name" {...field} /></FormControl>
+              <FormControl>
+                <Input placeholder="Shopper's Name" {...field} />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Adding...' : 'Add Expense'}
+        <Button type="submit" className="w-full font-semibold" disabled={isSubmitting}>
+          {isSubmitting ? 'Recording Expense...' : 'Add Expense'}
         </Button>
       </form>
     </Form>
   );
 }
 
-// ── Active Cycle Banner ──────────────────────────────────────────────────────
+export default function Dashboard() {
+  const { stats, members, mealLogs, getMemberStats } = useMeal();
+  const [openExpense, setOpenExpense] = useState(false);
+  const [openMeal, setOpenMeal] = useState(false);
+  const { canManageExpenses, canOperateMeals } = useAuth();
 
-function ActiveCycleBanner() {
-  const { activeCycle, pendingCycle, stats, members, closeActiveCycle, renameActiveCycle } = useMeal();
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState('');
-  const [isSavingName, setIsSavingName] = useState(false);
-  const [closeStep, setCloseStep] = useState<0 | 1 | 2>(0); // 0=closed, 1=review, 2=confirm
-  const [isClosing, setIsClosing] = useState(false);
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-  const renameInputRef = useRef<HTMLInputElement>(null);
+  const totalSpent = stats.totalMealExpenses + stats.totalFixedExpenses;
+  const spentPct = stats.totalDeposits > 0 ? Math.min(100, Math.round((totalSpent / stats.totalDeposits) * 100)) : 0;
+  const mealPct = totalSpent > 0 ? Math.round((stats.totalMealExpenses / totalSpent) * 100) : 0;
+  const fixedPct = totalSpent > 0 ? 100 - mealPct : 0;
 
-  const startRename = () => {
-    setRenameValue(activeCycle?.name ?? '');
-    setIsRenaming(true);
-    setTimeout(() => renameInputRef.current?.select(), 50);
-  };
-
-  const cancelRename = () => {
-    setIsRenaming(false);
-    setRenameValue('');
-  };
-
-  const saveRename = async () => {
-    if (!renameValue.trim() || renameValue.trim() === activeCycle?.name) {
-      cancelRename();
-      return;
-    }
-    setIsSavingName(true);
-    try {
-      await renameActiveCycle(renameValue.trim());
-      setIsRenaming(false);
-    } finally {
-      setIsSavingName(false);
-    }
-  };
-
-  const handleCloseConfirm = async () => {
-    setIsClosing(true);
-    try {
-      await closeActiveCycle();
-      setCloseDialogOpen(false);
-      setCloseStep(0);
-    } finally {
-      setIsClosing(false);
-    }
-  };
-
-  if (!activeCycle) return null;
-
-  const startedAt = new Date(activeCycle.startedAt);
-  const durationLabel = formatDistanceToNow(startedAt, { addSuffix: false });
+  // Member balance snapshot
+  const memberBalances = members.map((m) => getMemberStats(m.id).balance);
+  const membersWithDue = memberBalances.filter((b) => b < 0).length;
+  const totalDueAmount = memberBalances.filter((b) => b < 0).reduce((sum, b) => sum + Math.abs(b), 0);
+  const membersWithSurplus = memberBalances.filter((b) => b > 0).length;
 
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-      {/* Header bar */}
-      <div className="flex items-center justify-between gap-3 border-b bg-emerald-500/5 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-          </span>
-          <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-            Active Cycle
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          {durationLabel} · Started {format(startedAt, 'MMM d')}
-        </div>
-      </div>
+    <div className="space-y-6 pb-24">
+      <OnboardingTour />
 
-      {/* Cycle name + inline rename */}
-      <div className="flex items-center gap-3 px-4 py-3">
-        {isRenaming ? (
-          <div className="flex flex-1 items-center gap-2">
-            <Input
-              ref={renameInputRef}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveRename();
-                if (e.key === 'Escape') cancelRename();
-              }}
-              className="h-8 text-base font-semibold"
-              disabled={isSavingName}
-            />
-            <Button size="sm" className="h-8 shrink-0" onClick={() => void saveRename()} disabled={isSavingName}>
-              {isSavingName ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-8 shrink-0" onClick={cancelRename} disabled={isSavingName}>
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-1 items-center gap-2 min-w-0">
-            <h2 className="truncate text-lg font-bold">{activeCycle.name}</h2>
-            <button
-              type="button"
-              onClick={startRename}
-              className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title="Rename cycle"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Stats strip */}
-      <div className="grid grid-cols-3 gap-px border-t bg-border">
-        <div className="flex flex-col items-center gap-0.5 bg-card px-3 py-2.5 text-center">
-          <span className="text-lg font-bold">{members.length}</span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Members</span>
-        </div>
-        <div className="flex flex-col items-center gap-0.5 bg-card px-3 py-2.5 text-center">
-          <span className="text-lg font-bold">{formatCurrency(stats.totalMealExpenses + stats.totalFixedExpenses)}</span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Expenses</span>
-        </div>
-        <div className="flex flex-col items-center gap-0.5 bg-card px-3 py-2.5 text-center">
-          <span className="text-lg font-bold">{formatMealCount(stats.totalMealsConsumed)}</span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Meals</span>
-        </div>
-      </div>
-
-      {/* Pending cycle warning */}
-      {pendingCycle && (
-        <div className="flex items-center gap-2.5 border-t bg-amber-500/5 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>
-            Pending settlement in progress —{' '}
-            <Link href="/app/history" className="font-semibold underline underline-offset-2">
-              go to History to finalize
-            </Link>
-          </span>
-        </div>
-      )}
-
-      {/* Close action */}
-      <div className="border-t px-4 py-3">
-        <Dialog open={closeDialogOpen} onOpenChange={(open) => { setCloseDialogOpen(open); if (!open) setCloseStep(0); }}>
-          <DialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 border-amber-300 text-amber-700 hover:border-amber-400 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/30"
-              disabled={!!pendingCycle}
-              title={pendingCycle ? 'Finish the pending settlement before closing this cycle' : undefined}
-            >
-              <Archive className="h-4 w-4" />
-              Close Cycle
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md w-[95%]">
-            {closeStep === 0 || closeStep === 1 ? (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Archive className="h-5 w-5 text-amber-500" />
-                    Close Current Cycle
-                  </DialogTitle>
-                  <DialogDescription>
-                    Review the cycle summary before closing.
-                  </DialogDescription>
-                </DialogHeader>
-
-                {/* Summary */}
-                <div className="space-y-4 py-2">
-                  <div className="rounded-xl border bg-secondary/30 p-4 space-y-3">
-                    <p className="text-sm font-semibold">{activeCycle.name}</p>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-lg bg-card p-2.5 border">
-                        <p className="text-xs text-muted-foreground">Members</p>
-                        <p className="text-lg font-bold">{members.length}</p>
-                      </div>
-                      <div className="rounded-lg bg-card p-2.5 border">
-                        <p className="text-xs text-muted-foreground">Total Meals</p>
-                        <p className="text-lg font-bold">{formatMealCount(stats.totalMealsConsumed)}</p>
-                      </div>
-                      <div className="rounded-lg bg-card p-2.5 border">
-                        <p className="text-xs text-muted-foreground">Total Expenses</p>
-                        <p className="text-lg font-bold">{formatCurrency(stats.totalMealExpenses + stats.totalFixedExpenses)}</p>
-                      </div>
-                      <div className="rounded-lg bg-card p-2.5 border">
-                        <p className="text-xs text-muted-foreground">Remaining Cash</p>
-                        <p className="text-lg font-bold">{formatCurrency(stats.remainingCash)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                    <p className="font-semibold">What happens when you close?</p>
-                    <ul className="mt-1.5 list-disc list-inside space-y-1 text-xs text-amber-700 dark:text-amber-400">
-                      <li>This cycle moves to <strong>Pending Settlement</strong> in History</li>
-                      <li>No new cycle starts automatically — you start one when ready</li>
-                      <li>You can still add settlement corrections in History</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 justify-end">
-                  <Button variant="ghost" onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
-                    onClick={() => setCloseStep(2)}
-                  >
-                    Continue
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                    <AlertTriangle className="h-5 w-5" />
-                    Confirm Close Cycle
-                  </DialogTitle>
-                  <DialogDescription>
-                    This action cannot be undone. The cycle will enter pending settlement.
-                  </DialogDescription>
-                </DialogHeader>
-                <p className="text-sm text-muted-foreground py-2">
-                  Are you sure you want to close <strong>"{activeCycle.name}"</strong>? No new cycle will start automatically. You'll start the next cycle from the Dashboard when you're ready.
-                </p>
-                <div className="flex gap-2 justify-end">
-                  <Button variant="ghost" onClick={() => setCloseStep(1)} disabled={isClosing}>
-                    Back
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="gap-2"
-                    onClick={() => void handleCloseConfirm()}
-                    disabled={isClosing}
-                  >
-                    {isClosing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-                    {isClosing ? 'Closing…' : 'Yes, Close Cycle'}
-                  </Button>
-                </div>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
-    </div>
-  );
-}
-
-// ── No Active Cycle state card ───────────────────────────────────────────────
-
-function NoActiveCycleCard() {
-  const { startNewCycle, suggestCycleName, pendingCycle } = useMeal();
-  const [open, setOpen] = useState(false);
-  const [cycleName, setCycleName] = useState('');
-  const [startDate, setStartDate] = useState<Date>(new Date());
-  const [isStarting, setIsStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleOpen = () => {
-    setCycleName(suggestCycleName(new Date()));
-    setStartDate(new Date());
-    setError(null);
-    setOpen(true);
-  };
-
-  const handleStart = async () => {
-    if (!cycleName.trim()) {
-      setError('Cycle name is required.');
-      return;
-    }
-    setIsStarting(true);
-    setError(null);
-    try {
-      await startNewCycle(cycleName.trim(), startDate.toISOString());
-      setOpen(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start cycle.');
-    } finally {
-      setIsStarting(false);
-    }
-  };
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-dashed bg-card shadow-sm">
-      <div className="flex flex-col items-center gap-4 px-6 py-10 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-          <Sparkles className="h-7 w-7 text-primary" />
-        </div>
+      {/* Top Quick Actions Bar (Desktop / Tablet) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-base font-semibold">No Active Cycle</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {pendingCycle
-              ? 'A cycle is pending settlement. Start a new cycle whenever you\'re ready.'
-              : 'Start your first cycle to begin tracking meals, expenses, and deposits.'}
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Mess Overview
+          </h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
+            Live financial liquidity, meal metrics, and cost breakdown
           </p>
         </div>
 
-        {pendingCycle && (
-          <div className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span className="text-left text-xs">
-              Pending settlement in History — finalize it before starting a new cycle to keep accounts clean.
-            </span>
-          </div>
-        )}
-
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2" onClick={handleOpen}>
-              <Play className="h-4 w-4" />
-              Start New Cycle
+        <div className="flex items-center gap-2">
+          {canManageExpenses && (
+            <Button
+              size="sm"
+              onClick={() => setOpenExpense(true)}
+              className="h-9 gap-1.5 font-medium shadow-xs"
+            >
+              <Plus className="h-4 w-4" /> Add Expense
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md w-[95%]">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Play className="h-5 w-5 text-emerald-500" />
-                Start New Cycle
-              </DialogTitle>
-              <DialogDescription>
-                Name your new cycle and choose a start date.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Cycle Name</label>
-                <Input
-                  id="new-cycle-name"
-                  value={cycleName}
-                  onChange={(e) => { setCycleName(e.target.value); setError(null); }}
-                  placeholder="e.g. Meal_Aug-26"
-                  onKeyDown={(e) => { if (e.key === 'Enter') void handleStart(); }}
-                  autoFocus
-                />
-                <p className="text-xs text-muted-foreground">
-                  A descriptive name helps identify this cycle in history later.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Start Date</label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                      <CalendarDays className="mr-2 h-4 w-4" />
-                      {format(startDate, 'PPP')}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto rounded-xl p-0 shadow-xl" align="start">
-                    <Calendar mode="single" selected={startDate} onSelect={(d) => d && setStartDate(d)} initialFocus className="p-3" />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {error && (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
-                  {error}
-                </p>
-              )}
-            </div>
-
-            <div className="flex gap-2 justify-end">
-              <Button variant="ghost" onClick={() => setOpen(false)} disabled={isStarting}>Cancel</Button>
-              <Button className="gap-2" onClick={() => void handleStart()} disabled={isStarting}>
-                {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                {isStarting ? 'Starting…' : 'Start Cycle'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          )}
+          {canOperateMeals && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setOpenMeal(true)}
+              className="h-9 gap-1.5 font-medium shadow-xs"
+            >
+              <Utensils className="h-4 w-4" /> Log Meals
+            </Button>
+          )}
+        </div>
       </div>
-    </div>
-  );
-}
 
-// ── Dashboard ────────────────────────────────────────────────────────────────
-
-export default function Dashboard() {
-  const { stats, getMemberStats, members, mealLogs, activeCycle, pendingCycle } = useMeal();
-  const [openExpense, setOpenExpense] = useState(false);
-  const [openMeal, setOpenMeal] = useState(false);
-  const { canManageExpenses, canOperateMeals, canManageCycles } = useAuth();
-  const memberSettlementRows = members.map((member) => {
-    const memberStats = getMemberStats(member.id);
-    const roundedBalance = Math.round(memberStats.balance);
-    return {
-      ...member,
-      mealsEaten: memberStats.mealsEaten,
-      managerWillGet: roundedBalance < 0 ? Math.abs(roundedBalance) : 0,
-      managerWillGive: roundedBalance > 0 ? roundedBalance : 0,
-    };
-  });
-  const totalManagerWillGet = memberSettlementRows.reduce((sum, member) => sum + member.managerWillGet, 0);
-  const totalManagerWillGive = memberSettlementRows.reduce((sum, member) => sum + member.managerWillGive, 0);
-
-  return (
-    <div className="space-y-6 pb-20">
-      <OnboardingTour />
-
-      {/* Main stats cards */}
+      {/* Primary Financial & Meal Command Center */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="glass-card border-none bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 text-white shadow-lg lg:col-span-2">
+        {/* Hero Card: Cash Liquidity & Fund Utilization */}
+        <Card className="relative overflow-hidden border-none bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-xl lg:col-span-2">
+          {/* Subtle decorative background blur glow */}
+          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-56 w-56 rounded-full bg-teal-400/10 blur-2xl" />
+
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-emerald-50">
-              <Wallet className="h-4 w-4" />
-              Remaining Cash in Hand
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="font-heading text-4xl font-bold md:text-5xl">৳{stats.remainingCash.toFixed(2)}</span>
-              <span className="text-sm text-emerald-100">/ ৳{stats.totalDeposits.toFixed(2)} Collected</span>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-100/90">
+                <Wallet className="h-4 w-4 text-emerald-200" />
+                Remaining Cash in Hand
+              </CardTitle>
+              <span
+                className={cn(
+                  'rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide backdrop-blur-md',
+                  stats.remainingCash >= 0
+                    ? 'bg-emerald-400/20 text-emerald-100 border border-emerald-300/30'
+                    : 'bg-rose-500/30 text-rose-100 border border-rose-400/40'
+                )}
+              >
+                {stats.remainingCash >= 0 ? 'Reserve Healthy' : 'Cash Deficit'}
+              </span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-              <div className="rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-sm p-3">
-                <p className="text-xs text-emerald-100">Total Meal Cost</p>
-                <p className="font-bold text-lg">৳{stats.totalMealExpenses.toFixed(2)}</p>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
+              <div className="flex items-baseline gap-2">
+                <span className="font-heading text-4xl font-extrabold tracking-tight md:text-5xl">
+                  {formatCurrency(stats.remainingCash)}
+                </span>
               </div>
-              <div className="rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-sm p-3">
-                <p className="text-xs text-emerald-100">Total Fixed Cost</p>
-                <p className="font-bold text-lg">৳{stats.totalFixedExpenses.toFixed(2)}</p>
+              <p className="text-xs text-emerald-100/80 font-medium">
+                of <strong className="text-white font-bold">{formatCurrency(stats.totalDeposits)}</strong> collected deposits
+              </p>
+            </div>
+
+            {/* Fund deployment progress bar */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[11px] text-emerald-100/80 font-medium">
+                <span>Funds Deployed: {formatCurrency(totalSpent)}</span>
+                <span>{spentPct}% utilized</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-black/20 backdrop-blur-xs">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-200 to-teal-100 transition-all duration-700"
+                  style={{ width: `${spentPct}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Breakdown Sub-boxes */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-100">Meal Cost</p>
+                  <span className="rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-100">
+                    {mealPct}%
+                  </span>
+                </div>
+                <p className="mt-1 font-heading text-xl font-bold tracking-tight text-white">
+                  {formatCurrency(stats.totalMealExpenses)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-100">Fixed Cost</p>
+                  <span className="rounded-md bg-purple-400/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-100">
+                    {fixedPct}%
+                  </span>
+                </div>
+                <p className="mt-1 font-heading text-xl font-bold tracking-tight text-white">
+                  {formatCurrency(stats.totalFixedExpenses)}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="glass-card shadow-sm border-emerald-100/50">
+        {/* Card 2: Meal Economy & Consumption */}
+        <Card className="glass-card border border-border/70 shadow-sm flex flex-col justify-between">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium uppercase text-muted-foreground">Current Meal Rate</CardTitle>
-            <Utensils className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col">
-              <span className="font-heading text-3xl font-extrabold text-foreground md:text-4xl">৳{stats.currentMealRate.toFixed(2)}</span>
-              <p className="mt-1 text-xs text-muted-foreground">Per Meal</p>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Current Meal Rate
+            </CardTitle>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Utensils className="h-4 w-4" />
             </div>
-            <div className="mt-4 space-y-2 border-t pt-4 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Utensils className="h-3.5 w-3.5" /> Total Meals:
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-heading text-3xl font-extrabold text-foreground md:text-4xl">
+                  {formatCurrency(stats.currentMealRate)}
                 </span>
-                <span className="font-semibold text-foreground">{formatMealCount(stats.totalMealsConsumed)}</span>
+                <span className="text-xs text-muted-foreground font-medium">/ meal</span>
               </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Blended effective cost per meal for this active cycle
+              </p>
+            </div>
+
+            <div className="space-y-2.5 border-t pt-3.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <ShoppingBag className="h-3.5 w-3.5" /> Fixed Cost/Person:
+                  <Utensils className="h-3.5 w-3.5 text-emerald-500" /> Total Meals:
                 </span>
-                <span className="font-semibold text-foreground">৳{stats.fixedCostPerMember.toFixed(2)}</span>
+                <span className="font-bold text-foreground">{formatMealCount(stats.totalMealsConsumed)}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <ShoppingBag className="h-3.5 w-3.5 text-violet-500" /> Fixed Cost/Member:
+                </span>
+                <span className="font-bold text-foreground">{formatCurrency(stats.fixedCostPerMember)}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <Users className="h-3.5 w-3.5 text-blue-500" /> Active Members:
+                </span>
+                <Link
+                  href="/app/members"
+                  className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                >
+                  {members.length} members <ArrowUpRight className="h-3 w-3" />
+                </Link>
               </div>
             </div>
           </CardContent>
+
+          {/* Member Balance Health Mini-Strip */}
+          <div className="border-t bg-muted/25 px-4 py-2.5 text-[11px] rounded-b-xl flex items-center justify-between">
+            <span className="text-muted-foreground">
+              {membersWithDue > 0 ? (
+                <strong className="text-amber-600 dark:text-amber-400 font-semibold">
+                  {membersWithDue} member{membersWithDue === 1 ? '' : 's'} owe {formatCurrency(totalDueAmount)}
+                </strong>
+              ) : (
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                  All accounts settled / up to date
+                </span>
+              )}
+            </span>
+            <Link
+              href="/app/members"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              Details
+            </Link>
+          </div>
         </Card>
       </section>
 
-      {/* Floating Action Button for Quick Actions */}
+      {/* Analytics & Interactive Charts Workspace */}
+      <DashboardAnalytics />
+
+      {/* Floating Action Speed Dial Button for Quick Mobile & Desktop Actions */}
       <DashboardFab
         onOpenExpense={() => setOpenExpense(true)}
         onOpenMeal={() => setOpenMeal(true)}
@@ -624,8 +393,11 @@ export default function Dashboard() {
       <Dialog open={openExpense} onOpenChange={setOpenExpense}>
         <DialogContent className="max-w-md w-[95%]">
           <DialogHeader>
-            <DialogTitle>Add New Expense</DialogTitle>
-            <DialogDescription>Enter the details of the new expense below.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <CircleDollarSign className="h-5 w-5 text-emerald-500" />
+              Add New Expense
+            </DialogTitle>
+            <DialogDescription>Record a grocery, meal, or utility expense for this active cycle.</DialogDescription>
           </DialogHeader>
           <QuickAddExpense onClose={() => setOpenExpense(false)} />
         </DialogContent>
@@ -635,59 +407,15 @@ export default function Dashboard() {
       <Dialog open={openMeal} onOpenChange={setOpenMeal}>
         <DialogContent className="max-w-md w-[95%]">
           <DialogHeader>
-            <DialogTitle>Log Meals by Date</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Utensils className="h-5 w-5 text-emerald-500" />
+              Log Meals by Date
+            </DialogTitle>
             <DialogDescription>Update meal counts for each member for the selected date.</DialogDescription>
           </DialogHeader>
           <MealCountEditor members={members} mealLogs={mealLogs} onClose={() => setOpenMeal(false)} />
         </DialogContent>
       </Dialog>
-
-      {/* Member summary table */}
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold">All Members Summary</h2>
-          <Button variant="ghost" size="sm" asChild><a href="/app/members">View Details</a></Button>
-        </div>
-        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-          <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(96px,1fr)_minmax(96px,1fr)] gap-3 border-b bg-secondary/20 px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-xs">
-            <div>Member</div>
-            <div className="text-right">Due</div>
-            <div className="text-right">Refund</div>
-          </div>
-          <div className="divide-y">
-            {memberSettlementRows.map((member) => (
-              <div
-                key={member.id}
-                className="grid grid-cols-[minmax(0,1.6fr)_minmax(96px,1fr)_minmax(96px,1fr)] gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar className="h-8 w-8 text-xs">
-                    <AvatarFallback>{member.avatar}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{member.name}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={cn('text-sm font-semibold', member.managerWillGet > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground')}>
-                    {member.managerWillGet > 0 ? formatCurrency(member.managerWillGet) : '৳0'}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className={cn('text-sm font-semibold', member.managerWillGive > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
-                    {member.managerWillGive > 0 ? formatCurrency(member.managerWillGive) : '৳0'}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(96px,1fr)_minmax(96px,1fr)] gap-3 border-t bg-secondary/20 px-4 py-3">
-            <div className="text-sm font-semibold">Total</div>
-            <div className="text-right text-sm font-bold text-red-600">{formatCurrency(totalManagerWillGet)}</div>
-            <div className="text-right text-sm font-bold text-emerald-600">{formatCurrency(totalManagerWillGive)}</div>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
