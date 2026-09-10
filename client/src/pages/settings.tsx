@@ -34,6 +34,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/lib/auth-context';
 import { useMeal } from '@/lib/meal-context';
 import { usePushNotifications } from '@/lib/push-notifications';
@@ -107,6 +109,7 @@ function CycleManagementCard() {
   const {
     activeCycle, pendingCycle, stats, members,
     closeActiveCycle, renameActiveCycle, startNewCycle, suggestCycleName,
+    getCycleDetails, loadCycleDetails,
   } = useMeal();
   const { canManageCycles } = useAuth();
 
@@ -124,6 +127,8 @@ function CycleManagementCard() {
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // carry-forward: keyed by memberId, true = selected (default), false = deselected
+  const [carryForwards, setCarryForwards] = useState<Record<string, boolean>>({});
 
   const startRename = () => {
     setRenameValue(activeCycle?.name ?? '');
@@ -148,13 +153,37 @@ function CycleManagementCard() {
 
   const handleOpenStart = () => {
     setCycleName(suggestCycleName(new Date()));
-    setStartDate(new Date()); setStartError(null); setStartDialogOpen(true);
+    setStartDate(new Date()); setStartError(null);
+    // Pre-load pending cycle details so member balances are available for carry-forward
+    if (pendingCycle) {
+      void loadCycleDetails(pendingCycle.id);
+    }
+    // Default all eligible members to checked
+    const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
+    const defaults: Record<string, boolean> = {};
+    if (pendingDetails) {
+      for (const m of pendingDetails.members) {
+        if (m.balance > 0) defaults[m.id] = true;
+      }
+    }
+    setCarryForwards(defaults);
+    setStartDialogOpen(true);
   };
 
   const handleStart = async () => {
     if (!cycleName.trim()) { setStartError('Cycle name is required.'); return; }
     setIsStarting(true); setStartError(null);
-    try { await startNewCycle(cycleName.trim(), startDate.toISOString()); setStartDialogOpen(false); }
+    try {
+      // Build the carry-forward list from selected members with a positive balance
+      const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
+      const selectedCarryForwards = pendingDetails
+        ? pendingDetails.members
+            .filter((m) => m.balance > 0 && carryForwards[m.id] !== false)
+            .map((m) => ({ memberId: m.id, amount: Math.round(m.balance * 100) / 100 }))
+        : [];
+      await startNewCycle(cycleName.trim(), startDate.toISOString(), selectedCarryForwards.length > 0 ? selectedCarryForwards : undefined);
+      setStartDialogOpen(false);
+    }
     catch (err) { setStartError(err instanceof Error ? err.message : 'Failed to start cycle.'); }
     finally { setIsStarting(false); }
   };
@@ -365,6 +394,58 @@ function CycleManagementCard() {
                 </PopoverContent>
               </Popover>
             </div>
+
+            {/* ── Carry-Forward Section (only when pending cycle has eligible members) ── */}
+            {(() => {
+              const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
+              const eligibleMembers = pendingDetails?.members.filter((m) => m.balance > 0) ?? [];
+              if (eligibleMembers.length === 0) return null;
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-emerald-600" />
+                    <label className="text-sm font-medium">Carry-Forward Balances</label>
+                    <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Optional</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    These members have a surplus in <strong>{pendingCycle?.name}</strong>. Their balance will be zeroed in the pending cycle and added as an opening deposit in this new cycle.
+                  </p>
+                  <div className="rounded-xl border bg-emerald-500/5 divide-y overflow-hidden">
+                    {eligibleMembers.map((m) => {
+                      const checked = carryForwards[m.id] !== false;
+                      return (
+                        <label
+                          key={m.id}
+                          className={cn(
+                            'flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors select-none',
+                            checked ? 'bg-emerald-500/5' : 'opacity-60',
+                          )}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(val) =>
+                              setCarryForwards((prev) => ({ ...prev, [m.id]: Boolean(val) }))
+                            }
+                            className="shrink-0"
+                          />
+                          <Avatar className="h-7 w-7 shrink-0 text-xs">
+                            <AvatarFallback className="bg-primary/10 text-primary">{m.avatar}</AvatarFallback>
+                          </Avatar>
+                          <span className="flex-1 text-sm font-medium truncate">{m.name}</span>
+                          <span className="shrink-0 text-sm font-bold text-emerald-600">
+                            +{formatCurrency(m.balance)}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Unchecked members keep their surplus in the pending cycle and must be settled manually.
+                  </p>
+                </div>
+              );
+            })()}
+
             {startError && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">{startError}</p>}
           </div>
           <div className="flex gap-2 justify-end">

@@ -148,8 +148,18 @@ interface MealContextType {
   renameActiveCycle: (name: string) => Promise<void>;
   /** Closes the active cycle (moves it to pending). Does NOT auto-start a new cycle. */
   closeActiveCycle: () => Promise<void>;
-  /** Creates a new active cycle. Only callable when there is no current active cycle. */
-  startNewCycle: (name: string, startedAt?: string) => Promise<void>;
+  /**
+   * Creates a new active cycle. Only callable when there is no current active cycle.
+   * @param carryForwards - Optional list of members whose positive balance should be
+   *   carried forward from the current pending cycle into the new cycle as opening deposits.
+   *   A two-sided transfer is performed: a negative correction is added to the pending cycle
+   *   (so it can still be locked cleanly) and a positive opening deposit is added to the new cycle.
+   */
+  startNewCycle: (
+    name: string,
+    startedAt?: string,
+    carryForwards?: Array<{ memberId: string; amount: number }>,
+  ) => Promise<void>;
   /** Suggests a default cycle name based on the given date and existing cycles. */
   suggestCycleName: (date?: Date) => string;
   markCycleClosed: (cycleId: string) => Promise<void>;
@@ -1897,7 +1907,46 @@ export function MealProvider({ children }: { children: ReactNode }) {
     void broadcastSharedUpdate();
   };
 
-  const startNewCycle = async (name: string, startedAt?: string) => {
+  /**
+   * Perform a two-sided carry-forward transfer for a set of members:
+   * 1. Add a negative correction deposit to the source (pending) cycle — zeroes the member
+   *    so the settlement math (`isSettlementMatched`) still passes cleanly.
+   * 2. Add a positive opening deposit to the new (active) cycle — the member starts ahead.
+   *
+   * Both writes go through the existing `addDeposit` function, so the offline queue and
+   * changelog pipeline are inherited automatically at no extra cost.
+   */
+  const carryForwardDeposits = async (
+    newCycleId: string,
+    sourceCycleId: string,
+    sourceCycleName: string,
+    entries: Array<{ memberId: string; amount: number }>,
+  ) => {
+    for (const { memberId, amount } of entries) {
+      if (amount <= 0) continue;
+      const rounded = Math.round(amount * 100) / 100;
+      // Step 1 — Zero out the member in the source/pending cycle
+      await addDeposit(
+        memberId,
+        -rounded,
+        sourceCycleId,
+        `Carry-forward correction — balance moved to next cycle`,
+      );
+      // Step 2 — Open the new cycle with that amount
+      await addDeposit(
+        memberId,
+        rounded,
+        newCycleId,
+        `Carry-forward from ${sourceCycleName}`,
+      );
+    }
+  };
+
+  const startNewCycle = async (
+    name: string,
+    startedAt?: string,
+    carryForwards?: Array<{ memberId: string; amount: number }>,
+  ) => {
     if (!userId || !messId) return;
     if (activeCycle) {
       throw new Error('Close the current active cycle before starting a new one.');
@@ -1950,6 +1999,17 @@ export function MealProvider({ children }: { children: ReactNode }) {
       ...prev,
     ]);
     setLoadedCycleIds((prev) => new Set(prev).add(newCycle.id));
+
+    // Carry-forward: two-sided deposit transfer from the pending cycle (if any)
+    if (carryForwards && carryForwards.length > 0 && pendingCycle) {
+      await carryForwardDeposits(
+        newCycle.id,
+        pendingCycle.id,
+        pendingCycle.name,
+        carryForwards,
+      );
+    }
+
     void broadcastSharedUpdate();
   };
 
