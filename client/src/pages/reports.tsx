@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useMeal } from '@/lib/meal-context';
 import { cn } from '@/lib/utils';
@@ -75,7 +76,7 @@ function isDateInFilterRange(dateStr: string, fromDate: Date, toDate: Date, from
 }
 
 export default function ReportsPage() {
-  const { activeCycle, getCycleDetails } = useMeal();
+  const { activeCycle, getCycleDetails, loading } = useMeal();
   const previewRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
   const [from, setFrom] = useState(() => activeCycle?.startedAt ? startOfDay(new Date(activeCycle.startedAt)) : today);
@@ -89,6 +90,7 @@ export default function ReportsPage() {
   }, [activeCycle?.startedAt]);
 
   const details = activeCycle ? getCycleDetails(activeCycle.id) : null;
+  const isLoading = loading || (Boolean(activeCycle) && !details);
   const fromKey = fileDate(from); const toKey = fileDate(to);
   const generatedAt = useMemo(() => new Date(), [fromKey, toKey, details]);
   const report = useMemo(() => {
@@ -202,8 +204,168 @@ export default function ReportsPage() {
           </div>
         </div>
       </header>
-      <section className="rounded-xl border bg-card p-4 shadow-sm md:p-5"><div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div className="grid gap-3 sm:grid-cols-2 xl:w-[500px]"><DatePicker label="From" value={from} onChange={setFrom} disabled={(date) => date > to} /><DatePicker label="To" value={to} onChange={setTo} disabled={(date) => date < from || date > today} /></div><div className="flex flex-wrap gap-2"><DropdownMenu><DropdownMenuTrigger asChild><Button disabled={isGenerating}><Download className="h-4 w-4" /> Export</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuLabel>Download report</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuItem onSelect={() => void run(async () => { download(makePdf(), `${baseName}.pdf`); toast.success('PDF exported', { description: 'Your report download has started.' }); })}><FileText className="h-4 w-4" /> PDF document</DropdownMenuItem><DropdownMenuItem onSelect={() => void run(async () => { download(makeXlsx(), `${baseName}.xlsx`); toast.success('Excel exported', { description: 'Your spreadsheet download has started.' }); })}><FileSpreadsheet className="h-4 w-4" /> Excel (.xlsx)</DropdownMenuItem><DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); download(blob, `${baseName}.png`); toast.success('PNG exported', { description: 'Your report image download has started.' }); })}><FileImage className="h-4 w-4" /> PNG image</DropdownMenuItem></DropdownMenuContent></DropdownMenu><DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={isGenerating}>{isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Share</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuLabel>Share report</DropdownMenuLabel><DropdownMenuSeparator /><DropdownMenuItem onSelect={() => void run(async () => { await share(makePdf(), `${baseName}.pdf`, 'application/pdf'); })}><FileText className="h-4 w-4" /> Share PDF</DropdownMenuItem><DropdownMenuItem onSelect={() => void run(async () => { await share(makeXlsx(), `${baseName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); })}><FileSpreadsheet className="h-4 w-4" /> Share Excel</DropdownMenuItem><DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); await share(blob, `${baseName}.png`, 'image/png'); })}><FileImage className="h-4 w-4" /> Share PNG</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('Clipboard images are not supported.'); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast.success('Image copied', { description: 'The report image is ready to paste.' }); })}><ClipboardCopy className="h-4 w-4" /> Copy image</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div></div></section>
-      <div className="mx-auto max-w-4xl overflow-x-auto pb-2"><div ref={previewRef} className="min-w-[820px] overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg"><div className="flex items-start justify-between bg-slate-950 px-7 py-6 text-white"><div className="flex items-center gap-3"><div className="rounded-xl bg-teal-400 p-2"><ChefHat className="h-6 w-6 text-slate-950" /></div><div><p className="text-xl font-bold">MealTrack</p><p className="text-sm text-slate-300">Meal Report</p></div></div><div className="text-right text-xs text-slate-300"><p className="font-semibold text-white">{rangeLabel}</p><p className="mt-1">Generated {format(generatedAt, 'PPP p')}</p></div></div><div className="p-7"><div className="grid grid-cols-3 gap-4">{[['Total Expenses', currency(report.totalExpenses)], ['Total Meals', mealCount(report.totalMeals)], ['Current Meal Rate', currency(report.rate)]].map(([label, value]) => <div key={label} className="rounded-lg border border-teal-100 bg-teal-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-teal-700">{label}</p><p className="mt-2 text-2xl font-bold text-slate-950">{value}</p></div>)}</div><div className="mt-7 overflow-hidden rounded-lg border border-slate-200"><table className="w-full border-collapse text-sm"><thead className="bg-slate-900 text-left text-white"><tr><th className="p-3">Member</th><th className="p-3 text-right">Meals</th><th className="p-3 text-right">Deposit</th><th className="p-3 text-right">Bill</th><th className="p-3 text-right">Due</th><th className="p-3 text-right">Refund</th></tr></thead><tbody>{report.rows.length ? report.rows.map((row, index) => <tr key={row.id} className={index % 2 ? 'bg-slate-50' : 'bg-white'}><td className="p-3 font-semibold">{row.name}</td><td className="p-3 text-right">{mealCount(row.meals)}</td><td className="p-3 text-right">{currency(row.deposit)}</td><td className="p-3 text-right">{currency(row.bill)}</td><td className="p-3 text-right font-bold text-rose-700">{row.balance < 0 ? currencyInt(Math.abs(row.balance)) : '-'}</td><td className="p-3 text-right font-bold text-emerald-700">{row.balance > 0 ? currencyInt(row.balance) : '-'}</td></tr>) : <tr><td colSpan={6} className="p-10 text-center text-slate-500"><p>{activeCycle ? 'No active-cycle members to include in this report.' : 'Start a cycle to create a report for your mess.'}</p>{!activeCycle ? <Link href="/app/settings"><Button className="mt-4 gap-2"><Play className="h-4 w-4" />Start New Cycle</Button></Link> : null}</td></tr>}</tbody></table></div></div><div className="border-t border-slate-200 px-7 py-4 text-center text-xs text-slate-500">Generated via MealTrack</div></div></div>
+      <section className="rounded-xl border bg-card p-4 shadow-sm md:p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="grid gap-3 sm:grid-cols-2 xl:w-[500px]">
+            <DatePicker label="From" value={from} onChange={setFrom} disabled={(date) => date > to} />
+            <DatePicker label="To" value={to} onChange={setTo} disabled={(date) => date < from || date > today} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button disabled={isGenerating || isLoading}>
+                  <Download className="h-4 w-4" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Download report</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => void run(async () => { download(makePdf(), `${baseName}.pdf`); toast.success('PDF exported', { description: 'Your report download has started.' }); })}>
+                  <FileText className="h-4 w-4" /> PDF document
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void run(async () => { download(makeXlsx(), `${baseName}.xlsx`); toast.success('Excel exported', { description: 'Your spreadsheet download has started.' }); })}>
+                  <FileSpreadsheet className="h-4 w-4" /> Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); download(blob, `${baseName}.png`); toast.success('PNG exported', { description: 'Your report image download has started.' }); })}>
+                  <FileImage className="h-4 w-4" /> PNG image
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={isGenerating || isLoading}>
+                  {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Share
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Share report</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => void run(async () => { await share(makePdf(), `${baseName}.pdf`, 'application/pdf'); })}>
+                  <FileText className="h-4 w-4" /> Share PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void run(async () => { await share(makeXlsx(), `${baseName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); })}>
+                  <FileSpreadsheet className="h-4 w-4" /> Share Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); await share(blob, `${baseName}.png`, 'image/png'); })}>
+                  <FileImage className="h-4 w-4" /> Share PNG
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('Clipboard images are not supported.'); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast.success('Image copied', { description: 'The report image is ready to paste.' }); })}>
+                  <ClipboardCopy className="h-4 w-4" /> Copy image
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </section>
+      <div className="mx-auto max-w-4xl overflow-x-auto pb-2">
+        <div ref={previewRef} className="min-w-[820px] overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg">
+          <div className="flex items-start justify-between bg-slate-950 px-7 py-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-teal-400 p-2">
+                <ChefHat className="h-6 w-6 text-slate-950" />
+              </div>
+              <div>
+                <p className="text-xl font-bold">MealTrack</p>
+                <p className="text-sm text-slate-300">Meal Report</p>
+              </div>
+            </div>
+            <div className="text-right text-xs text-slate-300">
+              <p className="font-semibold text-white">{rangeLabel}</p>
+              <p className="mt-1">Generated {format(generatedAt, 'PPP p')}</p>
+            </div>
+          </div>
+          <div className="p-7">
+            <div className="grid grid-cols-3 gap-4">
+              {isLoading ? (
+                [1, 2, 3].map((i) => (
+                  <div key={i} className="rounded-lg border border-teal-100 bg-teal-50/60 p-4 space-y-2">
+                    <Skeleton className="h-3.5 w-24 bg-teal-200/70" />
+                    <Skeleton className="h-8 w-28 bg-teal-200/70" />
+                  </div>
+                ))
+              ) : (
+                [['Total Expenses', currency(report.totalExpenses)], ['Total Meals', mealCount(report.totalMeals)], ['Current Meal Rate', currency(report.rate)]].map(([label, value]) => (
+                  <div key={label} className="rounded-lg border border-teal-100 bg-teal-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-teal-700">{label}</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="mt-7 overflow-hidden rounded-lg border border-slate-200">
+              <table className="w-full border-collapse text-sm">
+                <thead className="bg-slate-900 text-left text-white">
+                  <tr>
+                    <th className="p-3">Member</th>
+                    <th className="p-3 text-right">Meals</th>
+                    <th className="p-3 text-right">Deposit</th>
+                    <th className="p-3 text-right">Bill</th>
+                    <th className="p-3 text-right">Due</th>
+                    <th className="p-3 text-right">Refund</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    Array.from({ length: 4 }).map((_, index) => (
+                      <tr key={index} className={index % 2 ? 'bg-slate-50' : 'bg-white'}>
+                        <td className="p-3">
+                          <Skeleton className="h-4 w-28 bg-slate-200" />
+                        </td>
+                        <td className="p-3 text-right">
+                          <Skeleton className="ml-auto h-4 w-12 bg-slate-200" />
+                        </td>
+                        <td className="p-3 text-right">
+                          <Skeleton className="ml-auto h-4 w-16 bg-slate-200" />
+                        </td>
+                        <td className="p-3 text-right">
+                          <Skeleton className="ml-auto h-4 w-16 bg-slate-200" />
+                        </td>
+                        <td className="p-3 text-right">
+                          <Skeleton className="ml-auto h-4 w-12 bg-slate-200" />
+                        </td>
+                        <td className="p-3 text-right">
+                          <Skeleton className="ml-auto h-4 w-12 bg-slate-200" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : report.rows.length ? (
+                    report.rows.map((row, index) => (
+                      <tr key={row.id} className={index % 2 ? 'bg-slate-50' : 'bg-white'}>
+                        <td className="p-3 font-semibold">{row.name}</td>
+                        <td className="p-3 text-right">{mealCount(row.meals)}</td>
+                        <td className="p-3 text-right">{currency(row.deposit)}</td>
+                        <td className="p-3 text-right">{currency(row.bill)}</td>
+                        <td className="p-3 text-right font-bold text-rose-700">
+                          {row.balance < 0 ? currencyInt(Math.abs(row.balance)) : '-'}
+                        </td>
+                        <td className="p-3 text-right font-bold text-emerald-700">
+                          {row.balance > 0 ? currencyInt(row.balance) : '-'}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="p-10 text-center text-slate-500">
+                        <p>{activeCycle ? 'No active-cycle members to include in this report.' : 'Start a cycle to create a report for your mess.'}</p>
+                        {!activeCycle && (
+                          <Link href="/app/settings">
+                            <Button className="mt-4 gap-2">
+                              <Play className="h-4 w-4" />
+                              Start New Cycle
+                            </Button>
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="border-t border-slate-200 px-7 py-4 text-center text-xs text-slate-500">Generated via MealTrack</div>
+        </div>
+      </div>
     </div>
   );
 }
