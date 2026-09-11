@@ -21,6 +21,7 @@ import {
   Users,
   Utensils,
   Wallet,
+  WifiOff,
   X,
 } from 'lucide-react';
 import { addHours, format, formatDistanceToNow, isPast, parseISO } from 'date-fns';
@@ -36,12 +37,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/auth-context';
 import { useMeal } from '@/lib/meal-context';
 import { usePushNotifications } from '@/lib/push-notifications';
 import { getNotificationPreferences, saveNotificationPreferences } from '@/lib/notification-preferences';
 import { useNotice } from '@/lib/notice-context';
 import { NoticeDialog } from '@/components/notice-dialog';
+import { useNetworkStatus } from '@/lib/pwa';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -112,6 +115,7 @@ function CycleManagementCard() {
     getCycleDetails, loadCycleDetails,
   } = useMeal();
   const { canManageCycles } = useAuth();
+  const { isOnline } = useNetworkStatus();
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -174,12 +178,12 @@ function CycleManagementCard() {
     if (!cycleName.trim()) { setStartError('Cycle name is required.'); return; }
     setIsStarting(true); setStartError(null);
     try {
-      // Build the carry-forward list from selected members with a positive balance
+      // Build the carry-forward list from selected members with a positive balance only when online
       const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
-      const selectedCarryForwards = pendingDetails
+      const selectedCarryForwards = isOnline && pendingDetails
         ? pendingDetails.members
-            .filter((m) => m.balance > 0 && carryForwards[m.id] !== false)
-            .map((m) => ({ memberId: m.id, amount: Math.round(m.balance * 100) / 100 }))
+          .filter((m) => m.balance > 0 && carryForwards[m.id] !== false)
+          .map((m) => ({ memberId: m.id, amount: Math.round(m.balance * 100) / 100 }))
         : [];
       await startNewCycle(cycleName.trim(), startDate.toISOString(), selectedCarryForwards.length > 0 ? selectedCarryForwards : undefined);
       setStartDialogOpen(false);
@@ -400,45 +404,146 @@ function CycleManagementCard() {
               const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
               const eligibleMembers = pendingDetails?.members.filter((m) => m.balance > 0) ?? [];
               if (eligibleMembers.length === 0) return null;
+
+              const totalEligible = eligibleMembers.length;
+              const selectedMembers = eligibleMembers.filter((m) => carryForwards[m.id] !== false);
+              const selectedCount = selectedMembers.length;
+              const selectedTotal = selectedMembers.reduce((sum, m) => sum + m.balance, 0);
+
+              const masterChecked: boolean | 'indeterminate' =
+                selectedCount === 0
+                  ? false
+                  : selectedCount === totalEligible
+                    ? true
+                    : 'indeterminate';
+
+              const toggleAll = () => {
+                if (!isOnline) return;
+                const nextVal = masterChecked !== true;
+                const updated: Record<string, boolean> = { ...carryForwards };
+                for (const m of eligibleMembers) {
+                  updated[m.id] = nextVal;
+                }
+                setCarryForwards(updated);
+              };
+
               return (
-                <div className="space-y-2">
+                <div className="space-y-2.5 pt-1">
                   <div className="flex items-center gap-2">
-                    <Wallet className="h-4 w-4 text-emerald-600" />
-                    <label className="text-sm font-medium">Carry-Forward Balances</label>
-                    <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Optional</span>
+                    <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <label className="text-sm font-medium text-foreground">Carry-Forward Balances</label>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      Optional
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    These members have a surplus in <strong>{pendingCycle?.name}</strong>. Their balance will be zeroed in the pending cycle and added as an opening deposit in this new cycle.
+                    Transfer refundable member balances from <strong>{pendingCycle?.name}</strong> as opening deposits for the new cycle.
                   </p>
-                  <div className="rounded-xl border bg-emerald-500/5 divide-y overflow-hidden">
-                    {eligibleMembers.map((m) => {
-                      const checked = carryForwards[m.id] !== false;
-                      return (
-                        <label
-                          key={m.id}
-                          className={cn(
-                            'flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors select-none',
-                            checked ? 'bg-emerald-500/5' : 'opacity-60',
+
+                  {!isOnline && (
+                    <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                      <WifiOff className="h-3.5 w-3.5 shrink-0" />
+                      <span>Reconnect to enable carry-forward.</span>
+                    </div>
+                  )}
+
+                  <div className={cn(
+                    "rounded-xl border bg-card overflow-hidden divide-y",
+                    !isOnline && "opacity-75"
+                  )}>
+                    {/* Master Sub-Header Bar */}
+                    <div className="flex items-center justify-between bg-muted/50 px-3 py-2 text-xs select-none">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <label
+                              className={cn(
+                                "flex items-center gap-2.5",
+                                isOnline ? "cursor-pointer" : "cursor-not-allowed"
+                              )}
+                            >
+                              <Checkbox
+                                id="carry-forward-select-all"
+                                checked={masterChecked}
+                                disabled={!isOnline}
+                                onCheckedChange={toggleAll}
+                                className="shrink-0"
+                                aria-label="Select all carry-forward balances"
+                              />
+                              <span className="font-semibold text-foreground">
+                                {masterChecked === true ? 'Deselect all' : 'Select all'}
+                              </span>
+                            </label>
+                          </TooltipTrigger>
+                          {!isOnline && (
+                            <TooltipContent side="top">
+                              Reconnect to enable carry-forward
+                            </TooltipContent>
                           )}
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(val) =>
-                              setCarryForwards((prev) => ({ ...prev, [m.id]: Boolean(val) }))
-                            }
-                            className="shrink-0"
-                          />
-                          <Avatar className="h-7 w-7 shrink-0 text-xs">
-                            <AvatarFallback className="bg-primary/10 text-primary">{m.avatar}</AvatarFallback>
-                          </Avatar>
-                          <span className="flex-1 text-sm font-medium truncate">{m.name}</span>
-                          <span className="shrink-0 text-sm font-bold text-emerald-600">
-                            +{formatCurrency(m.balance)}
+                        </Tooltip>
+                      </TooltipProvider>
+
+                      <div className="flex items-center gap-2 font-medium">
+                        <span className="text-muted-foreground">
+                          <strong className="text-foreground">{selectedCount}</strong> of {totalEligible} selected
+                        </span>
+                        {selectedTotal > 0 && isOnline && (
+                          <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            +{formatCurrency(selectedTotal)}
                           </span>
-                        </label>
-                      );
-                    })}
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Member List */}
+                    <div className="max-h-52 overflow-y-auto divide-y">
+                      {eligibleMembers.map((m) => {
+                        const checked = carryForwards[m.id] !== false && isOnline;
+                        return (
+                          <TooltipProvider key={m.id}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <label
+                                  className={cn(
+                                    'flex items-center gap-3 px-3 py-2.5 transition-colors select-none',
+                                    isOnline ? 'cursor-pointer hover:bg-muted/30' : 'cursor-not-allowed',
+                                    checked ? 'bg-emerald-500/5' : 'opacity-60',
+                                  )}
+                                >
+                                  <Checkbox
+                                    id={`carry-forward-${m.id}`}
+                                    checked={checked}
+                                    disabled={!isOnline}
+                                    onCheckedChange={(val) => {
+                                      if (!isOnline) return;
+                                      setCarryForwards((prev) => ({ ...prev, [m.id]: Boolean(val) }));
+                                    }}
+                                    className="shrink-0"
+                                  />
+                                  <Avatar className="h-7 w-7 shrink-0 text-xs">
+                                    <AvatarFallback className="bg-primary/10 text-primary font-medium">{m.avatar}</AvatarFallback>
+                                  </Avatar>
+                                  <span className="flex-1 text-sm font-medium truncate">{m.name}</span>
+                                  <span className={cn(
+                                    "shrink-0 text-sm font-bold",
+                                    checked ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                                  )}>
+                                    +{formatCurrency(m.balance)}
+                                  </span>
+                                </label>
+                              </TooltipTrigger>
+                              {!isOnline && (
+                                <TooltipContent side="top">
+                                  Reconnect to enable carry-forward
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })}
+                    </div>
                   </div>
+
                   <p className="text-[11px] text-muted-foreground">
                     Unchecked members keep their surplus in the pending cycle and must be settled manually.
                   </p>

@@ -352,7 +352,7 @@ function getCycleSeasonName(dateValue: string | Date) {
 function getDefaultCycleBaseName(dateValue: string | Date) {
   const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
   const year = String(date.getFullYear()).slice(-2);
-  return `Meal_${getCycleSeasonName(date)}-${year}`;
+  return `Meal ${getCycleSeasonName(date)}-${year}`;
 }
 
 function generateUniqueCycleName(dateValue: string | Date, existingCycles: Cycle[]) {
@@ -601,11 +601,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const currentActor =
       (profileData
         ? {
-            id: profileData.id,
-            name: profileData.full_name,
-            pictureUrl: profileData.picture_url ?? null,
-            role: profileData.role as ChangelogActor['role'],
-          }
+          id: profileData.id,
+          name: profileData.full_name,
+          pictureUrl: profileData.picture_url ?? null,
+          role: profileData.role as ChangelogActor['role'],
+        }
         : null) || profilesMapRef.current.get(userId) || null;
 
     setAllChangelogEntries((prev) => [{
