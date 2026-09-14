@@ -51,10 +51,6 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Settings, label: 'Settings', href: '/app/settings' },
 ];
 
-const PRIMARY_MOBILE_NAV_ITEMS = NAV_ITEMS.filter(
-  (item) => item.href !== '/app/settings' && item.href !== '/app/history',
-);
-
 /** Returns up to two uppercase initials from a display name or email. */
 function getInitials(name?: string | null, email?: string | null): string {
   const source = name ?? email ?? '';
@@ -86,7 +82,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const isMember = profile?.role === 'member';
-  const navItems = NAV_ITEMS.filter((item) => !(isMember && item.href === '/app/settings'));
+  const navItems = NAV_ITEMS.filter((item) => !(isMember && item.href === '/app/reports'));
+  const primaryMobileNavItems = navItems.filter(
+    (item) => item.href !== '/app/settings' && item.href !== '/app/history',
+  );
 
   const initials = getInitials(profile?.full_name, user?.email);
 
@@ -270,8 +269,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-50 border-t bg-card/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden"
         aria-label="Primary mobile navigation"
       >
-        <div className="grid h-16 grid-cols-6 items-center gap-0.5">
-          {PRIMARY_MOBILE_NAV_ITEMS.map((item) => (
+        <div
+          className={cn(
+            'grid h-16 items-center gap-0.5',
+            primaryMobileNavItems.length === 4 ? 'grid-cols-5' : 'grid-cols-6'
+          )}
+        >
+          {primaryMobileNavItems.map((item) => (
             <Link key={item.href} href={item.href} className="flex min-w-0 w-full justify-center">
               <div
                 className={cn(

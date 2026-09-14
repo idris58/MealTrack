@@ -12,8 +12,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useMeal } from '@/lib/meal-context';
+import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 
 type ReportMember = { id: string; name: string; meals: number; deposit: number; bill: number; balance: number };
 const currency = (amount: number) => `৳${amount.toFixed(2)}`;
@@ -77,6 +78,15 @@ function isDateInFilterRange(dateStr: string, fromDate: Date, toDate: Date, from
 
 export default function ReportsPage() {
   const { activeCycle, getCycleDetails, loading } = useMeal();
+  const { profile } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (profile?.role === 'member') {
+      setLocation('/app');
+    }
+  }, [profile?.role, setLocation]);
+
   const previewRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
   const [from, setFrom] = useState(() => activeCycle?.startedAt ? startOfDay(new Date(activeCycle.startedAt)) : today);
@@ -88,6 +98,10 @@ export default function ReportsPage() {
       setFrom(startOfDay(new Date(activeCycle.startedAt)));
     }
   }, [activeCycle?.startedAt]);
+
+  if (profile?.role === 'member') {
+    return null;
+  }
 
   const details = activeCycle ? getCycleDetails(activeCycle.id) : null;
   const isLoading = loading || (Boolean(activeCycle) && !details);

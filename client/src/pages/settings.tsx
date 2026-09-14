@@ -867,13 +867,29 @@ function NoticeSettingsCard() {
 
 export default function SettingsPage() {
   const { profile, canManageCycles } = useAuth();
-  const [, setLocation] = useLocation();
+  const isMember = profile?.role === 'member';
 
-  useEffect(() => {
-    if (profile?.role === 'member') setLocation('/app');
-  }, [profile?.role, setLocation]);
+  if (isMember) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6 pb-16 sm:pb-20">
+        <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 sm:p-7 shadow-sm">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+              <Settings2 className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold font-heading tracking-tight sm:text-3xl truncate">Settings</h1>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">Manage your reminder and notification preferences.</p>
+            </div>
+          </div>
+        </header>
 
-  if (profile?.role === 'member') return null;
+        <section id="notifications" className="scroll-mt-6">
+          <NotificationSettingsCard />
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16 sm:space-y-10 sm:pb-20">
