@@ -6,7 +6,6 @@ import {
   Receipt,
   FileBarChart,
   History,
-  Menu,
   Settings,
   ChefHat,
   UtensilsCrossed,
@@ -19,7 +18,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { PwaInstallButton } from '@/components/pwa-install-button';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -63,7 +61,6 @@ function getInitials(name?: string | null, email?: string | null): string {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showNoticeDialog, setShowNoticeDialog] = useState(false);
   const { user, profile, signOut } = useAuth();
@@ -83,9 +80,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const isMember = profile?.role === 'member';
   const navItems = NAV_ITEMS.filter((item) => !(isMember && item.href === '/app/reports'));
-  const primaryMobileNavItems = navItems.filter(
-    (item) => item.href !== '/app/settings' && item.href !== '/app/history',
-  );
 
   const initials = getInitials(profile?.full_name, user?.email);
 
@@ -157,44 +151,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </Link>
   );
 
-  const mobileSheet = (
-    <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-      <SheetContent side="left" className="w-[80%] max-w-[300px] p-0">
-        <div className="flex h-full flex-col bg-card">
-          <div className="border-b p-6">
-            <Link href="/app">
-              <div className="flex cursor-pointer items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
-                <ChefHat className="h-6 w-6 text-primary" />
-                <span className="font-heading text-xl font-bold">MealTrack</span>
-              </div>
-            </Link>
-          </div>
-          <nav className="flex-1 space-y-2 p-4">
-            {navItems.map((item) => (
-              <Link key={item.href} href={item.href}>
-                <div
-                  className={cn(
-                    'flex items-center gap-3 rounded-md px-4 py-3 transition-colors',
-                    location === item.href
-                      ? 'bg-primary/10 font-medium text-primary'
-                      : 'text-muted-foreground hover:bg-muted',
-                  )}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <item.icon className="h-5 w-5" />
-                  {item.label}
-                </div>
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-
   return (
     <div className="min-h-screen bg-background">
-      {mobileSheet}
 
       <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b bg-card px-4 md:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
@@ -266,38 +224,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 border-t bg-card/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 border-t bg-card/95 px-0.5 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden"
         aria-label="Primary mobile navigation"
       >
         <div
-          className={cn(
-            'grid h-16 items-center gap-0.5',
-            primaryMobileNavItems.length === 4 ? 'grid-cols-5' : 'grid-cols-6'
-          )}
+          className="grid h-16 items-center gap-0.5"
+          style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
         >
-          {primaryMobileNavItems.map((item) => (
+          {navItems.map((item) => (
             <Link key={item.href} href={item.href} className="flex min-w-0 w-full justify-center">
               <div
                 className={cn(
-                  'flex h-14 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-[10px] sm:text-[11px] font-medium transition-colors',
+                  'flex h-14 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 font-medium transition-colors',
                   location === item.href
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
-                <item.icon className="h-5 w-5 shrink-0" />
-                <span className="w-full truncate text-center leading-tight tracking-tight">{item.label}</span>
+                <item.icon className="h-4.5 w-4.5 shrink-0" />
+                <span className="w-full truncate text-center leading-tight tracking-tight text-[9px] min-[360px]:text-[10px] sm:text-[11px]">
+                  {item.label}
+                </span>
               </div>
             </Link>
           ))}
-          <button
-            type="button"
-            className="flex h-14 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-[10px] sm:text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            onClick={() => setIsMobileMenuOpen(true)}
-          >
-            <Menu className="h-5 w-5 shrink-0" />
-            <span className="w-full truncate text-center leading-tight tracking-tight">More</span>
-          </button>
         </div>
       </nav>
 
