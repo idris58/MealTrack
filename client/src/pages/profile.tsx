@@ -8,7 +8,16 @@ import {
   User,
   Mail,
   Link2,
+  KeyRound,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
+  Lock,
+  Check,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -19,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { RoleBadge } from '@/components/role-badge';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -459,6 +469,328 @@ function MessInfoCard() {
   );
 }
 
+// ─── Security Settings Card ───────────────────────────────────────────────────
+
+function getPasswordStrength(pass: string): { score: number; label: string; color: string } {
+  if (!pass) return { score: 0, label: '', color: '' };
+  let score = 0;
+  if (pass.length >= 6) score += 1;
+  if (pass.length >= 8) score += 1;
+  if (/[0-9]/.test(pass) && /[a-zA-Z]/.test(pass)) score += 1;
+  if (/[^A-Za-z0-9]/.test(pass)) score += 1;
+
+  if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-red-500' };
+  if (score <= 3) return { score: 2, label: 'Good', color: 'bg-amber-500' };
+  return { score: 3, label: 'Strong', color: 'bg-emerald-500' };
+}
+
+function SecuritySettingsCard() {
+  const { user } = useAuth();
+  const [isChanging, setIsChanging] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const strength = getPasswordStrength(newPassword);
+
+  const startChanging = () => {
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setMessage(null);
+    setError(null);
+    setIsChanging(true);
+  };
+
+  const cancelChanging = () => {
+    setIsChanging(false);
+    setNewPassword('');
+    setConfirmPassword('');
+    setMessage(null);
+    setError(null);
+  };
+
+  const handleUpdatePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+
+    const trimmedPassword = newPassword.trim();
+    if (!trimmedPassword) {
+      setError('Please enter a new password.');
+      return;
+    }
+
+    if (trimmedPassword.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (trimmedPassword !== confirmPassword.trim()) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: trimmedPassword,
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setMessage('Your password has been changed successfully.');
+      toast.success('Password updated successfully');
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsChanging(false);
+    } catch (err: any) {
+      console.error('Password change failed:', err);
+      const errMsg = err?.message || (typeof err === 'string' ? err : 'Failed to update password.');
+      setError(errMsg);
+      toast.error('Could not update password', { description: errMsg });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            <CardTitle>Account Security</CardTitle>
+          </div>
+
+          {!isChanging ? (
+            <Button
+              id="profile-change-password-btn"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={startChanging}
+            >
+              <KeyRound className="h-4 w-4" />
+              Change Password
+            </Button>
+          ) : (
+            <Button
+              id="profile-cancel-password-btn"
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-muted-foreground"
+              onClick={cancelChanging}
+            >
+              <X className="h-4 w-4" />
+              Cancel
+            </Button>
+          )}
+        </div>
+        <CardDescription>
+          Manage your password and protect your MealTrack account.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {isChanging ? (
+          <form onSubmit={handleUpdatePassword} className="space-y-4 pt-1">
+            {/* New Password */}
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-new-password" className="flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5" />
+                New Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="profile-new-password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="Enter at least 6 characters"
+                  disabled={saving}
+                  className="pr-10"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((v) => !v)}
+                  tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                  aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {/* Password strength indicator */}
+              {newPassword.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex h-1.5 w-full gap-1 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className={cn(
+                        'h-full transition-all duration-300 rounded-full',
+                        strength.score >= 1 ? strength.color : 'bg-transparent',
+                        strength.score >= 1 ? 'w-1/3' : 'w-0'
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        'h-full transition-all duration-300 rounded-full',
+                        strength.score >= 2 ? strength.color : 'bg-transparent',
+                        strength.score >= 2 ? 'w-1/3' : 'w-0'
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        'h-full transition-all duration-300 rounded-full',
+                        strength.score >= 3 ? strength.color : 'bg-transparent',
+                        strength.score >= 3 ? 'w-1/3' : 'w-0'
+                      )}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>
+                      Strength: <strong className="text-foreground">{strength.label}</strong>
+                    </span>
+                    <span className={cn(newPassword.length >= 6 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                      {newPassword.length >= 6 ? '✓ 6+ characters' : 'At least 6 characters'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-confirm-password" className="flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5" />
+                Confirm New Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="profile-confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="Re-enter your new password"
+                  disabled={saving}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-none"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {confirmPassword.length > 0 && (
+                <p
+                  className={cn(
+                    'text-xs flex items-center gap-1 mt-1 font-medium',
+                    newPassword === confirmPassword
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                  )}
+                >
+                  {newPassword === confirmPassword ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" /> Passwords match
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="h-3.5 w-3.5" /> Passwords do not match
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                id="profile-save-password-btn"
+                type="submit"
+                className="gap-2"
+                disabled={saving || !newPassword || newPassword.length < 6 || newPassword !== confirmPassword}
+              >
+                {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? 'Updating Password…' : 'Update Password'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={cancelChanging}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+            </div>
+
+            {message && (
+              <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                {message}
+              </p>
+            )}
+            {error && (
+              <p className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                {error}
+              </p>
+            )}
+          </form>
+        ) : (
+          /* Read-only / summary state */
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center justify-between rounded-lg border bg-secondary/20 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="shrink-0 text-muted-foreground">
+                  <Lock className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Password</p>
+                  <p className="mt-0.5 text-sm font-medium tracking-widest text-muted-foreground">••••••••••••</p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Protected
+              </span>
+            </div>
+
+            {message && (
+              <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                {message}
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── InfoRow helper ───────────────────────────────────────────────────────────
 
 function InfoRow({
@@ -493,11 +825,12 @@ export default function ProfilePage() {
       <header>
         <h1 className="font-heading text-2xl font-bold">My Profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          View and manage your personal details and mess information.
+          View and manage your personal details, security credentials, and mess information.
         </p>
       </header>
 
       <UserProfileCard />
+      <SecuritySettingsCard />
       <MessInfoCard />
     </div>
   );
