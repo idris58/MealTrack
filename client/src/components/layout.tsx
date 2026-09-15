@@ -13,11 +13,15 @@ import {
   Loader2,
   User,
   Bell,
+  MoreHorizontal,
+  ChevronRight,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PwaInstallButton } from '@/components/pwa-install-button';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -49,6 +53,28 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Settings, label: 'Settings', href: '/app/settings' },
 ];
 
+const MEMBER_MOBILE_NAV_ITEMS: NavItem[] = [
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/app' },
+  { icon: UtensilsCrossed, label: 'Meals', href: '/app/meals' },
+  { icon: Receipt, label: 'Expenses', href: '/app/expenses' },
+  { icon: Users, label: 'Members', href: '/app/members' },
+  { icon: Settings, label: 'Settings', href: '/app/settings' },
+];
+
+const MANAGER_MOBILE_NAV_ITEMS: NavItem[] = [
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/app' },
+  { icon: UtensilsCrossed, label: 'Meals', href: '/app/meals' },
+  { icon: Receipt, label: 'Expenses', href: '/app/expenses' },
+  { icon: Users, label: 'Members', href: '/app/members' },
+];
+
+const MORE_ITEMS = [
+  { icon: FileBarChart, label: 'Reports', href: '/app/reports', desc: 'Summary analytics, PDF & Excel export' },
+  { icon: History, label: 'History', href: '/app/history', desc: 'Archived cycles, settlements & ledger' },
+  { icon: Settings, label: 'Settings', href: '/app/settings', desc: 'Cycle operations, share links & notices' },
+  { icon: Sparkles, label: 'Changelog', href: '/app/changelog', desc: 'Recent features and updates' },
+];
+
 /** Returns up to two uppercase initials from a display name or email. */
 function getInitials(name?: string | null, email?: string | null): string {
   const source = name ?? email ?? '';
@@ -63,6 +89,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showNoticeDialog, setShowNoticeDialog] = useState(false);
+  const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
   const { notice } = useNotice();
 
@@ -79,7 +106,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const isMember = profile?.role === 'member';
-  const navItems = NAV_ITEMS.filter((item) => !(isMember && item.href === '/app/reports'));
+  const sidebarNavItems = NAV_ITEMS.filter((item) => {
+    if (isMember && (item.href === '/app/reports' || item.href === '/app/history')) return false;
+    return true;
+  });
+
+  const mobileNavItems = isMember ? MEMBER_MOBILE_NAV_ITEMS : MANAGER_MOBILE_NAV_ITEMS;
+  const isMoreActive = !isMember && ['/app/reports', '/app/history', '/app/settings', '/app/changelog'].includes(location);
 
   const initials = getInitials(profile?.full_name, user?.email);
 
@@ -153,7 +186,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-
       <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b bg-card px-4 md:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {brand}
@@ -197,7 +229,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Desktop Sidebar */}
         <aside className="hidden h-[calc(100vh-4rem)] w-64 shrink-0 flex-col border-r bg-card md:sticky md:top-16 md:flex">
           <nav className="flex-1 space-y-2 p-4 pt-6">
-            {navItems.map((item) => (
+            {sidebarNavItems.map((item) => (
               <Link key={item.href} href={item.href}>
                 <div
                   className={cn(
@@ -217,39 +249,124 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Main Content */}
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="container mx-auto max-w-5xl p-4 pb-28 md:p-8">
+          <div className="container mx-auto max-w-5xl p-4 pb-20 md:p-8">
             {children}
           </div>
         </main>
       </div>
 
+      {/* Mobile Bottom Navigation Bar (Clean 5-Item Bar) */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 border-t bg-card/95 px-0.5 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 border-t bg-card/98 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur-md md:hidden"
         aria-label="Primary mobile navigation"
       >
-        <div
-          className="grid h-16 items-center gap-0.5"
-          style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
-        >
-          {navItems.map((item) => (
-            <Link key={item.href} href={item.href} className="flex min-w-0 w-full justify-center">
+        <div className="grid h-14 grid-cols-5 items-stretch">
+          {mobileNavItems.map((item) => {
+            const isActive = location === item.href;
+            return (
+              <Link key={item.href} href={item.href} className="flex h-full min-w-0 w-full justify-center">
+                <div
+                  className={cn(
+                    'flex h-full w-full min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-medium transition-colors select-none',
+                    isActive
+                      ? 'text-primary'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'flex h-7 w-12 items-center justify-center rounded-full transition-colors',
+                      isActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground'
+                    )}
+                  >
+                    <item.icon className="h-4.5 w-4.5 shrink-0" />
+                  </div>
+                  <span
+                    className={cn(
+                      'w-full truncate text-center leading-tight tracking-tight text-[10px]',
+                      isActive ? 'font-bold text-primary' : 'font-medium'
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+
+          {!isMember && (
+            <button
+              type="button"
+              id="mobile-nav-more-btn"
+              onClick={() => setIsMoreSheetOpen(true)}
+              className="flex h-full min-w-0 w-full flex-col items-center justify-center gap-0.5 px-0.5 font-medium transition-colors select-none text-muted-foreground hover:text-foreground"
+            >
               <div
                 className={cn(
-                  'flex h-14 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 font-medium transition-colors',
-                  location === item.href
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  'flex h-7 w-12 items-center justify-center rounded-full transition-colors',
+                  isMoreActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground'
                 )}
               >
-                <item.icon className="h-4.5 w-4.5 shrink-0" />
-                <span className="w-full truncate text-center leading-tight tracking-tight text-[9px] min-[360px]:text-[10px] sm:text-[11px]">
-                  {item.label}
-                </span>
+                <MoreHorizontal className="h-4.5 w-4.5 shrink-0" />
               </div>
-            </Link>
-          ))}
+              <span
+                className={cn(
+                  'w-full truncate text-center leading-tight tracking-tight text-[10px]',
+                  isMoreActive ? 'font-bold text-primary' : 'font-medium'
+                )}
+              >
+                More
+              </span>
+            </button>
+          )}
         </div>
       </nav>
+
+      {/* Mobile More Sheet for Manager / Coordinator */}
+      {!isMember && (
+        <Sheet open={isMoreSheetOpen} onOpenChange={setIsMoreSheetOpen}>
+          <SheetContent side="bottom" className="rounded-t-2xl border-t bg-card p-5 sm:max-w-lg sm:mx-auto">
+            <SheetHeader className="pb-3 text-left">
+              <SheetTitle className="text-base font-bold">More Options</SheetTitle>
+              <SheetDescription className="text-xs text-muted-foreground">
+                Access reporting, archive records, and mess settings.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-2 pt-1">
+              {MORE_ITEMS.map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setIsMoreSheetOpen(false)}
+                    className={cn(
+                      'flex items-center justify-between rounded-xl border p-3 transition-colors',
+                      isActive
+                        ? 'border-primary/40 bg-primary/5 text-primary font-medium'
+                        : 'bg-secondary/20 hover:bg-muted text-foreground'
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={cn(
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                        isActive ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
+                      )}>
+                        <item.icon className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{item.label}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.desc}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                );
+              })}
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* Notice reader dialog triggered from the header bell */}
       {showNoticeDialog && (

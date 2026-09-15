@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { eachDayOfInterval, format, max, min, parseISO, startOfDay } from 'date-fns';
 import { Archive, Check, ChevronDown, History, Lock, Pencil, Plus, ScrollText, ShoppingBag, Trash2, Utensils, Wallet, Zap, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 
 import { useMeal, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
@@ -1063,8 +1063,20 @@ function StatCard({
 export default function HistoryPage() {
   const { cycles, getCycleDetails, restoreCycle } = useMeal();
   const { profile } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (profile?.role === 'member') {
+      setLocation('/app');
+    }
+  }, [profile?.role, setLocation]);
+
   const [openClosedCycleId, setOpenClosedCycleId] = useState('');
   const [deletedClosedCycles, setDeletedClosedCycles] = useState<DeletedCycleGhost[]>([]);
+
+  if (profile?.role === 'member') {
+    return null;
+  }
 
   const pendingCycles = cycles
     .filter((cycle) => cycle.status === 'pending')
@@ -1115,14 +1127,12 @@ export default function HistoryPage() {
               </p>
             </div>
           </div>
-          {profile?.role !== 'member' ? (
-            <Button variant="outline" size="sm" asChild className="gap-1.5 border-border/80 bg-background/80 shadow-sm transition-all hover:bg-background hover:shadow shrink-0 sm:h-9">
-              <Link href="/app/changelog">
-                <ScrollText className="h-4 w-4 text-primary" />
-                <span>Changelog</span>
-              </Link>
-            </Button>
-          ) : null}
+          <Button variant="outline" size="sm" asChild className="gap-1.5 border-border/80 bg-background/80 shadow-sm transition-all hover:bg-background hover:shadow shrink-0 sm:h-9">
+            <Link href="/app/changelog">
+              <ScrollText className="h-4 w-4 text-primary" />
+              <span>Changelog</span>
+            </Link>
+          </Button>
         </div>
       </header>
 
