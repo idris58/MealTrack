@@ -257,17 +257,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Navigation Bar (Clean 5-Item Bar) */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 w-full border-t bg-card/98 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur-md md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 w-full border-t bg-card/98 shadow-[0_-2px_12px_rgba(0,0,0,0.05)] backdrop-blur-md md:hidden"
         aria-label="Primary mobile navigation"
       >
-        <div className="grid h-16 w-full grid-cols-5 items-stretch">
+        <div className="grid h-[54px] w-full grid-cols-5 items-center">
           {mobileNavItems.map((item) => {
             const isActive = location === item.href;
             return (
-              <Link key={item.href} href={item.href} className="flex h-full min-w-0 w-full justify-center">
+              <Link key={item.href} href={item.href} className="flex h-full min-w-0 w-full items-center justify-center">
                 <div
                   className={cn(
-                    'flex h-full w-full min-w-0 flex-col items-center justify-center gap-1 px-0.5 font-medium transition-colors select-none py-1',
+                    'flex h-full w-full min-w-0 flex-col items-center justify-center py-1 font-medium transition-colors select-none',
                     isActive
                       ? 'text-primary'
                       : 'text-muted-foreground hover:text-foreground',
@@ -275,16 +275,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <div
                     className={cn(
-                      'flex h-7 w-12 items-center justify-center rounded-full transition-all duration-200',
-                      isActive ? 'bg-primary/15 text-primary scale-105' : 'text-muted-foreground'
+                      'flex h-6 w-10 items-center justify-center rounded-full transition-all duration-150',
+                      isActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground'
                     )}
                   >
                     <item.icon className="h-4.5 w-4.5 shrink-0" />
                   </div>
                   <span
                     className={cn(
-                      'w-full truncate text-center leading-none tracking-tight text-[11px]',
-                      isActive ? 'font-bold text-primary' : 'font-medium'
+                      'mt-0.5 w-full truncate text-center leading-tight tracking-tight text-[10px]',
+                      isActive ? 'font-bold text-primary' : 'font-medium text-muted-foreground'
                     )}
                   >
                     {item.label}
@@ -299,20 +299,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
               type="button"
               id="mobile-nav-more-btn"
               onClick={() => setIsMoreSheetOpen(true)}
-              className="flex h-full min-w-0 w-full flex-col items-center justify-center gap-1 px-0.5 font-medium transition-colors select-none text-muted-foreground hover:text-foreground py-1"
+              className="flex h-full min-w-0 w-full flex-col items-center justify-center py-1 font-medium transition-colors select-none text-muted-foreground hover:text-foreground"
             >
               <div
                 className={cn(
-                  'flex h-7 w-12 items-center justify-center rounded-full transition-all duration-200',
-                  isMoreActive ? 'bg-primary/15 text-primary scale-105' : 'text-muted-foreground'
+                  'flex h-6 w-10 items-center justify-center rounded-full transition-all duration-150',
+                  isMoreActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground'
                 )}
               >
                 <MoreHorizontal className="h-4.5 w-4.5 shrink-0" />
               </div>
               <span
                 className={cn(
-                  'w-full truncate text-center leading-none tracking-tight text-[11px]',
-                  isMoreActive ? 'font-bold text-primary' : 'font-medium'
+                  'mt-0.5 w-full truncate text-center leading-tight tracking-tight text-[10px]',
+                  isMoreActive ? 'font-bold text-primary' : 'font-medium text-muted-foreground'
                 )}
               >
                 More
