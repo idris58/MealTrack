@@ -320,11 +320,11 @@ function MemberCard({
   );
 }
 
-function SortableMemberCard({ member, stats, deletingMemberId, onDeposit, onDelete, profileRole, onCoordinatorAction, canManageRoles, isLinked }: { member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null; onDeposit?: () => void; onDelete?: () => void; profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void; canManageRoles?: boolean; isLinked?: boolean; }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: member.id });
+function SortableMemberCard({ member, stats, deletingMemberId, onDeposit, onDelete, profileRole, onCoordinatorAction, canManageRoles, canManageMembers, isLinked }: { member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null; onDeposit?: () => void; onDelete?: () => void; profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void; canManageRoles?: boolean; canManageMembers?: boolean; isLinked?: boolean; }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: member.id, disabled: !canManageMembers });
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1 : undefined }} className={isDragging ? "opacity-80" : undefined} {...attributes}>
-      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} dragHandleProps={{ ref: setActivatorNodeRef, ...listeners }} />
+      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} dragHandleProps={canManageMembers ? { ref: setActivatorNodeRef, ...listeners } : undefined} />
     </div>
   );
 }
@@ -382,6 +382,7 @@ export default function Members() {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (!canManageMembers) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = members.findIndex((member) => member.id === active.id);
@@ -579,7 +580,7 @@ export default function Members() {
                   const stats = getMemberStats(item.member.id);
                   const linkedProfile = profiles.find((profile) => profile.id === item.member.profileId);
                   const coordinatorAction = canManageRoles && linkedProfile && linkedProfile.role !== 'manager' ? () => void toggleCoordinator(linkedProfile.id, linkedProfile.role === 'coordinator' ? 'member' : 'coordinator') : undefined;
-                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} isLinked={!!item.member.profileId} />;
+                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} />;
                 })}
               </div>
             </SortableContext>

@@ -287,6 +287,10 @@ function PendingExpenseEditor({
 
 function PendingCycleCard({ details }: { details: CycleDetails }) {
   const { markCycleClosed, restoreExpense } = useMeal();
+  const { profile } = useAuth();
+  const canSettle = profile?.role === 'manager' || profile?.role === 'coordinator';
+  const canCorrect = canSettle;
+  const canLock = profile?.role === 'manager';
   const [depositMember, setDepositMember] = useState<{ id: string; name: string; balance: number } | null>(null);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -339,7 +343,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
   }, [details]);
 
   const handleMarkClosed = async () => {
-    if (isMarkingClosed || !isSettlementMatched) return;
+    if (!canLock || isMarkingClosed || !isSettlementMatched) return;
     setIsMarkingClosed(true);
 
     try {
@@ -457,11 +461,11 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
 
         <div className="flex flex-wrap items-center justify-between gap-4 border-y py-4">
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="gap-2" onClick={() => { setEditingExpense(null); setExpenseDialogOpen(true); }}>
+            <Button variant="outline" className="gap-2" disabled={!canCorrect} onClick={() => { if (!canCorrect) return; setEditingExpense(null); setExpenseDialogOpen(true); }}>
               <Plus className="h-4 w-4" />
               Add Expense Correction
             </Button>
-            <Button variant="outline" className="gap-2" onClick={() => { setMealDate(undefined); setMealDialogOpen(true); }}>
+            <Button variant="outline" className="gap-2" disabled={!canCorrect} onClick={() => { if (!canCorrect) return; setMealDate(undefined); setMealDialogOpen(true); }}>
               <Plus className="h-4 w-4" />
               Add Meal Correction
             </Button>
@@ -471,7 +475,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
               <Button
                 variant={isSettlementMatched ? "default" : "secondary"}
                 className={cn("gap-2 shadow-sm transition-all", isSettlementMatched ? "bg-indigo-600 text-white hover:bg-indigo-700 hover:-translate-y-0.5" : "text-muted-foreground")}
-                disabled={isMarkingClosed || !isSettlementMatched}
+                disabled={!canLock || isMarkingClosed || !isSettlementMatched}
                 title={!isSettlementMatched ? 'Cannot lock cycle until settlement math matches' : undefined}
               >
                 {!isSettlementMatched ? <AlertCircle className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
@@ -585,7 +589,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button size="sm" className="gap-2 rounded-full" onClick={() => setDepositMember({ id: member.id, name: member.name, balance: member.balance })}>
+                          <Button size="sm" className="gap-2 rounded-full" disabled={!canSettle} onClick={() => { if (!canSettle) return; setDepositMember({ id: member.id, name: member.name, balance: member.balance }); }}>
                             <Wallet className="h-4 w-4" />
                             Settle
                           </Button>
@@ -682,7 +686,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
 
                           return (
                             <div key={row.expense.id}>
-                              {renderPendingExpenseRow(row.expense, () => { setEditingExpense(row.expense); setExpenseDialogOpen(true); })}
+                              {renderPendingExpenseRow(row.expense, canCorrect ? () => { setEditingExpense(row.expense); setExpenseDialogOpen(true); } : undefined)}
                             </div>
                           );
                         })}
@@ -716,7 +720,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
                     const total = dayLogs.reduce((sum, log) => sum + log.count, 0);
 
                     return (
-                      <tr key={dateStr} className="cursor-pointer border-b hover:bg-muted/40" onClick={() => { setMealDate(day); setMealDialogOpen(true); }}>
+                      <tr key={dateStr} className={cn('border-b hover:bg-muted/40', canCorrect ? 'cursor-pointer' : undefined)} onClick={() => { if (!canCorrect) return; setMealDate(day); setMealDialogOpen(true); }}>
                         <td className="sticky left-0 border-r bg-card p-3 font-medium md:p-4">{format(day, 'dd MMM')}</td>
                         {details.members.map((member) => {
                           const log = dayLogs.find((entry) => entry.memberId === member.id);

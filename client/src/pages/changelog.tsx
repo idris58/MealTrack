@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, formatDistanceToNow, isValid, parseISO } from 'date-fns';
 import {
   ArrowLeft,
@@ -29,6 +29,8 @@ import {
   type ChangelogEntry,
 } from '@/lib/meal-context';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
+import { useLocation } from 'wouter';
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -458,6 +460,8 @@ function ChangelogSection({
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function ChangelogPage() {
+  const [, setLocation] = useLocation();
+  const { profile } = useAuth();
   const {
     activeCycle,
     activeCycleChangelogEntries,
@@ -471,6 +475,12 @@ export default function ChangelogPage() {
   const [actionFilter, setActionFilter] = useState<ChangelogAction | 'all'>('all');
   const [entityFilter, setEntityFilter] = useState<ChangelogEntityType | 'all'>('all');
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (profile?.role === 'member') setLocation('/app');
+  }, [profile?.role, setLocation]);
+
+  if (profile?.role === 'member') return null;
 
   const filteredPending = useMemo(
     () => filterEntries(pendingCycleChangelogEntries, actionFilter, entityFilter, search),
