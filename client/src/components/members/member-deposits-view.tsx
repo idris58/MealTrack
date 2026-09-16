@@ -198,7 +198,7 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type FilterTab = 'all' | 'deposits' | 'refunds' | 'carry_forward';
+type FilterTab = 'all' | 'deposit' | 'refund' | 'carry_forward';
 type SortOrder = 'newest' | 'oldest';
 
 export function MemberDepositsView() {
@@ -343,11 +343,11 @@ export function MemberDepositsView() {
     );
   }
 
-  const filterTabs: { key: FilterTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'all', label: 'All', icon: <Wallet className="h-3 w-3" /> },
-    { key: 'deposits', label: 'Deposits', icon: <ArrowUp className="h-3 w-3" /> },
-    { key: 'refunds', label: 'Refunds', icon: <ArrowDown className="h-3 w-3" /> },
-    { key: 'carry_forward', label: 'Carry-Forward', icon: <Repeat2 className="h-3 w-3" /> },
+  const filterTabs: { key: FilterTab; label: string; icon: React.ReactNode; count: number }[] = [
+    { key: 'all', label: 'All', icon: <Wallet className="h-3 w-3" />, count: cycleDeposits.length },
+    { key: 'deposit', label: 'Deposits', icon: <ArrowUp className="h-3 w-3" />, count: cycleDeposits.filter((d) => classifyTx(d) === 'deposit').length },
+    { key: 'refund', label: 'Refunds', icon: <ArrowDown className="h-3 w-3" />, count: cycleDeposits.filter((d) => classifyTx(d) === 'refund').length },
+    { key: 'carry_forward', label: 'Carry-Forward', icon: <Repeat2 className="h-3 w-3" />, count: cycleDeposits.filter((d) => classifyTx(d) === 'carry_forward').length },
   ];
 
   return (
@@ -508,7 +508,17 @@ export function MemberDepositsView() {
                 )}
               >
                 {tab.icon}
-                {tab.label}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-0.2 text-[9px] font-semibold leading-tight',
+                    filterTab === tab.key
+                      ? 'bg-primary-foreground/20 text-primary-foreground'
+                      : 'bg-muted-foreground/15 text-muted-foreground'
+                  )}
+                >
+                  {tab.count}
+                </span>
               </button>
             ))}
           </div>
