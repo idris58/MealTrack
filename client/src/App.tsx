@@ -225,11 +225,12 @@ function AppShell() {
       return;
     }
 
+    const isMemberRole = profile?.role === "member";
     const pageTitleMap: Record<string, string> = {
       "/": "Dashboard - MealTrack",
       "/app": "Dashboard - MealTrack",
-      "/members": "Members - MealTrack",
-      "/app/members": "Members - MealTrack",
+      "/members": isMemberRole ? "Deposits - MealTrack" : "Members - MealTrack",
+      "/app/members": isMemberRole ? "Deposits - MealTrack" : "Members - MealTrack",
       "/expenses": "Expenses - MealTrack",
       "/app/expenses": "Expenses - MealTrack",
       "/meals": "Meals - MealTrack",
@@ -246,7 +247,7 @@ function AppShell() {
     };
 
     document.title = pageTitleMap[routePath] ?? "MealTrack";
-  }, [isInviteRoute, isRecoveryFlow, isSharedLandingRoute, isSharedRoute, routePath]);
+  }, [isInviteRoute, isRecoveryFlow, isSharedLandingRoute, isSharedRoute, routePath, profile?.role]);
 
   useEffect(() => {
     if (isSharedLandingRoute || isSharedRoute || isInviteRoute || !authLinkResolved) return;

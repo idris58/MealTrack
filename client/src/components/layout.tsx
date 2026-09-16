@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   ChevronRight,
   Sparkles,
+  WalletCards,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -57,7 +58,7 @@ const MEMBER_MOBILE_NAV_ITEMS: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/app' },
   { icon: UtensilsCrossed, label: 'Meals', href: '/app/meals' },
   { icon: Receipt, label: 'Expenses', href: '/app/expenses' },
-  { icon: Users, label: 'Members', href: '/app/members' },
+  { icon: WalletCards, label: 'Deposits', href: '/app/members' },
   { icon: Settings, label: 'Settings', href: '/app/settings' },
 ];
 
@@ -109,6 +110,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const sidebarNavItems = NAV_ITEMS.filter((item) => {
     if (isMember && (item.href === '/app/reports' || item.href === '/app/history')) return false;
     return true;
+  }).map((item) => {
+    if (isMember && item.href === '/app/members') {
+      return { ...item, icon: WalletCards, label: 'Deposits' };
+    }
+    return item;
   });
 
   const mobileNavItems = isMember ? MEMBER_MOBILE_NAV_ITEMS : MANAGER_MOBILE_NAV_ITEMS;

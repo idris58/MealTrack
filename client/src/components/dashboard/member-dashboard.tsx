@@ -459,9 +459,13 @@ export function MemberDashboard() {
               <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Recent Deposits
               </CardTitle>
-              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10">
-                <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              </div>
+              <Link
+                href="/app/members"
+                className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+              >
+                <span>View All</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
             </CardHeader>
             <CardContent className="px-4 pb-4 pt-0">
               {recentDeposits.length === 0 ? (
