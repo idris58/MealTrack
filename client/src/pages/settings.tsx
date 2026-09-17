@@ -47,6 +47,7 @@ import { NoticeDialog } from '@/components/notice-dialog';
 import { useNetworkStatus } from '@/lib/pwa';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -701,6 +702,7 @@ function NotificationSettingsCard() {
   const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
   const [preferencesError, setPreferencesError] = useState<string | null>(null);
+  const onboardingToastId = useRef<string | number | null>(null);
   useEffect(() => {
     let active = true;
     void getNotificationPreferences().then((preferences) => {
@@ -735,6 +737,23 @@ function NotificationSettingsCard() {
     void savePreferences(patch, 'Notification preference saved.');
   };
 
+  useEffect(() => {
+    const shouldShow = supported && permission === 'default' && !hasSubscription && !preferencesLoading;
+    if (shouldShow && onboardingToastId.current === null) {
+      onboardingToastId.current = toast('Stay updated with MealTrack', {
+        description: 'Get reminders and important mess updates.',
+        duration: Infinity,
+        action: {
+          label: 'Enable notifications',
+          onClick: () => void subscribe(),
+        },
+      });
+    } else if (!shouldShow && onboardingToastId.current !== null) {
+      toast.dismiss(onboardingToastId.current);
+      onboardingToastId.current = null;
+    }
+  }, [hasSubscription, permission, preferencesLoading, subscribe, supported]);
+
   return (
     <Card className="overflow-hidden border-border/80 shadow-sm transition-shadow hover:shadow-md">
       <CardHeader className="border-b bg-gradient-to-r from-violet-500/[0.07] to-transparent p-5 sm:p-6">
@@ -759,7 +778,7 @@ function NotificationSettingsCard() {
             <p className="text-xs text-muted-foreground">Next reminder: {globalEnabled && mealRemindersEnabled && hasSubscription ? nextRun : 'Enable meal reminders and browser delivery to schedule reminders.'}</p>
             <Button type="button" size="sm" onClick={() => void savePreferences({ reminderTime }, 'Reminder time saved.')} disabled={preferencesLoading || preferencesSaving}>{preferencesSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save time</Button>
           </div>
-          <div className="border-t pt-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium">Browser delivery</p><p className="text-xs text-muted-foreground">{!supported ? 'Not supported in this browser.' : permission === 'denied' ? 'Permission is blocked in browser settings.' : hasSubscription ? 'Permission granted and this browser is subscribed.' : permission === 'granted' ? 'Permission granted, but this browser is not subscribed.' : 'Browser permission has not been granted yet.'}</p></div>{!hasSubscription && <Button type="button" size="sm" disabled={!supported || working || permission === 'denied'} onClick={() => void subscribe()}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Enable notifications</Button>}</div></div>
+          <div className="border-t pt-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium">Browser delivery</p><p className="text-xs text-muted-foreground">{!supported ? 'Not supported in this browser.' : permission === 'denied' ? 'Permission is blocked in browser settings.' : hasSubscription ? 'Permission granted and this browser is subscribed.' : permission === 'granted' ? 'Permission granted, but this browser is not subscribed.' : 'Browser permission has not been granted yet.'}</p></div></div></div>
           {!supported ? <p className="text-xs text-muted-foreground">This browser does not support Web Push notifications.</p> : permission === 'denied' ? <p className="text-xs text-red-600 dark:text-red-400">Notifications are blocked by your browser. Allow MealTrack in browser settings, then return here to retry.</p> : permission === 'granted' && !hasSubscription ? <p className="text-xs text-muted-foreground">Click Enable notifications to restore browser delivery.</p> : null}
           {preferencesMessage && <p className="text-xs text-emerald-600">{preferencesMessage}</p>}
           {preferencesError && <p className="text-xs text-red-600">{preferencesError}</p>}
