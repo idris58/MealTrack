@@ -184,6 +184,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canManageCycles: isManager,
     canManageMess: isManager,
     signOut: async () => {
+      if (session?.user) {
+        window.sessionStorage.removeItem(`mealtrack:notification-onboarding-dismissed:${session.user.id}`);
+      }
       const { error } = await supabase.auth.signOut();
 
       if (error) {
