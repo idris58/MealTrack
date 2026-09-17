@@ -47,7 +47,6 @@ import { NoticeDialog } from '@/components/notice-dialog';
 import { useNetworkStatus } from '@/lib/pwa';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -702,7 +701,6 @@ function NotificationSettingsCard() {
   const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
   const [preferencesError, setPreferencesError] = useState<string | null>(null);
-  const onboardingToastId = useRef<string | number | null>(null);
   useEffect(() => {
     let active = true;
     void getNotificationPreferences().then((preferences) => {
@@ -736,23 +734,6 @@ function NotificationSettingsCard() {
     const patch = key === 'global' ? { global: checked } : { categories: { [key]: checked } };
     void savePreferences(patch, 'Notification preference saved.');
   };
-
-  useEffect(() => {
-    const shouldShow = supported && permission === 'default' && !hasSubscription && !preferencesLoading;
-    if (shouldShow && onboardingToastId.current === null) {
-      onboardingToastId.current = toast('Stay updated with MealTrack', {
-        description: 'Get reminders and important mess updates.',
-        duration: Infinity,
-        action: {
-          label: 'Enable notifications',
-          onClick: () => void subscribe(),
-        },
-      });
-    } else if (!shouldShow && onboardingToastId.current !== null) {
-      toast.dismiss(onboardingToastId.current);
-      onboardingToastId.current = null;
-    }
-  }, [hasSubscription, permission, preferencesLoading, subscribe, supported]);
 
   return (
     <Card className="overflow-hidden border-border/80 shadow-sm transition-shadow hover:shadow-md">

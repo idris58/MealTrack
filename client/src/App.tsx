@@ -12,6 +12,8 @@ import { MealProvider, useMeal } from "@/lib/meal-context";
 import { NoticeProvider } from "@/lib/notice-context";
 import { OfflineToastManager } from "@/components/offline-toast";
 import { supabase } from "@/lib/supabase";
+import { usePushNotifications } from "@/lib/push-notifications";
+import { getNotificationPreferences } from "@/lib/notification-preferences";
 import { ErrorBoundary } from "@/components/error-boundary";
 import AuthPage from "@/pages/auth";
 import ChangelogPage from "@/pages/changelog";
@@ -109,6 +111,48 @@ function Router() {
       </ErrorBoundary>
     </Layout>
   );
+}
+
+function NotificationOnboardingToast() {
+  const { supported, permission, hasSubscription, working, subscribe } = usePushNotifications({ mode: "main" });
+  const toastId = useRef<string | number | null>(null);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    void getNotificationPreferences().then((preferences) => {
+      if (!active) return;
+      setNotificationsEnabled(
+        preferences.global !== false &&
+          (preferences.categories?.notices !== false || preferences.categories?.mealReminders !== false),
+      );
+      setPreferencesReady(true);
+    }).catch(() => { if (active) setPreferencesReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const shouldShow = supported && permission === "default" && !hasSubscription && preferencesReady && notificationsEnabled;
+    if (shouldShow && toastId.current === null) {
+      toastId.current = toast("Stay updated with MealTrack", {
+        description: "Get reminders and important mess updates.",
+        duration: Infinity,
+        action: { label: "Enable notifications", onClick: () => void subscribe() },
+      });
+    } else if (!shouldShow && toastId.current !== null) {
+      toast.dismiss(toastId.current);
+      toastId.current = null;
+    }
+    return () => {
+      if (toastId.current !== null && !shouldShow) {
+        toast.dismiss(toastId.current);
+        toastId.current = null;
+      }
+    };
+  }, [hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, working]);
+
+  return null;
 }
 
 const legacyMainRouteMap: Record<string, string> = {
@@ -315,6 +359,7 @@ function AppShell() {
     <MealProvider>
       <NoticeProvider>
         <OfflineToastManager />
+        <NotificationOnboardingToast />
         <Router />
       </NoticeProvider>
     </MealProvider>
