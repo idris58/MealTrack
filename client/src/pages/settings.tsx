@@ -694,6 +694,9 @@ function ShareSettingsCard() {
 function NotificationSettingsCard() {
   const { supported, status, hasSubscription, working, error, message, subscribe, unsubscribe } = usePushNotifications({ mode: 'main' });
   const [reminderTime, setReminderTime] = useState('22:00');
+  const [globalEnabled, setGlobalEnabled] = useState(true);
+  const [noticesEnabled, setNoticesEnabled] = useState(true);
+  const [mealRemindersEnabled, setMealRemindersEnabled] = useState(true);
   const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
@@ -703,18 +706,35 @@ function NotificationSettingsCard() {
     void getNotificationPreferences().then((preferences) => {
       if (!active) return;
       setReminderTime(preferences.reminderTime || '22:00');
+      setGlobalEnabled(preferences.global !== false);
+      setNoticesEnabled(preferences.categories?.notices !== false);
+      setMealRemindersEnabled(preferences.categories?.mealReminders !== false);
     }).catch((loadError) => { if (active) setPreferencesError(loadError instanceof Error ? loadError.message : 'Unable to load reminder preferences.'); })
       .finally(() => { if (active) setPreferencesLoading(false); });
     return () => { active = false; };
   }, []);
-  const savePreferences = async () => {
+  const savePreferences = async (patch: Parameters<typeof saveNotificationPreferences>[0], successMessage = 'Notification preferences saved.') => {
     setPreferencesSaving(true); setPreferencesMessage(null); setPreferencesError(null);
-    try { const saved = await saveNotificationPreferences({ reminderTime }); setReminderTime(saved.reminderTime); setPreferencesMessage('Reminder time saved.'); }
+    try {
+      const saved = await saveNotificationPreferences(patch);
+      setReminderTime(saved.reminderTime || reminderTime);
+      if (saved.global !== undefined) setGlobalEnabled(saved.global !== false);
+      if (saved.categories?.notices !== undefined) setNoticesEnabled(saved.categories.notices !== false);
+      if (saved.categories?.mealReminders !== undefined) setMealRemindersEnabled(saved.categories.mealReminders !== false);
+      setPreferencesMessage(successMessage);
+    }
     catch (saveError) { setPreferencesError(saveError instanceof Error ? saveError.message : 'Unable to save reminder preferences.'); }
     finally { setPreferencesSaving(false); }
   };
   const nextRun = (() => { try { const [hour, minute] = reminderTime.split(':').map(Number); const now = new Date(); const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now); const values = new Map(parts.map((part) => [part.type, part.value])); const currentTime = `${values.get('hour')}:${values.get('minute')}`; const today = `${values.get('year')}-${values.get('month')}-${values.get('day')}`; return `${currentTime >= reminderTime ? 'Tomorrow' : 'Today'}, ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (Dhaka time)${today ? '' : ''}`; } catch { return 'the next scheduled time'; } })();
-  const handleToggle = (checked: boolean) => { if (checked) { void subscribe(); return; } void unsubscribe(); };
+  const handlePreferenceToggle = (key: 'global' | 'notices' | 'mealReminders', checked: boolean) => {
+    if (key === 'global') setGlobalEnabled(checked);
+    if (key === 'notices') setNoticesEnabled(checked);
+    if (key === 'mealReminders') setMealRemindersEnabled(checked);
+    const patch = key === 'global' ? { global: checked } : { categories: { [key]: checked } };
+    void savePreferences(patch, 'Notification preference saved.');
+  };
+  const handleSubscriptionToggle = () => { if (hasSubscription) void unsubscribe(); else void subscribe(); };
 
   return (
     <Card className="overflow-hidden border-border/80 shadow-sm transition-shadow hover:shadow-md">
@@ -723,7 +743,7 @@ function NotificationSettingsCard() {
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-600 dark:text-violet-400">Reminders</p>
             <CardTitle className="mt-0.5 text-lg font-bold font-heading">Push Notifications</CardTitle>
-            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">Set up browser alerts for daily meal logs.</p>
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">Choose what MealTrack may send. Browser delivery is managed separately below.</p>
           </div>
           <div className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
             <BellRing className="h-4.5 w-4.5 text-violet-600 dark:text-violet-400" />
@@ -732,11 +752,16 @@ function NotificationSettingsCard() {
       </CardHeader>
       <CardContent className="p-5 sm:p-6 space-y-4">
         <div className="rounded-xl border bg-background/70 p-4 space-y-3">
-          <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-medium">Meal log reminders</p><p className="text-xs text-muted-foreground">Get an alert when today&apos;s active-cycle meal log has not been saved.</p></div><Switch checked={hasSubscription} disabled={!supported || working || status === 'denied'} onCheckedChange={handleToggle} aria-label="Toggle meal log reminders" /></div>
-          <label className="block space-y-1 text-xs font-medium">Reminder time <span className="font-normal text-muted-foreground">(Dhaka time)</span><input type="time" value={reminderTime} disabled={!hasSubscription || preferencesLoading || preferencesSaving} onChange={(event) => setReminderTime(event.target.value)} className="mt-1 flex h-10 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50" /></label>
-          <p className="text-xs text-muted-foreground">Next reminder: {hasSubscription ? nextRun : 'Enable reminders to choose a time.'}</p>
-          <Button type="button" size="sm" onClick={() => void savePreferences()} disabled={!hasSubscription || preferencesLoading || preferencesSaving}>{preferencesSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save time</Button>
-          {!supported ? <p className="text-xs text-muted-foreground">This browser does not support Web Push notifications.</p> : status === 'denied' ? <p className="text-xs text-red-600 dark:text-red-400">Notifications are blocked. Allow them from your browser settings to enable reminders.</p> : null}
+          <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-semibold">Notifications</p><p className="text-xs text-muted-foreground">Master switch for all logged-in push notifications.</p></div><Switch checked={globalEnabled} disabled={preferencesLoading || preferencesSaving} onCheckedChange={(checked) => handlePreferenceToggle('global', checked)} aria-label="Toggle all notifications" /></div>
+          <div className={cn('space-y-3 border-t pt-3', !globalEnabled && 'opacity-60')}>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-medium">Notice notifications</p><p className="text-xs text-muted-foreground">Receive alerts when a new mess notice is posted.</p></div><Switch checked={noticesEnabled} disabled={!globalEnabled || preferencesLoading || preferencesSaving} onCheckedChange={(checked) => handlePreferenceToggle('notices', checked)} aria-label="Toggle notice notifications" /></div>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-medium">Meal-log reminders</p><p className="text-xs text-muted-foreground">Get an alert when today&apos;s active-cycle meal log has not been saved.</p></div><Switch checked={mealRemindersEnabled} disabled={!globalEnabled || preferencesLoading || preferencesSaving} onCheckedChange={(checked) => handlePreferenceToggle('mealReminders', checked)} aria-label="Toggle meal log reminders" /></div>
+            <label className="block space-y-1 text-xs font-medium">Reminder time <span className="font-normal text-muted-foreground">(Dhaka time)</span><input type="time" value={reminderTime} disabled={!globalEnabled || !mealRemindersEnabled || preferencesLoading || preferencesSaving} onChange={(event) => setReminderTime(event.target.value)} className="mt-1 flex h-10 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50" /></label>
+            <p className="text-xs text-muted-foreground">Next reminder: {globalEnabled && mealRemindersEnabled && hasSubscription ? nextRun : 'Enable meal reminders and browser delivery to schedule reminders.'}</p>
+            <Button type="button" size="sm" onClick={() => void savePreferences({ reminderTime }, 'Reminder time saved.')} disabled={preferencesLoading || preferencesSaving}>{preferencesSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save time</Button>
+          </div>
+          <div className="border-t pt-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium">Browser delivery</p><p className="text-xs text-muted-foreground">{!supported ? 'Not supported in this browser.' : status === 'denied' ? 'Permission is blocked in browser settings.' : hasSubscription ? 'This browser is subscribed.' : 'Permission and subscription are not active.'}</p></div><Button type="button" size="sm" variant={hasSubscription ? 'outline' : 'default'} disabled={!supported || working || status === 'denied'} onClick={handleSubscriptionToggle}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{hasSubscription ? 'Disable on this browser' : 'Enable on this browser'}</Button></div></div>
+          {!supported ? <p className="text-xs text-muted-foreground">This browser does not support Web Push notifications.</p> : status === 'denied' ? <p className="text-xs text-red-600 dark:text-red-400">Notifications are blocked. Allow them from your browser settings to enable browser delivery.</p> : null}
           {preferencesMessage && <p className="text-xs text-emerald-600">{preferencesMessage}</p>}
           {preferencesError && <p className="text-xs text-red-600">{preferencesError}</p>}
         </div>

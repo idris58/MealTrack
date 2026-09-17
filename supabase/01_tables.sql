@@ -9,9 +9,13 @@ create table if not exists public.profiles (
   mess_id uuid,
   picture_url text,
   reminder_time time not null default '22:00',
+  notification_preferences jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists notification_preferences jsonb;
 
 -- mess_id is constrained below because messes.creator_id points back to profiles.
 create table if not exists public.messes (

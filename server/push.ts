@@ -32,7 +32,24 @@ type ReminderProfileRow = {
   id: string;
   mess_id: string | null;
   reminder_time: string | null;
+  notification_preferences: unknown;
 };
+
+type NotificationPreferences = {
+  global?: boolean;
+  categories?: { notices?: boolean; mealReminders?: boolean };
+};
+
+function parseNotificationPreferences(value: unknown): NotificationPreferences {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as NotificationPreferences;
+}
+
+function allowsNotification(value: unknown, category: "notices" | "mealReminders") {
+  const preferences = parseNotificationPreferences(value);
+  if (preferences.global === false) return false;
+  return preferences.categories?.[category] !== false;
+}
 
 const DEFAULT_TIMEZONE = "Asia/Dhaka";
 const NOTIFICATION_DELIVERY_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -352,21 +369,12 @@ export async function sendNoticePushToMessMembers(
   if (!notice) return;
   if (!messId) return;
 
-  // Deduplicate by notice so we don't blast the same notice multiple times
-  const deliveryRecorded = await recordDelivery(
-    userId,
-    "notice_posted",
-    `main:${messId}:${notice.id}:${notice.expiresAt}`,
-  );
-
-  if (!deliveryRecorded) return;
-
   const supabase = assertSupabaseAdmin();
 
   // Find all profile_ids that belong to this mess
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, notification_preferences")
     .eq("mess_id", messId);
 
   if (profilesError) {
@@ -374,7 +382,8 @@ export async function sendNoticePushToMessMembers(
     return;
   }
 
-  const profileIds = (profiles || []).map((p: { id: string }) => p.id);
+  const eligibleProfiles = (profiles || []).filter((profile: { id: string; notification_preferences: unknown }) => allowsNotification(profile.notification_preferences, "notices"));
+  const profileIds = eligibleProfiles.map((p: { id: string }) => p.id);
   if (profileIds.length === 0) return;
 
   // Get all main-audience subscriptions for those users
@@ -389,7 +398,13 @@ export async function sendNoticePushToMessMembers(
     return;
   }
 
-  await sendPushToRows((subs || []) as PushSubscriptionRow[], {
+  const dedupeKey = `main:${messId}:${notice.id}:${notice.expiresAt}`;
+  const eligibleUserIds = new Set<string>();
+  for (const subscription of (subs || []) as Array<PushSubscriptionRow & { user_id: string }>) {
+    if (await recordDelivery(subscription.user_id, "notice_posted", dedupeKey)) eligibleUserIds.add(subscription.user_id);
+  }
+
+  await sendPushToRows((subs || []).filter((subscription: { user_id: string }) => eligibleUserIds.has(subscription.user_id)) as PushSubscriptionRow[], {
     title: `📢 ${notice.title}`,
     body: truncateNotificationBody(notice.content),
     url: `/app`,
@@ -442,7 +457,7 @@ export async function sendMealLogReminders() {
   for (const cycle of (activeCycles || []) as ActiveCycleRow[]) {
     let profilesQuery = supabase
       .from("profiles")
-      .select("id, mess_id, reminder_time");
+      .select("id, mess_id, reminder_time, notification_preferences");
     profilesQuery = cycle.mess_id
       ? profilesQuery.eq("mess_id", cycle.mess_id)
       : profilesQuery.eq("id", cycle.user_id);
@@ -450,6 +465,7 @@ export async function sendMealLogReminders() {
     if (profilesError) { console.error("Error loading reminder profiles:", profilesError); continue; }
 
     for (const profile of (profiles || []) as ReminderProfileRow[]) {
+      if (!allowsNotification(profile.notification_preferences, "mealReminders")) continue;
       const local = safeLocalDateTime(DEFAULT_TIMEZONE, now);
       const configuredTime = (profile.reminder_time || "22:00").slice(0, 5);
       if (local.time !== configuredTime) continue;

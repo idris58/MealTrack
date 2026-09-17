@@ -1,6 +1,15 @@
 import { supabase } from '@/lib/supabase';
 
-export type NotificationPreferences = { reminderTime: string };
+export type NotificationCategoryPreferences = {
+  notices?: boolean;
+  mealReminders?: boolean;
+};
+
+export type NotificationPreferences = {
+  global?: boolean;
+  categories?: NotificationCategoryPreferences;
+  reminderTime: string;
+};
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -14,7 +23,7 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
   return body;
 }
 
-export async function saveNotificationPreferences(preferences: NotificationPreferences): Promise<NotificationPreferences> {
+export async function saveNotificationPreferences(preferences: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
   const response = await fetch('/api/push/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify(preferences) });
   const body = await response.json();
   if (!response.ok) throw new Error(body?.message || 'Unable to save reminder preferences.');
