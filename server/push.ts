@@ -137,8 +137,10 @@ async function sendPushToRows(
     tag: string;
   },
 ) {
+  const failedUserIds = new Set<string>();
   if (!ensureVapidConfigured()) {
-    return;
+    rows.forEach((row) => failedUserIds.add(row.user_id));
+    return failedUserIds;
   }
 
   const data = JSON.stringify({
@@ -152,6 +154,7 @@ async function sendPushToRows(
       try {
         await webpush.sendNotification(toWebPushSubscription(row), data);
       } catch (error) {
+        failedUserIds.add(row.user_id);
         const statusCode =
           typeof error === "object" && error && "statusCode" in error
             ? Number((error as { statusCode?: unknown }).statusCode)
@@ -166,6 +169,7 @@ async function sendPushToRows(
       }
     }),
   );
+  return failedUserIds;
 }
 
 export async function upsertPushSubscription({
@@ -312,6 +316,17 @@ async function recordDelivery(userId: string, type: NotificationType, dedupeKey:
   return true;
 }
 
+async function removeDelivery(userId: string, type: NotificationType, dedupeKey: string) {
+  const supabase = assertSupabaseAdmin();
+  const { error } = await supabase
+    .from("notification_deliveries")
+    .delete()
+    .eq("user_id", userId)
+    .eq("type", type)
+    .eq("dedupe_key", dedupeKey);
+  if (error) console.error("Error clearing failed notification delivery:", error);
+}
+
 export async function sendNoticePushToSharedSubscribers(
   userId: string,
   notice: { id: string; title: string; content: string; expiresAt: string } | null,
@@ -345,15 +360,17 @@ export async function sendNoticePushToSharedSubscribers(
 
   if (error) {
     console.error("Error loading shared push subscriptions:", error);
+    await removeDelivery(userId, "notice_posted", `${notice.id}:${notice.expiresAt}`);
     return;
   }
 
-  await sendPushToRows((data || []) as PushSubscriptionRow[], {
+  const failedUserIds = await sendPushToRows((data || []) as PushSubscriptionRow[], {
     title: "New MealTrack Notice",
     body: truncateNotificationBody(`${notice.title}: ${notice.content}`),
     url: `/shared/${shareToken}`,
     tag: `notice-${notice.id}`,
   });
+  if (failedUserIds.has(userId)) await removeDelivery(userId, "notice_posted", `${notice.id}:${notice.expiresAt}`);
 }
 
 /**
@@ -399,17 +416,20 @@ export async function sendNoticePushToMessMembers(
   }
 
   const dedupeKey = `main:${messId}:${notice.id}:${notice.expiresAt}`;
+  const subscribedUserIds = new Set((subs || []).map((subscription: { user_id: string }) => subscription.user_id));
   const eligibleUserIds = new Set<string>();
-  for (const subscription of (subs || []) as Array<PushSubscriptionRow & { user_id: string }>) {
-    if (await recordDelivery(subscription.user_id, "notice_posted", dedupeKey)) eligibleUserIds.add(subscription.user_id);
-  }
+  await Promise.all(Array.from(subscribedUserIds, async (recipientId) => {
+    if (await recordDelivery(recipientId, "notice_posted", dedupeKey)) eligibleUserIds.add(recipientId);
+  }));
 
-  await sendPushToRows((subs || []).filter((subscription: { user_id: string }) => eligibleUserIds.has(subscription.user_id)) as PushSubscriptionRow[], {
+  const rowsForDelivery = (subs || []).filter((subscription: { user_id: string }) => eligibleUserIds.has(subscription.user_id)) as PushSubscriptionRow[];
+  const failedUserIds = await sendPushToRows(rowsForDelivery, {
     title: `📢 ${notice.title}`,
     body: truncateNotificationBody(notice.content),
     url: `/app`,
     tag: `mess-notice-${notice.id}`,
   });
+  await Promise.all(Array.from(failedUserIds, (failedUserId) => removeDelivery(failedUserId, "notice_posted", dedupeKey)));
 }
 
 function getLocalDateTime(timeZone: string, now = new Date()) {
