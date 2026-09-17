@@ -115,12 +115,18 @@ function Router() {
 
 function NotificationOnboardingToast() {
   const { supported, permission, hasSubscription, working, subscribe } = usePushNotifications({ mode: "main" });
+  const { user } = useAuth();
   const toastId = useRef<string | number | null>(null);
+  const autoSubscribeAttemptedFor = useRef<string | null>(null);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [toastDismissed, setToastDismissed] = useState(false);
+  const [dismissalReady, setDismissalReady] = useState(false);
+  const dismissalKey = user ? `mealtrack:notification-onboarding-dismissed:${user.id}` : null;
 
   useEffect(() => {
     let active = true;
+    setPreferencesReady(false);
     void getNotificationPreferences().then((preferences) => {
       if (!active) return;
       setNotificationsEnabled(
@@ -130,15 +136,33 @@ function NotificationOnboardingToast() {
       setPreferencesReady(true);
     }).catch(() => { if (active) setPreferencesReady(true); });
     return () => { active = false; };
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
-    const shouldShow = supported && permission === "default" && !hasSubscription && preferencesReady && notificationsEnabled;
+    setDismissalReady(false);
+    setToastDismissed(dismissalKey ? window.localStorage.getItem(dismissalKey) === "true" : false);
+    setDismissalReady(true);
+  }, [dismissalKey]);
+
+  useEffect(() => {
+    const canAutoSubscribe = supported && permission === "granted" && !hasSubscription && preferencesReady && notificationsEnabled && !working;
+    if (!canAutoSubscribe || !user || autoSubscribeAttemptedFor.current === user.id) return;
+    autoSubscribeAttemptedFor.current = user.id;
+    void subscribe();
+  }, [hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, user, working]);
+
+  useEffect(() => {
+    const shouldShow = supported && permission === "default" && !hasSubscription && preferencesReady && dismissalReady && notificationsEnabled && !toastDismissed;
     if (shouldShow && toastId.current === null) {
       toastId.current = toast("Stay updated with MealTrack", {
         description: "Get reminders and important mess updates.",
         duration: Infinity,
         action: { label: "Enable notifications", onClick: () => void subscribe() },
+        onDismiss: () => {
+          if (dismissalKey) window.localStorage.setItem(dismissalKey, "true");
+          setToastDismissed(true);
+          toastId.current = null;
+        },
       });
     } else if (!shouldShow && toastId.current !== null) {
       toast.dismiss(toastId.current);
@@ -150,7 +174,7 @@ function NotificationOnboardingToast() {
         toastId.current = null;
       }
     };
-  }, [hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, working]);
+  }, [dismissalKey, dismissalReady, hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, toastDismissed]);
 
   return null;
 }
