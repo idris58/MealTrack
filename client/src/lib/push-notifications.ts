@@ -95,6 +95,14 @@ async function getServerSubscriptionStatus({
   return Boolean(response.ok && body?.subscribed);
 }
 
+async function syncSubscription({ mode, shareToken, subscription }: { mode: PushMode; shareToken?: string; subscription: PushSubscription }) {
+  const endpoint = mode === "main" ? "/api/push/subscribe" : `/api/push/shared/${encodeURIComponent(shareToken || "")}/subscribe`;
+  const headers = mode === "main" ? { "Content-Type": "application/json", ...(await getMainAuthHeaders()) } : { "Content-Type": "application/json" };
+  const response = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(subscription.toJSON()) });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.message || "Unable to enable notifications.");
+}
+
 export function usePushNotifications({
   mode,
   shareToken,
@@ -188,28 +196,7 @@ export function usePushNotifications({
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         }));
 
-      const endpoint =
-        mode === "main"
-          ? "/api/push/subscribe"
-          : `/api/push/shared/${encodeURIComponent(shareToken || "")}/subscribe`;
-      const headers =
-        mode === "main"
-          ? {
-              "Content-Type": "application/json",
-              ...(await getMainAuthHeaders()),
-            }
-          : { "Content-Type": "application/json" };
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(subscription.toJSON()),
-      });
-      const body = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(body?.message || "Unable to enable notifications.");
-      }
+      await syncSubscription({ mode, shareToken, subscription });
 
       setHasSubscription(true);
       setMessage("Notifications enabled.");
@@ -223,6 +210,26 @@ export function usePushNotifications({
       setWorking(false);
     }
   };
+
+  const ensureExistingSubscription = useCallback(async () => {
+    if (!isPushSupported() || Notification.permission !== "granted") return false;
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+      if (!subscription) return false;
+      await syncSubscription({ mode, shareToken, subscription });
+      setPermission("granted");
+      setHasSubscription(true);
+      return true;
+    } catch {
+      setHasSubscription(false);
+      return false;
+    }
+  }, [mode, shareToken]);
+
+  useEffect(() => {
+    if (permission === "granted" && !hasSubscription) void ensureExistingSubscription();
+  }, [permission, hasSubscription, ensureExistingSubscription]);
 
   const unsubscribe = async () => {
     if (!isPushSupported()) {
@@ -283,5 +290,6 @@ export function usePushNotifications({
     subscribe,
     unsubscribe,
     refreshSubscriptionState,
+    ensureExistingSubscription,
   };
 }

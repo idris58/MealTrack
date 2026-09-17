@@ -4,8 +4,9 @@ create or replace function public.handle_auth_user_profile()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, full_name, email)
-  values (new.id, coalesce(nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''), nullif(trim(new.raw_user_meta_data ->> 'name'), ''), nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''), nullif(split_part(new.email, '@', 1), ''), 'Member'), new.email)
+  insert into public.profiles (id, full_name, email, notification_preferences)
+  values (new.id, coalesce(nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''), nullif(trim(new.raw_user_meta_data ->> 'name'), ''), nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''), nullif(split_part(new.email, '@', 1), ''), 'Member'), new.email,
+    jsonb_build_object('global', true, 'categories', jsonb_build_object('notices', true, 'mealReminders', true)))
   on conflict (id) do update set full_name = excluded.full_name, email = excluded.email, updated_at = now();
   return new;
 end;

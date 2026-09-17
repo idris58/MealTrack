@@ -692,7 +692,7 @@ function ShareSettingsCard() {
 // ── Notification Settings Card ────────────────────────────────────────────────
 
 function NotificationSettingsCard() {
-  const { supported, status, hasSubscription, working, error, message, subscribe, unsubscribe } = usePushNotifications({ mode: 'main' });
+  const { supported, permission, hasSubscription, working, error, message, subscribe } = usePushNotifications({ mode: 'main' });
   const [reminderTime, setReminderTime] = useState('22:00');
   const [globalEnabled, setGlobalEnabled] = useState(true);
   const [noticesEnabled, setNoticesEnabled] = useState(true);
@@ -734,7 +734,6 @@ function NotificationSettingsCard() {
     const patch = key === 'global' ? { global: checked } : { categories: { [key]: checked } };
     void savePreferences(patch, 'Notification preference saved.');
   };
-  const handleSubscriptionToggle = () => { if (hasSubscription) void unsubscribe(); else void subscribe(); };
 
   return (
     <Card className="overflow-hidden border-border/80 shadow-sm transition-shadow hover:shadow-md">
@@ -760,8 +759,8 @@ function NotificationSettingsCard() {
             <p className="text-xs text-muted-foreground">Next reminder: {globalEnabled && mealRemindersEnabled && hasSubscription ? nextRun : 'Enable meal reminders and browser delivery to schedule reminders.'}</p>
             <Button type="button" size="sm" onClick={() => void savePreferences({ reminderTime }, 'Reminder time saved.')} disabled={preferencesLoading || preferencesSaving}>{preferencesSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Save time</Button>
           </div>
-          <div className="border-t pt-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium">Browser delivery</p><p className="text-xs text-muted-foreground">{!supported ? 'Not supported in this browser.' : status === 'denied' ? 'Permission is blocked in browser settings.' : hasSubscription ? 'This browser is subscribed.' : 'Permission and subscription are not active.'}</p></div><Button type="button" size="sm" variant={hasSubscription ? 'outline' : 'default'} disabled={!supported || working || status === 'denied'} onClick={handleSubscriptionToggle}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{hasSubscription ? 'Disable on this browser' : 'Enable on this browser'}</Button></div></div>
-          {!supported ? <p className="text-xs text-muted-foreground">This browser does not support Web Push notifications.</p> : status === 'denied' ? <p className="text-xs text-red-600 dark:text-red-400">Notifications are blocked. Allow them from your browser settings to enable browser delivery.</p> : null}
+          <div className="border-t pt-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium">Browser delivery</p><p className="text-xs text-muted-foreground">{!supported ? 'Not supported in this browser.' : permission === 'denied' ? 'Permission is blocked in browser settings.' : hasSubscription ? 'Permission granted and this browser is subscribed.' : permission === 'granted' ? 'Permission granted, but this browser is not subscribed.' : 'Browser permission has not been granted yet.'}</p></div>{!hasSubscription && <Button type="button" size="sm" disabled={!supported || working || permission === 'denied'} onClick={() => void subscribe()}>{working ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Enable notifications</Button>}</div></div>
+          {!supported ? <p className="text-xs text-muted-foreground">This browser does not support Web Push notifications.</p> : permission === 'denied' ? <p className="text-xs text-red-600 dark:text-red-400">Notifications are blocked by your browser. Allow MealTrack in browser settings, then return here to retry.</p> : permission === 'granted' && !hasSubscription ? <p className="text-xs text-muted-foreground">Click Enable notifications to restore browser delivery.</p> : null}
           {preferencesMessage && <p className="text-xs text-emerald-600">{preferencesMessage}</p>}
           {preferencesError && <p className="text-xs text-red-600">{preferencesError}</p>}
         </div>
