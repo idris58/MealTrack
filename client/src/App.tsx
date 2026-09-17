@@ -121,12 +121,11 @@ function NotificationOnboardingToast() {
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [toastDismissed, setToastDismissed] = useState(false);
-  const [dismissalReady, setDismissalReady] = useState(false);
-  const dismissalKey = user ? `mealtrack:notification-onboarding-dismissed:${user.id}` : null;
 
   useEffect(() => {
     let active = true;
     setPreferencesReady(false);
+    setToastDismissed(false);
     void getNotificationPreferences().then((preferences) => {
       if (!active) return;
       setNotificationsEnabled(
@@ -139,12 +138,6 @@ function NotificationOnboardingToast() {
   }, [user?.id]);
 
   useEffect(() => {
-    setDismissalReady(false);
-    setToastDismissed(dismissalKey ? window.localStorage.getItem(dismissalKey) === "true" : false);
-    setDismissalReady(true);
-  }, [dismissalKey]);
-
-  useEffect(() => {
     const canAutoSubscribe = supported && permission === "granted" && !hasSubscription && preferencesReady && notificationsEnabled && !working;
     if (!canAutoSubscribe || !user || autoSubscribeAttemptedFor.current === user.id) return;
     autoSubscribeAttemptedFor.current = user.id;
@@ -152,14 +145,13 @@ function NotificationOnboardingToast() {
   }, [hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, user, working]);
 
   useEffect(() => {
-    const shouldShow = supported && permission === "default" && !hasSubscription && preferencesReady && dismissalReady && notificationsEnabled && !toastDismissed;
+    const shouldShow = supported && permission === "default" && !hasSubscription && preferencesReady && notificationsEnabled && !toastDismissed;
     if (shouldShow && toastId.current === null) {
       toastId.current = toast("Stay updated with MealTrack", {
         description: "Get reminders and important mess updates.",
         duration: Infinity,
         action: { label: "Enable notifications", onClick: () => void subscribe() },
         onDismiss: () => {
-          if (dismissalKey) window.localStorage.setItem(dismissalKey, "true");
           setToastDismissed(true);
           toastId.current = null;
         },
@@ -174,7 +166,7 @@ function NotificationOnboardingToast() {
         toastId.current = null;
       }
     };
-  }, [dismissalKey, dismissalReady, hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, toastDismissed]);
+  }, [hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, toastDismissed]);
 
   return null;
 }
