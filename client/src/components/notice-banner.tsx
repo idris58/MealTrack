@@ -17,15 +17,22 @@ import { useNotice } from '@/lib/notice-context';
 import { useAuth } from '@/lib/auth-context';
 import { NoticeDialog } from '@/components/notice-dialog';
 
+import { useMarqueeDuration } from '@/hooks/use-marquee-duration';
+
 // ── Mini marquee for mobile ───────────────────────────────────────────────────
 
 function InlineTicker({ text }: { text: string }) {
+  const { targetRef, duration } = useMarqueeDuration(text);
+
   return (
     <div className="relative min-w-0 flex-1 overflow-hidden">
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-amber-50 to-transparent dark:from-amber-900/40" />
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-amber-50 to-transparent dark:from-amber-900/40" />
-      <div className="notice-ticker-track text-[13px] font-medium text-amber-900 dark:text-amber-200">
-        <div className="notice-ticker-group">
+      <div
+        className="notice-ticker-track text-[13px] font-medium text-amber-900 dark:text-amber-200"
+        style={duration ? { animationDuration: `${duration}s` } : undefined}
+      >
+        <div ref={targetRef} className="notice-ticker-group">
           {Array.from({ length: 8 }, (_, i) => (
             <span key={`p-${i}`} className="notice-ticker-item">{text}</span>
           ))}

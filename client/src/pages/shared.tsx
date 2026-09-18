@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePushNotifications } from "@/lib/push-notifications";
+import { useMarqueeDuration } from "@/hooks/use-marquee-duration";
 import { cn } from "@/lib/utils";
 
 const LAST_SHARED_MEAL_CODE_KEY = "mealtrack:last-shared-meal-code";
@@ -136,6 +137,8 @@ function SectionEmptyState({
 
 function NoticeTicker({ notice }: { notice: NonNullable<SharedPayload["activeNotice"]> }) {
   const text = `${notice.title}: ${notice.content}`;
+  const { targetRef, duration } = useMarqueeDuration(text);
+
   const renderTickerItems = (group: string) =>
     Array.from({ length: 10 }, (_, index) => (
       <span key={`${group}-${index}`} className="notice-ticker-item">
@@ -155,8 +158,11 @@ function NoticeTicker({ notice }: { notice: NonNullable<SharedPayload["activeNot
       </div>
       <div className="relative min-w-0 flex-1 overflow-hidden py-2.5">
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-amber-50 to-transparent" />
-        <div className="notice-ticker-track pl-10 text-sm font-medium">
-          <div className="notice-ticker-group">{renderTickerItems("primary")}</div>
+        <div
+          className="notice-ticker-track pl-10 text-sm font-medium"
+          style={duration ? { animationDuration: `${duration}s` } : undefined}
+        >
+          <div ref={targetRef} className="notice-ticker-group">{renderTickerItems("primary")}</div>
           <div className="notice-ticker-group" aria-hidden="true">
             {renderTickerItems("copy")}
           </div>
