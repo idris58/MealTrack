@@ -8,6 +8,7 @@ import {
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/lib/supabase";
+import { cleanupPushSubscriptionOnLogout } from "@/lib/push-notifications";
 
 interface AuthContextValue {
   session: Session | null;
@@ -186,6 +187,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut: async () => {
       if (session?.user) {
         window.sessionStorage.removeItem(`mealtrack:notification-onboarding-dismissed:${session.user.id}`);
+      }
+      try {
+        await cleanupPushSubscriptionOnLogout(session?.access_token);
+      } catch {
+        // ignore push cleanup errors on logout
       }
       const { error } = await supabase.auth.signOut();
 

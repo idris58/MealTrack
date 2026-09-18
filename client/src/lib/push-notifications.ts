@@ -64,6 +64,30 @@ function getSubscriptionEndpoint(subscription: PushSubscription | null) {
   return subscription?.endpoint ?? "";
 }
 
+export async function cleanupPushSubscriptionOnLogout(accessToken?: string | null) {
+  if (!isPushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    const endpoint = getSubscriptionEndpoint(subscription ?? null);
+    if (!endpoint) return;
+
+    const token = accessToken ?? (await supabase.auth.getSession()).data.session?.access_token;
+    if (!token) return;
+
+    await fetch("/api/push/unsubscribe", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ endpoint }),
+    });
+  } catch {
+    // Ignore network / cleanup failures during logout
+  }
+}
+
 async function getServerSubscriptionStatus({
   mode,
   shareToken,

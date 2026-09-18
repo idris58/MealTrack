@@ -198,6 +198,22 @@ export async function upsertPushSubscription({
 }) {
   const supabase = assertSupabaseAdmin();
   const normalizedShareToken = shareToken ?? null;
+
+  // On a shared device/browser, if another account was previously registered with this endpoint,
+  // unlink the previous user's main subscription so they do not receive future notifications on this device.
+  if (audience === "main") {
+    const { error: unlinkError } = await supabase
+      .from("push_subscriptions")
+      .delete()
+      .eq("endpoint", subscription.endpoint)
+      .eq("audience", "main")
+      .neq("user_id", userId);
+
+    if (unlinkError) {
+      console.error("Error unlinking previous account push subscription on device:", unlinkError);
+    }
+  }
+
   let existingQuery = supabase
     .from("push_subscriptions")
     .select("id")
