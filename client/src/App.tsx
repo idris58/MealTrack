@@ -209,7 +209,12 @@ function NotificationOnboardingToast() {
             </div>
           </div>
         ),
-        { id: "notification-onboarding", duration: Infinity, unstyled: true },
+        {
+          id: "notification-onboarding",
+          duration: Infinity,
+          unstyled: true,
+          className: "!bg-transparent !border-0 !shadow-none !p-0 !rounded-none !w-auto",
+        },
       );
     } else if (!shouldShow && toastId.current !== null) {
       toast.dismiss(toastId.current);
@@ -474,14 +479,71 @@ function PwaUpdateNotifier() {
 
       waitingRegistrationRef.current = registration;
       hasShownUpdateToast.current = true;
-      toast.info("New version available", {
-        description: "Update to get the latest fixes and features.",
-        action: {
-          label: "Update",
-          onClick: activateWaitingServiceWorker,
+
+      const UPDATE_TOAST_ID = "pwa-update-available";
+
+      const handleUpdate = () => {
+        toast.dismiss(UPDATE_TOAST_ID);
+        activateWaitingServiceWorker();
+      };
+      const handleLater = () => {
+        toast.dismiss(UPDATE_TOAST_ID);
+      };
+
+      toast.custom(
+        () => (
+          <div className="pointer-events-auto w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
+            {/* gradient accent bar – emerald/teal to distinguish from bell toast */}
+            <div className="h-[3px] w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+            <div className="p-4">
+              {/* header row */}
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                  <RefreshCw className="h-[18px] w-[18px] text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-foreground leading-snug">Update available</p>
+                  <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed">
+                    A new version of MealTrack is ready with the latest fixes &amp; features.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLater}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
+                  aria-label="Dismiss"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              {/* action row */}
+              <div className="mt-3.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleUpdate}
+                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                  Update now
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLater}
+                  className="inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg border border-border/70 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-[0.97] focus-visible:outline-none"
+                >
+                  Later
+                </button>
+              </div>
+            </div>
+          </div>
+        ),
+        {
+          id: UPDATE_TOAST_ID,
+          duration: Infinity,
+          unstyled: true,
+          className: "!bg-transparent !border-0 !shadow-none !p-0 !rounded-none !w-auto",
         },
-        duration: Infinity,
-      });
+      );
     };
 
     const attachRegistrationListeners = (
