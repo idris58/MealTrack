@@ -131,7 +131,7 @@ function NotificationOnboardingToast() {
       if (!active) return;
       setNotificationsEnabled(
         preferences.global !== false &&
-          (preferences.categories?.notices !== false || preferences.categories?.mealReminders !== false),
+        (preferences.categories?.notices !== false || preferences.categories?.mealReminders !== false),
       );
       setPreferencesReady(true);
     }).catch(() => { if (active) setPreferencesReady(true); });
@@ -176,7 +176,7 @@ function NotificationOnboardingToast() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-foreground leading-snug">Stay updated with MealTrack</p>
                   <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed">
-                    Get meal reminders &amp; mess updates delivered instantly.
+                    Get reminders &amp; mess updates delivered instantly.
                   </p>
                 </div>
                 <button
@@ -209,7 +209,7 @@ function NotificationOnboardingToast() {
             </div>
           </div>
         ),
-        { id: "notification-onboarding", duration: Infinity },
+        { id: "notification-onboarding", duration: Infinity, unstyled: true },
       );
     } else if (!shouldShow && toastId.current !== null) {
       toast.dismiss(toastId.current);
