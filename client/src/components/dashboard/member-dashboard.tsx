@@ -20,7 +20,6 @@ import {
   Users,
   Sparkles,
   Bell,
-  BadgeCheck,
   AlertCircle,
   ArrowUpRight,
   Clock,
@@ -225,15 +224,6 @@ export function MemberDashboard() {
             </div>
           </div>
 
-          {/* Status badge */}
-          {!isUnlinked && (
-            <div className="shrink-0 flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 shadow-sm">
-              <BadgeCheck className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-                Active Member
-              </span>
-            </div>
-          )}
         </div>
       </div>
 
