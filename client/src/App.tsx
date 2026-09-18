@@ -164,46 +164,46 @@ function NotificationOnboardingToast() {
       };
       toastId.current = toast.custom(
         (id) => (
-          <div className="pointer-events-auto w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
+          <div className="pointer-events-auto w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
             {/* gradient accent bar */}
-            <div className="h-1 w-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500" />
+            <div className="h-[3px] w-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500" />
             <div className="p-4">
-              <div className="flex items-start gap-3.5">
-                {/* animated bell icon */}
-                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
-                  <Bell className="h-5 w-5 text-violet-600 dark:text-violet-400 [animation:bell-ring_1.2s_ease-in-out_0.5s_2]" />
+              {/* header row: bell + text + close */}
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
+                  <Bell className="h-[18px] w-[18px] text-violet-600 dark:text-violet-400 [animation:bell-ring_1.2s_ease-in-out_0.5s_2]" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground leading-snug">Stay updated with MealTrack</p>
-                  <p className="mt-0.5 text-[12px] text-muted-foreground leading-relaxed">
-                    Get meal reminders &amp; important mess updates delivered instantly.
+                  <p className="text-[13px] font-semibold text-foreground leading-snug">Stay updated with MealTrack</p>
+                  <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed">
+                    Get meal reminders &amp; mess updates delivered instantly.
                   </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleEnable}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-violet-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
-                    >
-                      <Bell className="h-3.5 w-3.5" />
-                      Enable notifications
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDismiss}
-                      className="inline-flex h-8 items-center rounded-lg px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95 focus-visible:outline-none"
-                    >
-                      Not now
-                    </button>
-                  </div>
                 </div>
-                {/* close button */}
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="-mt-0.5 -mr-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
                   aria-label="Dismiss"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              {/* action row */}
+              <div className="mt-3.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleEnable}
+                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-violet-600 px-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-violet-700 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                >
+                  <Bell className="h-3.5 w-3.5 shrink-0" />
+                  Enable notifications
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  className="inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg border border-border/70 px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-[0.97] focus-visible:outline-none"
+                >
+                  Not now
                 </button>
               </div>
             </div>
