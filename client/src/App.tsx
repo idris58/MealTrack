@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation, useRoute } from "wouter";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, Bell, RefreshCw, X } from "lucide-react";
 
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -152,16 +152,65 @@ function NotificationOnboardingToast() {
   useEffect(() => {
     const shouldShow = supported && permission === "default" && !hasSubscription && preferencesReady && notificationsEnabled && !toastDismissed;
     if (shouldShow && toastId.current === null) {
-      toastId.current = toast("Stay updated with MealTrack", {
-        description: "Get reminders and important mess updates.",
-        duration: Infinity,
-        action: { label: "Enable notifications", onClick: () => void subscribe() },
-        onDismiss: () => {
-          if (dismissalKey) window.sessionStorage.setItem(dismissalKey, "true");
-          setToastDismissed(true);
-          toastId.current = null;
-        },
-      });
+      const handleDismiss = () => {
+        if (dismissalKey) window.sessionStorage.setItem(dismissalKey, "true");
+        setToastDismissed(true);
+        if (toastId.current !== null) toast.dismiss(toastId.current);
+        toastId.current = null;
+      };
+      const handleEnable = () => {
+        void subscribe();
+        handleDismiss();
+      };
+      toastId.current = toast.custom(
+        (id) => (
+          <div className="pointer-events-auto w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
+            {/* gradient accent bar */}
+            <div className="h-1 w-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500" />
+            <div className="p-4">
+              <div className="flex items-start gap-3.5">
+                {/* animated bell icon */}
+                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
+                  <Bell className="h-5 w-5 text-violet-600 dark:text-violet-400 [animation:bell-ring_1.2s_ease-in-out_0.5s_2]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground leading-snug">Stay updated with MealTrack</p>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground leading-relaxed">
+                    Get meal reminders &amp; important mess updates delivered instantly.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleEnable}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-violet-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                    >
+                      <Bell className="h-3.5 w-3.5" />
+                      Enable notifications
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDismiss}
+                      className="inline-flex h-8 items-center rounded-lg px-3 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95 focus-visible:outline-none"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </div>
+                {/* close button */}
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  className="-mt-0.5 -mr-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
+                  aria-label="Dismiss"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ),
+        { id: "notification-onboarding", duration: Infinity },
+      );
     } else if (!shouldShow && toastId.current !== null) {
       toast.dismiss(toastId.current);
       toastId.current = null;
