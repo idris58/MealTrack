@@ -214,10 +214,6 @@ export function MemberDashboard() {
               {activeCycle && (
                 <>
                   <span className="text-slate-600">·</span>
-                  <span className="text-xs text-slate-400">
-                    {activeCycle.name}
-                  </span>
-                  <span className="text-slate-600">·</span>
                   <span className="text-xs text-slate-400">Day {cycleDays}</span>
                 </>
               )}
@@ -410,14 +406,6 @@ export function MemberDashboard() {
 
                 {/* Stats list */}
                 <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between py-1.5 border-b border-border/50">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Users className="h-3.5 w-3.5 text-blue-500" /> Active Members
-                    </span>
-                    <Link href="/app/members" className="flex items-center gap-0.5 font-bold text-blue-600 dark:text-blue-400 hover:underline">
-                      {members.length} <ArrowUpRight className="h-3 w-3" />
-                    </Link>
-                  </div>
                   <div className="flex items-center justify-between py-1.5 border-b border-border/50">
                     <span className="flex items-center gap-1.5 text-muted-foreground">
                       <Utensils className="h-3.5 w-3.5 text-emerald-500" /> Total Mess Meals
