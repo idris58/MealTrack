@@ -149,12 +149,15 @@ async function sendPushToRows(
     badge: "/icon-192.png",
   });
 
+  const successfulUserIds = new Set<string>();
+  const transientFailureUserIds = new Set<string>();
+
   await Promise.all(
     rows.map(async (row) => {
       try {
         await webpush.sendNotification(toWebPushSubscription(row), data);
+        successfulUserIds.add(row.user_id);
       } catch (error) {
-        failedUserIds.add(row.user_id);
         const statusCode =
           typeof error === "object" && error && "statusCode" in error
             ? Number((error as { statusCode?: unknown }).statusCode)
@@ -165,10 +168,18 @@ async function sendPushToRows(
           return;
         }
 
+        transientFailureUserIds.add(row.user_id);
         console.error("Error sending push notification:", error);
       }
     }),
   );
+
+  transientFailureUserIds.forEach((userId) => {
+    if (!successfulUserIds.has(userId)) {
+      failedUserIds.add(userId);
+    }
+  });
+
   return failedUserIds;
 }
 
@@ -535,12 +546,15 @@ export async function sendMealLogReminders() {
 
       if (!deliveryRecorded) continue;
 
-      await sendPushToRows(rows, {
-      title: "Meal log reminder",
-      body: "Today's meal has not been logged yet.",
-      url: "/app/meals",
-      tag: `meal-log-reminder-${today}-${cycle.id}`,
+      const failedUserIds = await sendPushToRows(rows, {
+        title: "Meal log reminder",
+        body: "Today's meal has not been logged yet.",
+        url: "/app/meals",
+        tag: `meal-log-reminder-${today}-${cycle.id}`,
       });
+      if (failedUserIds.has(profile.id)) {
+        await removeDelivery(profile.id, "meal_log_reminder", `${today}:${cycle.id}`);
+      }
     }
   }
 }
