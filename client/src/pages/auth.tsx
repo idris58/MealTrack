@@ -24,6 +24,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
+import { PasswordStrengthIndicator } from "@/components/password-strength-indicator";
 
 type AuthMode = "login" | "signup" | "forgot-password" | "reset-password";
 
@@ -495,6 +496,9 @@ export default function AuthPage() {
                       />
                     </div>
                   </div>
+                  {(mode === "signup" || mode === "reset-password") && (
+                    <PasswordStrengthIndicator password={password} />
+                  )}
                 </div>
               )}
 

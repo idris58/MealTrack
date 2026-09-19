@@ -29,6 +29,7 @@ import { useAuth } from '@/lib/auth-context';
 import { RoleBadge } from '@/components/role-badge';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { PasswordStrengthIndicator, getPasswordStrength } from '@/components/password-strength-indicator';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -470,19 +471,6 @@ function MessInfoCard() {
 }
 
 // ─── Security Settings Card ───────────────────────────────────────────────────
-
-function getPasswordStrength(pass: string): { score: number; label: string; color: string } {
-  if (!pass) return { score: 0, label: '', color: '' };
-  let score = 0;
-  if (pass.length >= 6) score += 1;
-  if (pass.length >= 8) score += 1;
-  if (/[0-9]/.test(pass) && /[a-zA-Z]/.test(pass)) score += 1;
-  if (/[^A-Za-z0-9]/.test(pass)) score += 1;
-
-  if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-red-500' };
-  if (score <= 3) return { score: 2, label: 'Good', color: 'bg-amber-500' };
-  return { score: 3, label: 'Strong', color: 'bg-emerald-500' };
-}
 
 function SecuritySettingsCard() {
   const { user } = useAuth();
