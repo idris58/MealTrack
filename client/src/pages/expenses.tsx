@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { ShoppingBag, Zap, ChartPie, Plus, Pencil, DollarSign, Search, Play, Settings2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -394,15 +395,14 @@ export default function Expenses() {
       {activeCycle && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           {/* Search — full width on mobile, 50% width on tablet/desktop */}
-          <div className="relative w-full sm:w-1/2">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+          <InputGroup className="w-full sm:w-1/2">
+            <InputGroupAddon><Search /></InputGroupAddon>
+            <InputGroupInput
               placeholder="Search expenses..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
             />
-          </div>
+          </InputGroup>
 
           {/* Tab Buttons — full width on mobile, 50% width on tablet/desktop */}
           <div className="flex w-full rounded-lg border bg-muted p-0.5 sm:w-1/2">

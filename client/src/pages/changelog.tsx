@@ -19,7 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import {
   useMeal,
   type ChangelogAction,
@@ -542,16 +542,15 @@ export default function ChangelogPage() {
       {/* Filters */}
       <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
         {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
+        <InputGroup>
+          <InputGroupAddon><Search /></InputGroupAddon>
+          <InputGroupInput
             id="changelog-search"
             placeholder="Search by title, description, or author name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
           />
-        </div>
+        </InputGroup>
 
         {/* Action filter pills */}
         <div className="flex flex-wrap gap-2">
