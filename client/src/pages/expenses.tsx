@@ -62,7 +62,7 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {onEdit ? (
-          <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={onEdit}>
+          <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={onEdit} aria-label="Edit expense">
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         ) : null}
