@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   LayoutDashboard,
@@ -29,6 +29,15 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useNotice } from '@/lib/notice-context';
 import { NoticeBanner } from '@/components/notice-banner';
 import { NoticeDialog } from '@/components/notice-dialog';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from '@/components/ui/command';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,8 +100,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showNoticeDialog, setShowNoticeDialog] = useState(false);
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
   const { notice } = useNotice();
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsCommandOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
+
+  const runQuickAction = (href: string) => {
+    setIsCommandOpen(false);
+    setLocation(href);
+  };
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -192,6 +218,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
+      <CommandDialog open={isCommandOpen} onOpenChange={setIsCommandOpen}>
+        <CommandInput placeholder="Search actions and pages..." />
+        <CommandList>
+          <CommandEmpty>No matching action found.</CommandEmpty>
+          <CommandGroup heading="Quick actions">
+            {(profile?.role !== 'member') && (
+              <CommandItem onSelect={() => runQuickAction('/app/expenses')}>
+                <Receipt /> Add expense <CommandShortcut>↵</CommandShortcut>
+              </CommandItem>
+            )}
+            <CommandItem onSelect={() => runQuickAction('/app/meals')}>
+              <UtensilsCrossed /> Log meals <CommandShortcut>↵</CommandShortcut>
+            </CommandItem>
+            {profile?.role !== 'member' && (
+              <CommandItem onSelect={() => runQuickAction('/app/settings#cycle-operations')}>
+                <Settings /> Cycle operations <CommandShortcut>↵</CommandShortcut>
+              </CommandItem>
+            )}
+          </CommandGroup>
+          <CommandGroup heading="Navigate">
+            <CommandItem onSelect={() => runQuickAction('/app')}><LayoutDashboard /> Dashboard</CommandItem>
+            {profile?.role !== 'member' && <CommandItem onSelect={() => runQuickAction('/app/members')}><Users /> Members</CommandItem>}
+            <CommandItem onSelect={() => runQuickAction('/app/settings')}><Settings /> Settings</CommandItem>
+            <CommandItem onSelect={() => runQuickAction('/app/profile')}><User /> Profile</CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
       <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b bg-card px-4 md:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {brand}
