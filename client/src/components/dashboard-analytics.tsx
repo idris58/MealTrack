@@ -522,11 +522,11 @@ export function DashboardAnalytics() {
               </CardTitle>
               <p className="text-xs text-muted-foreground">Where the mess cycle funds are distributed</p>
             </CardHeader>
-            <CardContent className="grid items-center gap-4 sm:grid-cols-[1.1fr_1fr] pt-2">
-              <div className="relative h-[220px]">
+            <CardContent className="grid min-w-0 items-center gap-4 pt-2 sm:grid-cols-[1.1fr_1fr]">
+              <div className="relative h-[220px] min-w-0">
                 {pieData.length ? (
                   <>
-                    <ChartContainer config={chartConfig} className="h-[220px] w-full">
+                    <ChartContainer config={chartConfig} className="h-[220px] w-full min-w-0 aspect-auto">
                       <PieChart>
                         <Pie
                           data={pieData}
@@ -558,14 +558,14 @@ export function DashboardAnalytics() {
                 )}
               </div>
 
-              <div className="space-y-3.5">
+              <div className="min-w-0 space-y-3.5">
                 {pieData.map((item) => {
                   const percentage = totalCycleExpenses > 0 ? (item.value / totalCycleExpenses) * 100 : 0;
                   return (
                     <div key={item.name} className="rounded-xl border border-border/50 bg-muted/20 p-3">
                       <div className="flex items-center justify-between text-xs">
                         <span className="flex items-center gap-2 font-medium text-foreground">
-                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className={`h-2.5 w-2.5 rounded-full ${item.name === 'Meal Expenses' ? 'bg-emerald-500' : 'bg-violet-500'}`} />
                           {item.name}
                         </span>
                         <span className="font-bold text-foreground">{currency(item.value)}</span>
@@ -573,8 +573,8 @@ export function DashboardAnalytics() {
                       <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
                         <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ width: `${percentage}%`, backgroundColor: item.color }}
+                            className={`h-full rounded-full transition-all duration-500 ${item.name === 'Meal Expenses' ? 'bg-emerald-500' : 'bg-violet-500'}`}
+                            style={{ width: `${percentage}%` }}
                           />
                         </div>
                         <span className="font-semibold">{percentage.toFixed(0)}%</span>
