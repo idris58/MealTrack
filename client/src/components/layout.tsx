@@ -263,7 +263,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Navigation Bar (Clean 5-Item Bar) */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 w-full border-t bg-card/98 shadow-[0_-2px_12px_rgba(0,0,0,0.05)] backdrop-blur-md md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 w-full border-t bg-card md:hidden"
         aria-label="Primary mobile navigation"
       >
         <div className="grid h-[54px] w-full grid-cols-5 items-center">
