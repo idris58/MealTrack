@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, isSameDay } from 'date-fns';
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -19,6 +20,15 @@ type MealLogTableProps = {
 };
 
 export function MealLogTable({ members, mealLogs, days, maxHeight = 'h-[calc(100vh-240px)]', onDayClick, renderLog, tintedRows = false, totalMeals }: MealLogTableProps) {
+  const monthOptions = useMemo(() => Array.from(new Set(days.map((day) => format(day, 'yyyy-MM')))), [days]);
+  const [monthIndex, setMonthIndex] = useState(0);
+  const selectedMonth = monthOptions[monthIndex] ?? monthOptions[0];
+
+  useEffect(() => {
+    setMonthIndex(0);
+  }, [days]);
+
+  const visibleDays = selectedMonth ? days.filter((day) => format(day, 'yyyy-MM') === selectedMonth) : days;
   const totals = new Map(members.map((member) => [member.id, 0]));
   mealLogs.forEach((log) => totals.set(log.memberId, (totals.get(log.memberId) ?? 0) + log.count));
   const formatCount = (value: number) => `${Math.round(value * 1000) / 1000}`;
@@ -26,6 +36,17 @@ export function MealLogTable({ members, mealLogs, days, maxHeight = 'h-[calc(100
 
   return (
     <div className="flex-1 min-h-0 overflow-hidden rounded-lg border bg-card shadow-sm">
+      {monthOptions.length > 1 && (
+        <div className="flex items-center justify-between border-b bg-muted/20 px-3 py-2">
+          <button type="button" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40" onClick={() => setMonthIndex((index) => Math.min(index + 1, monthOptions.length - 1))} disabled={monthIndex >= monthOptions.length - 1} aria-label="Previous month">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-xs font-semibold text-foreground">{selectedMonth ? format(new Date(`${selectedMonth}-01T00:00:00`), 'MMMM yyyy') : 'Meal logs'}</span>
+          <button type="button" className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40" onClick={() => setMonthIndex((index) => Math.max(index - 1, 0))} disabled={monthIndex <= 0} aria-label="Next month">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className={cn(maxHeight, 'overflow-auto overscroll-x-contain [scrollbar-gutter:stable_both-edges]')}>
         <table className="min-w-max w-full border-collapse text-sm">
           <thead className="sticky top-0 z-30 bg-card">
@@ -43,7 +64,7 @@ export function MealLogTable({ members, mealLogs, days, maxHeight = 'h-[calc(100
             </tr>
           </thead>
           <tbody className="divide-y">
-            {days.map((day, index) => {
+            {visibleDays.map((day, index) => {
               const dateStr = format(day, 'yyyy-MM-dd');
               const dayLogs = mealLogs.filter((log) => log.date === dateStr);
               const dayTotal = dayLogs.reduce((sum, log) => sum + log.count, 0);
