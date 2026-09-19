@@ -318,7 +318,7 @@ export function ManagerDashboard() {
 
       {/* Add Expense Dialog */}
       <Dialog open={openExpense} onOpenChange={setOpenExpense}>
-        <DialogContent className="max-w-md w-[95%]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CircleDollarSign className="h-5 w-5 text-emerald-500" />
@@ -332,7 +332,7 @@ export function ManagerDashboard() {
 
       {/* Log Meals Dialog */}
       <Dialog open={openMeal} onOpenChange={setOpenMeal}>
-        <DialogContent className="max-w-md w-[95%]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Utensils className="h-5 w-5 text-emerald-500" />

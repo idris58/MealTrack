@@ -314,7 +314,7 @@ function CycleManagementCard() {
 
       {/* Close Cycle Dialog */}
       <Dialog open={closeDialogOpen} onOpenChange={(open) => { setCloseDialogOpen(open); if (!open) setCloseStep(1); }}>
-        <DialogContent className="max-w-md w-[95%]">
+        <DialogContent size="sm">
           {closeStep === 1 ? (
             <>
               <DialogHeader>
@@ -373,7 +373,7 @@ function CycleManagementCard() {
 
       {/* Start New Cycle Dialog */}
       <Dialog open={startDialogOpen} onOpenChange={setStartDialogOpen}>
-        <DialogContent className="max-w-md w-[95%]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Play className="h-5 w-5 text-emerald-500" />Start New Cycle</DialogTitle>
             <DialogDescription>Name your new cycle and choose a start date.</DialogDescription>

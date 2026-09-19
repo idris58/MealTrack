@@ -35,7 +35,7 @@ export function OnboardingTour() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && complete()}>
-      <DialogContent className="max-w-md overflow-hidden p-0 [&>button]:hidden">
+      <DialogContent size="sm" className="overflow-hidden p-0 [&>button]:hidden">
         <div className="h-1.5 bg-muted">
           <div className="h-full bg-primary transition-all duration-300" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
         </div>

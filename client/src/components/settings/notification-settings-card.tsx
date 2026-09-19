@@ -246,7 +246,7 @@ export function NotificationSettingsCard() {
 
       {/* ── How to Unblock Dialog ── */}
       <Dialog open={showUnblockDialog} onOpenChange={setShowUnblockDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base font-bold">
               <BellRing className="h-4 w-4 text-primary" />

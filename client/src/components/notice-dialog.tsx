@@ -362,7 +362,7 @@ export function NoticeDialog({ mode, open, onOpenChange }: NoticeDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md w-[95%] sm:max-w-lg">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>{titles[internalMode]}</DialogTitle>
           <DialogDescription>{descs[internalMode]}</DialogDescription>

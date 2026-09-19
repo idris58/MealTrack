@@ -460,7 +460,7 @@ export function ManagerMembersView() {
         </Dialog>
 
         <Dialog open={inviteManagerOpen} onOpenChange={setInviteManagerOpen}>
-          <DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Invite links</DialogTitle></DialogHeader>
+          <DialogContent size="lg"><DialogHeader><DialogTitle>Invite links</DialogTitle></DialogHeader>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">Links are one-time and expire after 7 days.</p>
               {inviteError ? <p className="text-sm text-destructive">{inviteError}</p> : null}
