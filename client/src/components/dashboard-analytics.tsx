@@ -11,14 +11,11 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import {
   BarChart3,
-  Calendar,
   CheckCircle2,
   CircleDollarSign,
   Info,
@@ -33,17 +30,30 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useMeal, type CycleDeposit, type Expense, type MealLog } from '@/lib/meal-context';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
-const CHART_COLORS = {
-  meal: '#10b981',
-  fixed: '#8b5cf6',
-  deposits: '#06b6d4',
-  expenses: '#f43f5e',
+const chartConfig: ChartConfig = {
+  meal: { label: 'Meal Expenses', theme: { light: 'hsl(160 84% 39%)', dark: 'hsl(158 64% 52%)' } },
+  fixed: { label: 'Fixed Expenses', theme: { light: 'hsl(258 90% 66%)', dark: 'hsl(258 90% 76%)' } },
+  deposits: { label: 'Total Deposits', theme: { light: 'hsl(188 86% 39%)', dark: 'hsl(188 86% 55%)' } },
+  expenses: { label: 'Total Expenses', theme: { light: 'hsl(350 89% 60%)', dark: 'hsl(350 89% 70%)' } },
+  rate: { label: 'Effective Meal Rate', theme: { light: 'hsl(160 84% 39%)', dark: 'hsl(158 64% 52%)' } },
 };
 
 const currency = (value: number) => `৳${Math.round(value).toLocaleString()}`;
 const preciseCurrency = (value: number) => `৳${value.toFixed(2)}`;
 const mealCount = (value: number) => `${Math.round(value * 1000) / 1000}`;
+
+function tooltipFormatter(kind: 'rate' | 'currency') {
+  return (value: unknown, name: unknown) => (
+    <>
+      <span className="text-muted-foreground">{String(name ?? '')}</span>
+      <span className="font-mono font-medium tabular-nums text-foreground">
+        {kind === 'rate' ? preciseCurrency(Number(value) || 0) : currency(Number(value) || 0)}
+      </span>
+    </>
+  );
+}
 
 type PeriodRow = {
   key: string;
@@ -174,53 +184,6 @@ function buildRateSeries(dateKeys: string[], expenses: Expense[], mealLogs: Meal
   });
 }
 
-function CustomTooltip({
-  active,
-  payload,
-  label,
-  kind,
-}: {
-  active?: boolean;
-  payload?: Array<{ name?: string; value?: number; color?: string; dataKey?: string }>;
-  label?: string;
-  kind: 'rate' | 'expense' | 'cash';
-}) {
-  if (!active || !payload?.length) return null;
-  const names: Record<string, string> = {
-    meal: 'Meal Expenses',
-    fixed: 'Fixed Expenses',
-    deposits: 'Total Deposits',
-    expenses: 'Total Expenses',
-    rate: 'Effective Meal Rate',
-    rawRate: 'Actual Rate',
-  };
-
-  return (
-    <div className="min-w-[190px] rounded-xl border border-border/80 bg-popover/95 p-3.5 text-xs shadow-2xl backdrop-blur-md">
-      <p className="mb-2.5 font-semibold text-foreground border-b pb-1.5 flex items-center gap-1.5">
-        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-        {label}
-      </p>
-      <div className="space-y-1.5">
-        {payload.map((entry) => (
-          <div key={`${entry.dataKey}-${entry.name}`} className="flex items-center justify-between gap-4">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-              {names[entry.dataKey ?? entry.name ?? ''] ?? entry.name}
-            </span>
-            <span className="font-bold text-foreground">
-              {kind === 'rate' ? preciseCurrency(entry.value ?? 0) : currency(entry.value ?? 0)}
-            </span>
-          </div>
-        ))}
-      </div>
-      {kind === 'cash' && (
-        <p className="mt-2.5 border-t pt-1.5 text-[10px] text-muted-foreground italic">Period financial activity</p>
-      )}
-    </div>
-  );
-}
-
 function EmptyChart({ message, subtext }: { message: string; subtext?: string }) {
   return (
     <div className="flex h-[240px] flex-col items-center justify-center rounded-xl border border-dashed bg-muted/10 px-6 text-center">
@@ -341,8 +304,8 @@ export function DashboardAnalytics() {
 
   const totalCycleExpenses = stats.totalMealExpenses + stats.totalFixedExpenses;
   const pieData = [
-    { name: 'Meal Expenses', value: stats.totalMealExpenses, color: CHART_COLORS.meal },
-    { name: 'Fixed Expenses', value: stats.totalFixedExpenses, color: CHART_COLORS.fixed },
+    { name: 'Meal Expenses', value: stats.totalMealExpenses, color: 'var(--color-meal)' },
+    { name: 'Fixed Expenses', value: stats.totalFixedExpenses, color: 'var(--color-fixed)' },
   ].filter((item) => item.value > 0);
 
   let cumulativeDeposits = 0;
@@ -429,12 +392,12 @@ export function DashboardAnalytics() {
             <CardContent className="px-2 pb-4 sm:px-4">
               {validRates.length ? (
                 <div className="h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ChartContainer config={chartConfig} className="h-[250px] w-full">
                     <AreaChart data={rateSeries} margin={{ top: 12, right: 12, left: -4, bottom: 0 }}>
                       <defs>
                         <linearGradient id="mealRateGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={CHART_COLORS.meal} stopOpacity={0.35} />
-                          <stop offset="95%" stopColor={CHART_COLORS.meal} stopOpacity={0.0} />
+                        <stop offset="0%" stopColor="var(--color-meal)" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="var(--color-meal)" stopOpacity={0.0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/40" />
@@ -455,18 +418,18 @@ export function DashboardAnalytics() {
                         tickFormatter={(val) => `৳${Math.round(val)}`}
                         domain={['auto', 'auto']}
                       />
-                      <Tooltip content={<CustomTooltip kind="rate" />} />
+                      <ChartTooltip content={<ChartTooltipContent formatter={tooltipFormatter('rate')} />} />
                       <Area
                         type="monotone"
                         dataKey="rate"
                         name="Effective Rate"
-                        stroke={CHART_COLORS.meal}
+                        stroke="var(--color-meal)"
                         strokeWidth={2.5}
                         fill="url(#mealRateGradient)"
                         activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
                       />
                     </AreaChart>
-                  </ResponsiveContainer>
+                  </ChartContainer>
                 </div>
               ) : (
                 <EmptyChart message="No meal rate data logged yet" />
@@ -494,7 +457,7 @@ export function DashboardAnalytics() {
               {periods.some((p) => p.expenses > 0) ? (
                 <>
                   <div className="h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ChartContainer config={chartConfig} className="h-[250px] w-full">
                       <BarChart data={periods} margin={{ top: 12, right: 12, left: -4, bottom: 0 }}>
                         <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/40" />
                         <XAxis
@@ -513,23 +476,23 @@ export function DashboardAnalytics() {
                           className="text-muted-foreground"
                           tickFormatter={(val) => `৳${Math.round(val)}`}
                         />
-                        <Tooltip content={<CustomTooltip kind="expense" />} />
+                        <ChartTooltip content={<ChartTooltipContent formatter={tooltipFormatter('currency')} />} />
                         <Bar
                           dataKey="meal"
                           name="Meal"
-                          fill={CHART_COLORS.meal}
+                          fill="var(--color-meal)"
                           radius={[4, 4, 0, 0]}
                           maxBarSize={18}
                         />
                         <Bar
                           dataKey="fixed"
                           name="Fixed"
-                          fill={CHART_COLORS.fixed}
+                          fill="var(--color-fixed)"
                           radius={[4, 4, 0, 0]}
                           maxBarSize={18}
                         />
                       </BarChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </div>
                   <div className="mt-2 flex justify-center gap-5 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1.5 font-medium">
@@ -563,7 +526,7 @@ export function DashboardAnalytics() {
               <div className="relative h-[220px]">
                 {pieData.length ? (
                   <>
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ChartContainer config={chartConfig} className="h-[220px] w-full">
                       <PieChart>
                         <Pie
                           data={pieData}
@@ -578,9 +541,9 @@ export function DashboardAnalytics() {
                             <Cell key={entry.name} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(value: number) => currency(value)} />
+                        <ChartTooltip content={<ChartTooltipContent formatter={tooltipFormatter('currency')} />} />
                       </PieChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                         Total Spent
@@ -653,7 +616,7 @@ export function DashboardAnalytics() {
               {periods.some((p) => p.deposits > 0 || p.expenses > 0) ? (
                 <>
                   <div className="h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ChartContainer config={chartConfig} className="h-[220px] w-full">
                       <LineChart data={cashSeries} margin={{ top: 12, right: 12, left: -4, bottom: 0 }}>
                         <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/40" />
                         <XAxis
@@ -672,12 +635,12 @@ export function DashboardAnalytics() {
                           className="text-muted-foreground"
                           tickFormatter={(val) => `৳${Math.round(val)}`}
                         />
-                        <Tooltip content={<CustomTooltip kind="cash" />} />
+                        <ChartTooltip content={<ChartTooltipContent formatter={tooltipFormatter('currency')} />} />
                         <Line
                           type="monotone"
                           dataKey="deposits"
                           name="Deposits"
-                          stroke={CHART_COLORS.deposits}
+                          stroke="var(--color-deposits)"
                           strokeWidth={2.5}
                           dot={false}
                           activeDot={{ r: 4 }}
@@ -686,13 +649,13 @@ export function DashboardAnalytics() {
                           type="monotone"
                           dataKey="expenses"
                           name="Expenses"
-                          stroke={CHART_COLORS.expenses}
+                          stroke="var(--color-expenses)"
                           strokeWidth={2.5}
                           dot={false}
                           activeDot={{ r: 4 }}
                         />
                       </LineChart>
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   </div>
                   <div className="mt-2 flex justify-center gap-5 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1.5 font-medium">
