@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { MealLogTable } from '@/components/meal-log-table';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { MealCountEditor } from '@/components/meal-count-editor';
 
@@ -701,53 +702,14 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
 
         <section className="space-y-3">
           <h3 className="font-semibold">Meal Logs</h3>
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <div className="max-h-[420px] overflow-auto overscroll-x-contain [scrollbar-gutter:stable_both-edges]">
-              <table className="min-w-max w-full border-collapse text-sm">
-                <thead className="sticky top-0 z-20 bg-card">
-                  <tr className="border-b">
-                    <th className="sticky left-0 z-30 min-w-[84px] border-r bg-card p-3 text-left text-xs font-bold sm:min-w-[96px] md:min-w-[112px] md:p-4 md:text-sm">Date</th>
-                    {details.members.map((member) => (
-                      <th key={member.id} className="min-w-[72px] border-r bg-card p-1.5 text-center text-[9px] font-bold sm:min-w-[84px] sm:text-[10px] md:min-w-[100px] md:p-2 md:text-xs">{member.name.split(' ')[0]}</th>
-                    ))}
-                    <th className="min-w-[64px] bg-card p-3 text-right text-xs font-bold sm:min-w-[72px] md:min-w-[80px] md:p-4 md:text-sm">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {days.map((day) => {
-                    const dateStr = format(day, 'yyyy-MM-dd');
-                    const dayLogs = details.mealLogs.filter((log) => log.date === dateStr);
-                    const total = dayLogs.reduce((sum, log) => sum + log.count, 0);
-
-                    return (
-                      <tr key={dateStr} className={cn('border-b hover:bg-muted/40', canCorrect ? 'cursor-pointer' : undefined)} onClick={() => { if (!canCorrect) return; setMealDate(day); setMealDialogOpen(true); }}>
-                        <td className="sticky left-0 border-r bg-card p-3 font-medium md:p-4">{format(day, 'dd MMM')}</td>
-                        {details.members.map((member) => {
-                          const log = dayLogs.find((entry) => entry.memberId === member.id);
-                          return <td key={member.id} className="border-r p-2.5 text-center text-xs sm:p-3 sm:text-sm md:p-4">{log ? formatMealCount(log.count) : '-'}</td>;
-                        })}
-                        <td className="p-3 text-right font-bold text-emerald-600 md:p-4">{total > 0 ? formatMealCount(total) : '-'}</td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="border-t-2 bg-secondary/20">
-                    <td className="sticky left-0 z-20 min-w-[84px] whitespace-nowrap border-r bg-card p-3 font-bold sm:min-w-[96px] md:min-w-[112px] md:p-4">Total</td>
-                    {details.members.map((member) => (
-                      <td
-                        key={member.id}
-                        className="border-r p-2.5 text-center font-bold text-emerald-700 sm:p-3 sm:text-sm md:p-4"
-                      >
-                        {formatMealCount(memberMealTotals.get(member.id) ?? 0)}
-                      </td>
-                    ))}
-                    <td className="bg-secondary/20 p-3 text-right font-bold text-emerald-700 md:p-4">
-                      {formatMealCount(details.stats.totalMealsConsumed)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <MealLogTable
+            members={details.members}
+            mealLogs={details.mealLogs}
+            days={days}
+            maxHeight="max-h-[420px]"
+            onDayClick={canCorrect ? (day) => { setMealDate(day); setMealDialogOpen(true); } : undefined}
+            totalMeals={details.stats.totalMealsConsumed}
+          />
         </section>
 
         <Dialog open={!!depositMember} onOpenChange={(open) => !open && setDepositMember(null)}>
