@@ -13,7 +13,7 @@
  * – Unlinked profile fallback
  */
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { format, isToday, isYesterday, parseISO, differenceInDays } from 'date-fns';
 import { useAuth } from '@/lib/auth-context';
 import { useMeal, type CycleDeposit, type Cycle } from '@/lib/meal-context';
@@ -224,11 +224,11 @@ export function MemberDepositsView() {
   const selectedCycle = availableCycles.find((c) => c.id === selectedCycleId) ?? availableCycles[0] ?? null;
 
   // Load details for the selected cycle if needed (for pending cycles)
-  useMemo(() => {
+  useEffect(() => {
     if (selectedCycleId && selectedCycleId !== activeCycle?.id) {
       void loadCycleDetails(selectedCycleId);
     }
-  }, [selectedCycleId]);
+  }, [selectedCycleId, activeCycle?.id, loadCycleDetails]);
 
   // ── Deposits for selected cycle ────────────────────────────────────────────
   const cycleDeposits = useMemo(() => {

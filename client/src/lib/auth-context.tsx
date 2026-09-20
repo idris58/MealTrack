@@ -17,6 +17,7 @@ interface AuthContextValue {
   lastAuthEvent: AuthChangeEvent | null;
   profile: { id: string; full_name: string; email: string; role: "manager" | "coordinator" | "member"; mess_id: string | null; picture_url: string | null } | null;
   profileLoading: boolean;
+  profileError: string | null;
   canManageMembers: boolean;
   canManageRoles: boolean;
   canOperateMeals: boolean;
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const [profile, setProfile] = useState<AuthContextValue["profile"]>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -97,12 +99,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = async () => {
     if (!session?.user) return;
     setProfileLoading(true);
+    setProfileError(null);
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, email, role, mess_id, picture_url")
       .eq("id", session.user.id)
       .maybeSingle();
-    if (error) console.error("Error loading profile:", error);
+    if (error) {
+      console.error("Error loading profile:", error);
+      setProfileError("We couldn't load your profile. Check your connection and try again.");
+    } else if (!data) {
+      setProfileError("Your profile could not be found. Try again or sign out and sign in again.");
+    }
     if (data) {
       setProfile(data as AuthContextValue["profile"]);
       try {
@@ -118,11 +126,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
     if (!session?.user) {
       setProfile(null);
+      setProfileError(null);
       setProfileLoading(false);
       return;
     }
 
     const cacheKey = `mealtrack-profile-${session.user.id}`;
+    setProfileError(null);
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
       try {
@@ -149,9 +159,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error("Error loading profile:", error);
           if (!cached) {
             setProfile(null);
+            setProfileError("We couldn't load your profile. Check your connection and try again.");
           }
         } else {
           setProfile(data as AuthContextValue["profile"]);
+          if (!data) setProfileError("Your profile could not be found. Try again or sign out and sign in again.");
           if (data) {
             try {
               localStorage.setItem(cacheKey, JSON.stringify(data));
@@ -177,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     lastAuthEvent,
     profile,
     profileLoading,
+    profileError,
     canManageMembers: isManager,
     canManageRoles: isManager,
     canOperateMeals: canOperate,

@@ -99,10 +99,6 @@ export default function ReportsPage() {
     }
   }, [activeCycle?.startedAt]);
 
-  if (profile?.role === 'member') {
-    return null;
-  }
-
   const details = activeCycle ? getCycleDetails(activeCycle.id) : null;
   const isLoading = loading || (Boolean(activeCycle) && !details);
   const fromKey = fileDate(from); const toKey = fileDate(to);
@@ -142,6 +138,7 @@ export default function ReportsPage() {
     autoTable(doc, { startY: 238, head: [['Member', 'Meals', 'Deposit', 'Bill', 'Due', 'Refund']], body: report.rows.map((row) => [row.name, mealCount(row.meals), pdfCurrency(row.deposit), pdfCurrency(row.bill), pdfCurrencyInt(row.balance < 0 ? Math.abs(row.balance) : 0), pdfCurrencyInt(row.balance > 0 ? row.balance : 0)]), theme: 'grid', headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [248, 250, 252] }, styles: { fontSize: 9, cellPadding: 8, textColor: [30, 41, 59] }, columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } }, margin: { left: 40, right: 40 }, didDrawPage: () => { const height = doc.internal.pageSize.getHeight(); doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.text('Generated via MealTrack', 40, height - 24); } });
     return doc.output('blob');
   };
+  if (profile?.role === 'member') return null;
   const makeXlsx = async () => {
     const wb = new ExcelJS.Workbook();
     const summaryData: (string | number)[][] = [

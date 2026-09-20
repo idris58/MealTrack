@@ -243,7 +243,7 @@ const legacyMainRouteMap: Record<string, string> = {
 };
 
 function AppShell() {
-  const { session, loading, lastAuthEvent, profile, profileLoading } = useAuth();
+  const { session, loading, lastAuthEvent, profile, profileLoading, profileError, refreshProfile } = useAuth();
   const [location, setLocation] = useLocation();
   const routePath = location.split("?")[0];
   const [isSharedLandingRoute] = useRoute("/shared");
@@ -413,6 +413,21 @@ function AppShell() {
 
   if (isInviteRoute && inviteParams?.token) {
     return <InvitePage token={inviteParams.token} />;
+  }
+
+  if (session && profileError && !profileLoading && profile === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="w-full max-w-md space-y-4 text-center">
+          <h1 className="text-xl font-semibold">Unable to load your profile</h1>
+          <p className="text-sm text-muted-foreground">{profileError}</p>
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => void refreshProfile()}>Try again</Button>
+            <Button variant="outline" onClick={() => void supabase.auth.signOut({ scope: "local" })}>Sign out</Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (loading || !authLinkResolved || (session && (profileLoading || profile === null))) {

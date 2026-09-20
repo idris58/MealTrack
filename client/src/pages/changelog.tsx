@@ -480,8 +480,6 @@ export default function ChangelogPage() {
     if (profile?.role === 'member') setLocation('/app');
   }, [profile?.role, setLocation]);
 
-  if (profile?.role === 'member') return null;
-
   const filteredPending = useMemo(
     () => filterEntries(pendingCycleChangelogEntries, actionFilter, entityFilter, search),
     [actionFilter, entityFilter, pendingCycleChangelogEntries, search],
@@ -499,6 +497,8 @@ export default function ChangelogPage() {
     update: entries.filter((e) => getDisplayAction(e) === 'update').length,
     delete: entries.filter((e) => getDisplayAction(e) === 'delete').length,
   });
+
+  if (profile?.role === 'member') return null;
 
   return (
     <div className="space-y-6 pb-10">
