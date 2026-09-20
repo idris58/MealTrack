@@ -3,7 +3,7 @@ import { format, startOfDay, endOfDay } from 'date-fns';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { CalendarIcon, ChefHat, ClipboardCopy, Download, FileImage, FileSpreadsheet, FileText, Loader2, Play, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -142,8 +142,8 @@ export default function ReportsPage() {
     autoTable(doc, { startY: 238, head: [['Member', 'Meals', 'Deposit', 'Bill', 'Due', 'Refund']], body: report.rows.map((row) => [row.name, mealCount(row.meals), pdfCurrency(row.deposit), pdfCurrency(row.bill), pdfCurrencyInt(row.balance < 0 ? Math.abs(row.balance) : 0), pdfCurrencyInt(row.balance > 0 ? row.balance : 0)]), theme: 'grid', headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [248, 250, 252] }, styles: { fontSize: 9, cellPadding: 8, textColor: [30, 41, 59] }, columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } }, margin: { left: 40, right: 40 }, didDrawPage: () => { const height = doc.internal.pageSize.getHeight(); doc.setTextColor(100, 116, 139); doc.setFontSize(8); doc.text('Generated via MealTrack', 40, height - 24); } });
     return doc.output('blob');
   };
-  const makeXlsx = () => {
-    const wb = XLSX.utils.book_new();
+  const makeXlsx = async () => {
+    const wb = new ExcelJS.Workbook();
     const summaryData: (string | number)[][] = [
       ['MealTrack - Meal Report'],
       ['Date Range:', rangeLabel],
@@ -166,17 +166,12 @@ export default function ReportsPage() {
         Number(row.balance.toFixed(2)),
       ]),
     ];
-    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-    summaryWs['!cols'] = [
-      { wch: 22 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 16 },
+    const summaryWs = wb.addWorksheet('Summary');
+    summaryWs.addRows(summaryData);
+    summaryWs.columns = [
+      { width: 22 }, { width: 14 }, { width: 14 }, { width: 14 },
+      { width: 12 }, { width: 12 }, { width: 16 },
     ];
-    XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
 
     if (details?.expenses?.length) {
       const expenses = (details.expenses ?? []).filter((item) => isDateInFilterRange(item.date, from, to, fromKey, toKey));
@@ -189,12 +184,12 @@ export default function ReportsPage() {
           exp.amount,
         ]),
       ];
-      const expenseWs = XLSX.utils.aoa_to_sheet(expenseData);
-      expenseWs['!cols'] = [{ wch: 14 }, { wch: 26 }, { wch: 16 }, { wch: 14 }];
-      XLSX.utils.book_append_sheet(wb, expenseWs, 'Expenses');
+      const expenseWs = wb.addWorksheet('Expenses');
+      expenseWs.addRows(expenseData);
+      expenseWs.columns = [{ width: 14 }, { width: 26 }, { width: 16 }, { width: 14 }];
     }
 
-    const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const wbOut = await wb.xlsx.writeBuffer();
     return new Blob([wbOut], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
@@ -237,7 +232,7 @@ export default function ReportsPage() {
                 <DropdownMenuItem onSelect={() => void run(async () => { download(makePdf(), `${baseName}.pdf`); toast.success('PDF exported', { description: 'Your report download has started.' }); })}>
                   <FileText className="h-4 w-4" /> PDF document
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void run(async () => { download(makeXlsx(), `${baseName}.xlsx`); toast.success('Excel exported', { description: 'Your spreadsheet download has started.' }); })}>
+                <DropdownMenuItem onSelect={() => void run(async () => { download(new Blob([await makeXlsx()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${baseName}.xlsx`); toast.success('Excel exported', { description: 'Your spreadsheet download has started.' }); })}>
                   <FileSpreadsheet className="h-4 w-4" /> Excel (.xlsx)
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); download(blob, `${baseName}.png`); toast.success('PNG exported', { description: 'Your report image download has started.' }); })}>
@@ -257,7 +252,7 @@ export default function ReportsPage() {
                 <DropdownMenuItem onSelect={() => void run(async () => { await share(makePdf(), `${baseName}.pdf`, 'application/pdf'); })}>
                   <FileText className="h-4 w-4" /> Share PDF
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void run(async () => { await share(makeXlsx(), `${baseName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); })}>
+                <DropdownMenuItem onSelect={() => void run(async () => { await share(new Blob([await makeXlsx()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${baseName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); })}>
                   <FileSpreadsheet className="h-4 w-4" /> Share Excel
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void run(async () => { const { blob } = await makePng(); await share(blob, `${baseName}.png`, 'image/png'); })}>

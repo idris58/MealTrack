@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
-import { log } from "./index";
+import { log } from "./logger";
 
 /**
  * Wrap an async Express handler so that rejected promises are caught,
@@ -436,6 +436,22 @@ async function resolveScopeForUserId(userId: string): Promise<Scope> {
   return { userId, messId: (data?.mess_id as string | null) ?? null };
 }
 
+async function requireMessOperator(userId: string) {
+  const supabaseAdmin = assertSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("role, mess_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.mess_id || (data.role !== "manager" && data.role !== "coordinator")) {
+    const error = new Error("Only mess managers and coordinators can broadcast updates.");
+    (error as Error & { status?: number }).status = 403;
+    throw error;
+  }
+  return data.mess_id as string;
+}
+
 /** Resolve the tenancy scope a share link points at. */
 function scopeFromShareLink(shareLink: { user_id: string; mess_id?: string | null }): Scope {
   return { userId: shareLink.user_id, messId: shareLink.mess_id ?? null };
@@ -751,6 +767,8 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid authorization token." });
     }
 
+    await requireMessOperator(userId);
+
     const scope = await resolveScopeForUserId(userId);
     const activeNotice = await getActiveNoticeForScope(scope);
     broadcastNoticeUpdate(scopeKey(scope), activeNotice);
@@ -768,6 +786,8 @@ export async function registerRoutes(
     if (!userId) {
       return res.status(401).json({ message: "Invalid authorization token." });
     }
+
+    await requireMessOperator(userId);
 
     const scope = await resolveScopeForUserId(userId);
     const data = await getSharedPayloadForScope(scope);
