@@ -325,12 +325,12 @@ export function MemberDashboard() {
                     <span className="font-heading text-5xl font-black tracking-tight sm:text-6xl drop-shadow-md">
                       {isPositive ? '+' : '-'}{formatCurrency(memberStats.balance)}
                     </span>
-                    <p className="mt-1 text-sm font-semibold text-white/60">
-                      {isPositive ? "surplus" : 'owed to mess'}
+                    <p className="text-sm font-semibold text-white/80">
+                      {isPositive ? "Surplus" : 'Owed to mess'}
                     </p>
                   </div>
-                  <p className="mt-1 text-sm font-semibold text-white/60">
-                    {isPositive ? "You're all clear 🎉" : 'Please clear your due'}
+                  <p className="mt-1 text-sm font-medium text-white/70">
+                    {isPositive ? "You're all clear" : 'Please clear your due'}
                   </p>
                 </div>
 

@@ -421,12 +421,12 @@ export function MemberDepositsView() {
               <span className="font-heading text-4xl font-extrabold tracking-tight sm:text-5xl">
                 {cycleStats.balance >= 0 ? '+' : '-'}{formatCurrency(cycleStats.balance)}
               </span>
-              <p className="mt-1 text-sm font-semibold text-white/60">
-                {cycleStats.balance >= 0 ? 'surplus' : 'owed to mess'}
+              <p className="text-sm font-semibold text-white/80">
+                {cycleStats.balance >= 0 ? 'Surplus' : 'Owed to mess'}
               </p>
             </div>
-            <p className="text-sm font-semibold text-white/60">
-              {cycleStats.balance >= 0 ? "You're all clear 🎉" : 'Please clear your due'}
+            <p className="mt-1 text-sm font-medium text-white/70">
+              {cycleStats.balance >= 0 ? "You're all clear" : 'Please clear your due'}
             </p>
 
             {/* Cost breakdown sub-boxes */}
