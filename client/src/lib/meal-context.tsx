@@ -1348,6 +1348,21 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     const nextDate = updates.date ? (updates.date.includes('T') ? updates.date : new Date(updates.date).toISOString()) : existingExpense.date;
 
+    if (!navigator.onLine) {
+      setAllExpenses((prev) => prev.map((expense) => expense.id === id ? {
+        ...expense, amount: updates.amount, description: updates.description, type: updates.type,
+        paidBy: updates.paidBy, date: nextDate,
+      } : expense));
+      setPendingSyncIds((prev) => new Set(prev).add(id));
+      await enqueue({
+        id: `offline-${uuidv4()}`,
+        type: 'UPDATE_EXPENSE',
+        payload: { id, amount: updates.amount, description: updates.description, type: updates.type, paidBy: updates.paidBy, date: nextDate, cycleId: existingExpense.cycleId, changes, userId, messId },
+        createdAt: Date.now(),
+      });
+      return;
+    }
+
     const { error } = await supabase
       .from('expenses')
       .update({
@@ -1393,6 +1408,23 @@ export function MealProvider({ children }: { children: ReactNode }) {
     if (!userId || !messId) return;
     const existingExpense = allExpenses.find((expense) => expense.id === id);
     if (!existingExpense) return;
+
+    if (!navigator.onLine) {
+      const tempId = `offline-${uuidv4()}`;
+      setAllExpenses((prev) => prev.filter((expense) => expense.id !== id));
+      setPendingSyncIds((prev) => new Set(prev).add(tempId));
+      await enqueue({
+        id: tempId,
+        type: 'DELETE_EXPENSE',
+        payload: {
+          id, cycleId: existingExpense.cycleId, description: existingExpense.description,
+          amount: existingExpense.amount, type: existingExpense.type, paidBy: existingExpense.paidBy,
+          date: existingExpense.date, userId, messId,
+        },
+        createdAt: Date.now(),
+      });
+      return;
+    }
 
     const now = new Date();
     const { error } = await supabase
@@ -1598,107 +1630,36 @@ export function MealProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    let nextMealLogs = [...allMealLogs];
-    const mealLogChanges: ChangelogChange[] = [];
+    const rows = entries.map((entry) => ({
+      member_id: entry.memberId,
+      cycle_id: targetCycleId,
+      date: dateStr,
+      count: Number.isNaN(entry.count) ? 0 : entry.count,
+      user_id: userId,
+      mess_id: messId,
+    }));
+    const { data, error } = await supabase
+      .from('meal_logs')
+      .upsert(rows, { onConflict: 'member_id,date,cycle_id' })
+      .select();
 
-    for (const entry of entries) {
-      const normalizedCount = Number.isNaN(entry.count) ? 0 : entry.count;
-      const existingLog = nextMealLogs.find((log) => (
-        log.memberId === entry.memberId && log.date === dateStr && log.cycleId === targetCycleId
-      ));
-
-      if (existingLog) {
-        if (existingLog.count === normalizedCount) {
-          continue;
-        }
-
-        if (normalizedCount === 0) {
-          const { error } = await supabase
-            .from('meal_logs')
-            .delete()
-            .eq('id', existingLog.id)
-            .eq('mess_id', messId);
-
-          if (error) {
-            console.error('Error deleting meal log:', error);
-            throw new Error('Unable to save meal log. Please try again.');
-          }
-
-          nextMealLogs = nextMealLogs.filter((log) => log.id !== existingLog.id);
-          mealLogChanges.push({
-            field: `member:${entry.memberId}`,
-            label: getMemberName(entry.memberId, targetCycleId),
-            from: existingLog.count,
-            to: 0,
-          });
-          continue;
-        }
-
-        const { error } = await supabase
-          .from('meal_logs')
-          .update({ count: normalizedCount })
-          .eq('id', existingLog.id)
-          .eq('mess_id', messId);
-
-        if (error) {
-          console.error('Error updating meal log:', error);
-          throw new Error('Unable to save meal log. Please try again.');
-        }
-
-        nextMealLogs = nextMealLogs.map((log) => (
-          log.id === existingLog.id ? { ...log, count: normalizedCount } : log
-        ));
-        mealLogChanges.push({
-          field: `member:${entry.memberId}`,
-          label: getMemberName(entry.memberId, targetCycleId),
-          from: existingLog.count,
-          to: normalizedCount,
-        });
-        continue;
-      }
-
-      if (normalizedCount <= 0) {
-        continue;
-      }
-
-      const { data, error } = await supabase
-        .from('meal_logs')
-        .insert([{
-          member_id: entry.memberId,
-          cycle_id: targetCycleId,
-          date: dateStr,
-          count: normalizedCount,
-          user_id: userId,
-          mess_id: messId,
-        }])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating meal log:', error);
-        throw new Error('Unable to save meal log. Please try again.');
-      }
-
-      nextMealLogs = [...nextMealLogs, {
-        id: data.id,
-        cycleId: data.cycle_id,
-        memberId: data.member_id,
-        date: data.date,
-        count: Number(data.count),
-      }];
-      mealLogChanges.push({
-        field: `member:${entry.memberId}`,
-        label: getMemberName(entry.memberId, targetCycleId),
-        from: 0,
-        to: Number(data.count),
-      });
+    if (error) {
+      console.error('Error upserting meal logs:', error);
+      throw new Error('Unable to save meal log. Please try again.');
     }
 
-    if (mealLogChanges.length === 0) {
-      return;
-    }
+    const savedLogs = (data ?? []) as Array<{ id: string; cycle_id: string; member_id: string; date: string; count: number }>;
+    setAllMealLogs((prev) => [
+      ...prev.filter((log) => !rows.some((row) => log.memberId === row.member_id && log.date === row.date && log.cycleId === row.cycle_id)),
+      ...savedLogs.map((log) => ({ id: log.id, cycleId: log.cycle_id, memberId: log.member_id, date: log.date, count: Number(log.count) })),
+    ]);
 
-    setAllMealLogs(nextMealLogs);
+    const mealLogChanges: ChangelogChange[] = entries.map((entry) => ({
+      field: `member:${entry.memberId}`,
+      label: getMemberName(entry.memberId, targetCycleId),
+      from: null,
+      to: Number.isNaN(entry.count) ? 0 : entry.count,
+    }));
 
     const sortedMealLogChanges = mealLogChanges.sort((left, right) => left.label.localeCompare(right.label));
     await recordChangelog({
@@ -1748,6 +1709,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       }
 
       // Refresh data after sync to get real server IDs
+      void broadcastSharedUpdate();
       void loadData();
     } finally {
       isSyncingRef.current = false;
@@ -1788,6 +1750,33 @@ export function MealProvider({ children }: { children: ReactNode }) {
         { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by },
         ...prev.filter((e) => e.id !== op.id),
       ]);
+      await recordChangelog({
+        cycleId: p.cycleId, entityType: 'expense', entityId: data.id, action: 'create',
+        title: `Added ${data.type} expense`,
+        changes: [buildSnapshotChange('description', 'Description', data.description), buildSnapshotChange('amount', 'Amount', Number(data.amount)), buildSnapshotChange('type', 'Type', data.type)],
+      });
+      return;
+    }
+
+    if (op.type === 'UPDATE_EXPENSE') {
+      const p = op.payload as { id: string; amount: number; description: string; type: 'meal' | 'fixed'; paidBy: string; date: string; cycleId: string; changes: ChangelogChange[] };
+      const { error } = await supabase.from('expenses').update({ amount: p.amount, description: p.description, type: p.type, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId);
+      if (error) throw error;
+      setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: p.type, paidBy: p.paidBy, date: p.date } : expense));
+      setPendingSyncIds((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
+      await recordChangelog({ cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'update', title: `Updated ${p.type} expense`, changes: p.changes });
+      return;
+    }
+
+    if (op.type === 'DELETE_EXPENSE') {
+      const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: 'meal' | 'fixed'; paidBy: string; date: string };
+      const now = new Date();
+      const { error } = await supabase.from('expenses').update({ deleted_at: now.toISOString(), delete_expires_at: new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString() }).eq('id', p.id).eq('mess_id', messId).is('deleted_at', null);
+      if (error) throw error;
+      await recordChangelog({
+        cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'delete', title: `Deleted ${p.type} expense`,
+        changes: [buildSnapshotChange('description', 'Description', p.description), buildSnapshotChange('amount', 'Amount', p.amount), buildSnapshotChange('type', 'Type', p.type), buildSnapshotChange('paid_by', 'Paid By', p.paidBy), buildSnapshotChange('date', 'Date', p.date)],
+      });
       return;
     }
 
@@ -1812,6 +1801,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
         ...prev.filter((d) => d.id !== op.id),
         { id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount), note: data.note ?? undefined, createdAt: data.created_at },
       ]);
+      await recordChangelog({
+        cycleId: p.cycleId, entityType: 'deposit', entityId: data.id, action: 'update',
+        title: `Updated deposit for ${getMemberName(p.memberId, p.cycleId)}`,
+        changes: [buildSnapshotChange('member', 'Member', getMemberName(p.memberId, p.cycleId)), buildSnapshotChange('transaction_amount', 'Transaction', Number(data.amount)), ...(data.note ? [buildSnapshotChange('note', 'Note', data.note)] : [])],
+      });
       return;
     }
 

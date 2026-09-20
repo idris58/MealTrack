@@ -92,7 +92,7 @@ create table if not exists public.meal_logs (
   cycle_id uuid references public.cycles(id) on delete cascade,
   mess_id uuid references public.messes(id) on delete set null,
   profile_id uuid references public.profiles(id) on delete set null,
-  constraint meal_logs_member_id_date_key unique (member_id, date)
+  constraint meal_logs_member_id_date_cycle_key unique (member_id, date, cycle_id)
 );
 
 create table if not exists public.cycle_deposits (
