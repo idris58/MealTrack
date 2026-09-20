@@ -10,7 +10,6 @@ import { format, isToday, parseISO, differenceInDays } from 'date-fns';
 import { useAuth } from '@/lib/auth-context';
 import { useMeal } from '@/lib/meal-context';
 import { useNotice } from '@/lib/notice-context';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import {
   Utensils,
@@ -21,9 +20,11 @@ import {
   Sparkles,
   Bell,
   AlertCircle,
-  ArrowUpRight,
   Clock,
   ShoppingBag,
+  ChevronRight,
+  Activity,
+  CreditCard,
 } from 'lucide-react';
 import { MemberMealStrip } from '@/components/dashboard/member-meal-strip';
 import { Link } from 'wouter';
@@ -40,12 +41,16 @@ function formatMealCount(value: number) {
   return rounded.toString();
 }
 
-function getGreeting(name: string): { greeting: string; emoji: string } {
+function getGreeting(name: string): { greeting: string; emoji: string; sub: string } {
   const hour = new Date().getHours();
-  if (hour >= 5 && hour < 12) return { greeting: `Good Morning, ${name}`, emoji: '🌅' };
-  if (hour >= 12 && hour < 17) return { greeting: `Good Afternoon, ${name}`, emoji: '☀️' };
-  if (hour >= 17 && hour < 21) return { greeting: `Good Evening, ${name}`, emoji: '🌆' };
-  return { greeting: `Good Night, ${name}`, emoji: '🌙' };
+  const firstName = name.split(' ')[0];
+  if (hour >= 5 && hour < 12)
+    return { greeting: 'Good Morning', emoji: '🌅', sub: `Rise & shine, ${firstName}!` };
+  if (hour >= 12 && hour < 17)
+    return { greeting: 'Good Afternoon', emoji: '☀️', sub: `Hope your day's going well, ${firstName}!` };
+  if (hour >= 17 && hour < 21)
+    return { greeting: 'Good Evening', emoji: '🌆', sub: `Relax and unwind, ${firstName}!` };
+  return { greeting: 'Good Night', emoji: '🌙', sub: `Rest well, ${firstName}!` };
 }
 
 function formatRelativeDate(dateStr: string) {
@@ -65,21 +70,19 @@ function formatRelativeDate(dateStr: string) {
 
 function UnlinkedMemberState({ name }: { name: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-5 py-14 text-center">
+    <div className="flex flex-col items-center justify-center gap-6 py-16 text-center">
       <div className="relative">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/10 ring-2 ring-amber-500/20">
-          <AlertCircle className="h-9 w-9 text-amber-500" />
+        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 ring-2 ring-amber-500/20 shadow-xl">
+          <AlertCircle className="h-10 w-10 text-amber-500" />
         </div>
-        <div className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-amber-500 shadow-md">
-          <Users className="h-3.5 w-3.5 text-white" />
+        <div className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg">
+          <Users className="h-4 w-4 text-white" />
         </div>
       </div>
       <div className="max-w-xs space-y-2">
         <h2 className="text-lg font-bold text-foreground">Account Not Linked, {name}</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Your profile isn't linked to a mess member yet. Please ask your
-          Manager or Coordinator to link your account to start seeing your
-          personal stats.
+          Your profile isn't linked to a mess member yet. Please ask your Manager or Coordinator to link your account to start seeing your personal stats.
         </p>
       </div>
     </div>
@@ -104,29 +107,52 @@ function MemberNoticeCard() {
   })();
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 via-purple-500/5 to-transparent p-4 shadow-sm">
-      <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-violet-500/10 blur-2xl" />
-      <div className="flex gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/15">
+    <div className="relative overflow-hidden rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-500/12 via-purple-500/8 to-fuchsia-500/5 p-4 shadow-sm backdrop-blur-sm">
+      <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-violet-500/15 blur-2xl" />
+      <div className="pointer-events-none absolute -left-5 bottom-0 h-20 w-20 rounded-full bg-fuchsia-500/10 blur-xl" />
+      <div className="relative flex gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-500/10 ring-1 ring-violet-500/20">
           <Bell className="h-4 w-4 text-violet-500" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+            <p className="text-[10px] font-black uppercase tracking-widest text-violet-500">
               Mess Notice
             </p>
             {expiresIn && (
-              <span className="flex items-center gap-0.5 text-[9px] font-medium text-muted-foreground whitespace-nowrap">
+              <span className="flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold text-violet-500 whitespace-nowrap">
                 <Clock className="h-2.5 w-2.5" /> {expiresIn}
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-sm font-semibold text-foreground">{notice.title}</p>
+          <p className="mt-1 text-sm font-bold text-foreground">{notice.title}</p>
           <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
             {notice.content}
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Economy Row Item ──────────────────────────────────────────────────────────
+
+function EcoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="group flex items-center justify-between px-3 py-2.5 transition-all duration-150 hover:bg-muted/50">
+      <span className="flex items-center gap-2 text-xs text-muted-foreground">
+        {icon}
+        {label}
+      </span>
+      <span className="text-xs font-bold text-foreground tabular-nums">{value}</span>
     </div>
   );
 }
@@ -183,43 +209,65 @@ export function MemberDashboard() {
 
   // ── Greeting ──────────────────────────────────────────────────────────────
   const displayName = profile?.full_name ?? 'Member';
-  const { greeting, emoji } = getGreeting(displayName);
+  const { greeting, emoji, sub } = getGreeting(displayName);
   const cycleDays =
     activeCycle?.startedAt
       ? differenceInDays(new Date(), parseISO(activeCycle.startedAt)) + 1
       : 0;
 
-  // ── Guard: unlinked ───────────────────────────────────────────────────────
   const isUnlinked = !myMember;
+  const isPositive = (memberStats?.balance ?? 0) >= 0;
 
   return (
     <div className="space-y-4 pb-28">
 
       {/* ── Greeting Header ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-5 shadow-xl text-white">
-        {/* Decorative orbs */}
-        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-emerald-500/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-10 left-10 h-32 w-32 rounded-full bg-violet-500/10 blur-2xl" />
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-[#0f1724] dark:to-slate-950 p-5 shadow-2xl text-white">
+        {/* Ambient orbs */}
+        <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-12 left-8 h-36 w-36 rounded-full bg-violet-500/15 blur-2xl" />
+        <div className="pointer-events-none absolute right-20 bottom-0 h-24 w-24 rounded-full bg-teal-400/10 blur-2xl" />
+        {/* Subtle dot grid */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+            backgroundSize: '24px 24px',
+          }}
+        />
 
         <div className="relative flex items-start justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl" aria-hidden="true">{emoji}</span>
-              <h1 className="text-xl font-bold tracking-tight text-white truncate">{greeting}</h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
-              <span className="text-xs text-slate-400">
-                {format(new Date(), 'EEEE, d MMMM yyyy')}
+          <div className="space-y-1 min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 mb-0.5">
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-xl shadow-inner ring-1 ring-white/10"
+                aria-hidden="true"
+              >
+                {emoji}
               </span>
-              {activeCycle && (
-                <>
-                  <span className="text-slate-600">·</span>
-                  <span className="text-xs text-slate-400">Day {cycleDays}</span>
-                </>
-              )}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 leading-none mb-0.5">
+                  {format(new Date(), 'EEEE, d MMMM yyyy')}
+                </p>
+                <h1 className="text-xl font-extrabold tracking-tight text-white leading-none">
+                  {greeting},{' '}
+                  <span className="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent">
+                    {displayName.split(' ')[0]}
+                  </span>
+                </h1>
+              </div>
             </div>
+            <p className="text-xs text-white/40 pl-12">{sub}</p>
           </div>
 
+          {/* Cycle day badge */}
+          {activeCycle && (
+            <div className="shrink-0 flex flex-col items-center gap-0.5 rounded-2xl bg-white/8 px-3 py-2 ring-1 ring-white/10 text-center">
+              <span className="text-[8px] font-black uppercase tracking-widest text-white/40">Cycle</span>
+              <span className="font-heading text-2xl font-black leading-none text-white">{cycleDays}</span>
+              <span className="text-[8px] font-bold text-white/40">days</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -228,128 +276,126 @@ export function MemberDashboard() {
 
       {/* ── Unlinked state ── */}
       {isUnlinked ? (
-        <Card className="glass-card border border-border/60">
-          <CardContent className="p-4">
-            <UnlinkedMemberState name={displayName} />
-          </CardContent>
-        </Card>
+        <div className="glass-card rounded-3xl border border-border/60 p-6">
+          <UnlinkedMemberState name={displayName} />
+        </div>
       ) : (
         <>
           {/* ── Financial Hero Card ── */}
           {memberStats && (
-            <Card
+            <div
               className={cn(
-                'relative overflow-hidden border-none text-white shadow-xl',
-                memberStats.balance >= 0
-                  ? 'bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800'
-                  : 'bg-gradient-to-br from-rose-600 via-rose-700 to-orange-800'
+                'relative overflow-hidden rounded-3xl p-5 shadow-2xl text-white',
+                isPositive
+                  ? 'bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700'
+                  : 'bg-gradient-to-br from-rose-500 via-rose-600 to-orange-700'
               )}
             >
-              {/* Decorative glows */}
-              <div className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-white/10 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-16 -left-16 h-44 w-44 rounded-full bg-white/5 blur-2xl" />
+              {/* Layered glow effects */}
+              <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-20 -left-10 h-52 w-52 rounded-full bg-black/20 blur-3xl" />
+              <div className="pointer-events-none absolute right-10 bottom-5 h-28 w-28 rounded-full bg-white/5 blur-2xl" />
 
-              <CardHeader className="pb-1 pt-4 px-4 sm:px-5">
+              <div className="relative space-y-4">
+                {/* Header row */}
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white/80">
-                    <Wallet className="h-3.5 w-3.5" />
-                    My Balance This Cycle
-                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/20">
+                      <Wallet className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">
+                      My Balance This Cycle
+                    </span>
+                  </div>
                   <span
                     className={cn(
-                      'rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide backdrop-blur-md',
-                      memberStats.balance >= 0
-                        ? 'border-emerald-300/30 bg-emerald-400/20 text-emerald-100'
-                        : 'border-rose-300/30 bg-rose-400/20 text-rose-100'
+                      'rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest backdrop-blur-md ring-1',
+                      isPositive
+                        ? 'bg-emerald-400/20 ring-emerald-300/30 text-emerald-50'
+                        : 'bg-rose-400/20 ring-rose-300/30 text-rose-50'
                     )}
                   >
-                    {memberStats.balance >= 0 ? 'In Good Standing' : 'Payment Due'}
-                  </span>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-3 px-4 pb-5 pt-1 sm:px-5">
-                {/* Balance amount */}
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="font-heading text-4xl font-extrabold tracking-tight sm:text-5xl">
-                    {memberStats.balance >= 0 ? '+' : '-'}{formatCurrency(memberStats.balance)}
-                  </span>
-                  <span className="text-sm text-white/70 font-medium">
-                    {memberStats.balance >= 0 ? 'surplus / credit' : 'owed to mess'}
+                    {isPositive ? '✦ In Good Standing' : '⚠ Payment Due'}
                   </span>
                 </div>
 
-                {/* Utilization bar */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] text-white/70 font-medium">
-                    <span>Deposited: {formatCurrency(memberStats.totalDeposited)}</span>
-                    <span>Used: {memberStats.utilPct}%</span>
+                {/* Balance Hero */}
+                <div>
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-heading text-5xl font-black tracking-tight sm:text-6xl drop-shadow-md">
+                      {isPositive ? '+' : '-'}{formatCurrency(memberStats.balance)}
+                    </span>
+                    <p className="mt-1 text-sm font-semibold text-white/60">
+                      {isPositive ? "surplus" : 'owed to mess'}
+                    </p>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-black/25">
-                    <div
-                      className={cn(
-                        'h-full rounded-full transition-all duration-700',
-                        memberStats.balance >= 0
-                          ? 'bg-gradient-to-r from-emerald-200 to-teal-100'
-                          : 'bg-gradient-to-r from-rose-200 to-orange-100'
-                      )}
-                      style={{ width: `${memberStats.utilPct}%` }}
-                    />
-                  </div>
+                  <p className="mt-1 text-sm font-semibold text-white/60">
+                    {isPositive ? "You're all clear 🎉" : 'Please clear your due'}
+                  </p>
                 </div>
 
                 {/* Cost breakdown sub-boxes */}
                 <div className="grid grid-cols-2 gap-2.5">
-                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2.5 backdrop-blur-md shadow-sm hover:bg-white/15 transition-colors">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/70">Meal Cost</p>
-                      <Utensils className="h-3 w-3 text-white/50" />
+                  <div className={cn(
+                    'flex items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 backdrop-blur-sm transition-all duration-200 hover:scale-[1.02]',
+                    isPositive ? 'border-white/15 bg-emerald-400/20' : 'border-white/15 bg-rose-400/20'
+                  )}>
+                    <Utensils className="h-3.5 w-3.5 text-white/70 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-white/60 leading-none mb-0.5">Meal Cost</p>
+                      <p className="text-sm font-extrabold text-white leading-none truncate">{formatCurrency(memberStats.mealCost)}</p>
+                      <p className="text-[9px] text-white/50 mt-0.5">{formatMealCount(myMember!.mealsEaten)} meals</p>
                     </div>
-                    <p className="font-heading text-lg font-extrabold text-white">
-                      {formatCurrency(memberStats.mealCost)}
-                    </p>
-                    <p className="text-[9px] text-white/60 mt-0.5">
-                      {formatMealCount(myMember!.mealsEaten)} meals eaten
-                    </p>
                   </div>
-
-                  <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2.5 backdrop-blur-md shadow-sm hover:bg-white/15 transition-colors">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/70">Fixed Share</p>
-                      <ShoppingBag className="h-3 w-3 text-white/50" />
+                  <div className={cn(
+                    'flex items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 backdrop-blur-sm transition-all duration-200 hover:scale-[1.02]',
+                    isPositive ? 'border-white/15 bg-emerald-400/20' : 'border-white/15 bg-rose-400/20'
+                  )}>
+                    <ShoppingBag className="h-3.5 w-3.5 text-white/70 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-white/60 leading-none mb-0.5">Fixed Share</p>
+                      <p className="text-sm font-extrabold text-white leading-none truncate">{formatCurrency(memberStats.fixedCost)}</p>
+                      <p className="text-[9px] text-white/50 mt-0.5">Bills & utilities</p>
                     </div>
-                    <p className="font-heading text-lg font-extrabold text-white">
-                      {formatCurrency(memberStats.fixedCost)}
-                    </p>
-                    <p className="text-[9px] text-white/60 mt-0.5">
-                      Bills & utilities
-                    </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
           {/* ── Meal Activity + Mess Rate Row ── */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
             {/* Today's Meals + 7-Day Strip */}
-            <Card className="glass-card border border-border/70 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Meal Activity
-                </CardTitle>
-                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10">
-                  <Utensils className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <div className="glass-card rounded-3xl border border-border/60 overflow-hidden shadow-sm">
+              <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/12 ring-1 ring-emerald-500/20">
+                    <Activity className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Meal Activity
+                  </span>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4 px-4 pb-4 pt-0">
-                {/* Today's status */}
-                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/40 px-3 py-2.5">
-                  <div className="space-y-0.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Today</p>
+              </div>
+
+              <div className="space-y-3 px-4 pb-4 pt-0">
+                {/* Today's status pill */}
+                <div
+                  className={cn(
+                    'flex items-center justify-between rounded-2xl border px-4 py-3 transition-colors',
+                    todayMeals > 0
+                      ? 'border-emerald-500/20 bg-emerald-500/8'
+                      : 'border-border/60 bg-muted/40'
+                  )}
+                >
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">
+                      Today
+                    </p>
                     {todayMeals > 0 ? (
-                      <p className="text-sm font-bold text-foreground">
-                        {todayMeals} meal{todayMeals !== 1 ? 's' : ''} logged
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                        {todayMeals} meal{todayMeals !== 1 ? 's' : ''} logged ✓
                       </p>
                     ) : (
                       <p className="text-sm font-semibold text-muted-foreground">No meals yet</p>
@@ -357,105 +403,119 @@ export function MemberDashboard() {
                   </div>
                   <div
                     className={cn(
-                      'flex h-10 w-10 items-center justify-center rounded-full text-lg font-extrabold',
+                      'flex h-11 w-11 items-center justify-center rounded-2xl text-base font-black shadow-sm',
                       todayMeals > 0
-                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-500/25'
                         : 'bg-muted text-muted-foreground'
                     )}
                   >
-                    {todayMeals > 0 ? todayMeals : '–'}
+                    {todayMeals > 0 ? todayMeals : '—'}
                   </div>
                 </div>
 
                 {/* Cycle total */}
-                <div className="flex items-baseline justify-between border-b pb-3">
+                <div className="flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2">
                   <span className="text-xs text-muted-foreground">Total this cycle</span>
                   <span className="text-sm font-extrabold text-foreground">
                     {formatMealCount(myMember!.mealsEaten)} meals
                   </span>
                 </div>
 
+                <div className="border-t border-border/40" />
+
                 {/* 7-Day strip */}
                 <MemberMealStrip memberId={myMember!.id} mealLogs={mealLogs} />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Mess Economy Snapshot */}
-            <Card className="glass-card border border-border/70 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Mess Economy
-                </CardTitle>
-                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-500/10">
-                  <TrendingUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+            <div className="glass-card rounded-3xl border border-border/60 overflow-hidden shadow-sm">
+              <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-500/12 ring-1 ring-blue-500/20">
+                    <TrendingUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Mess Economy
+                  </span>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3 px-4 pb-4 pt-0">
-                {/* Meal rate feature */}
-                <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/5 border border-blue-500/15 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-0.5">
+                <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-blue-500/10">
+                  <Sparkles className="h-3 w-3 text-blue-500" />
+                </div>
+              </div>
+
+              <div className="space-y-3 px-4 pb-4 pt-0">
+                {/* Meal rate hero */}
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/12 via-indigo-500/8 to-violet-500/5 border border-blue-500/15 px-4 py-4">
+                  <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-blue-500/15 blur-2xl" />
+                  <p className="text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">
                     Current Meal Rate
                   </p>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-heading text-2xl font-extrabold text-foreground">
+                  <div className="relative flex items-baseline gap-1.5">
+                    <span className="font-heading text-3xl font-black text-foreground">
                       ৳{stats.currentMealRate.toFixed(2)}
                     </span>
-                    <span className="text-xs text-muted-foreground">/ meal</span>
+                    <span className="text-xs font-semibold text-muted-foreground">/ meal</span>
                   </div>
                 </div>
 
                 {/* Stats list */}
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between py-1.5 border-b border-border/50">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Utensils className="h-3.5 w-3.5 text-emerald-500" /> Total Mess Meals
-                    </span>
-                    <span className="font-bold text-foreground">{formatMealCount(stats.totalMealsConsumed)}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1.5 border-b border-border/50">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <ShoppingBag className="h-3.5 w-3.5 text-violet-500" /> Fixed Cost / Head
-                    </span>
-                    <span className="font-bold text-foreground">{formatCurrency(stats.fixedCostPerMember)}</span>
-                  </div>
+                <div className="rounded-2xl border border-border/50 overflow-hidden divide-y divide-border/40">
+                  <EcoRow
+                    icon={<Utensils className="h-3.5 w-3.5 text-emerald-500" />}
+                    label="Total Mess Meals"
+                    value={formatMealCount(stats.totalMealsConsumed)}
+                  />
+                  <EcoRow
+                    icon={<ShoppingBag className="h-3.5 w-3.5 text-violet-500" />}
+                    label="Fixed Cost / Head"
+                    value={formatCurrency(stats.fixedCostPerMember)}
+                  />
                   {activeCycle && (
-                    <div className="flex items-center justify-between py-1.5">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <CalendarDays className="h-3.5 w-3.5 text-amber-500" /> Cycle Duration
-                      </span>
-                      <span className="font-bold text-foreground">Day {cycleDays}</span>
-                    </div>
+                    <EcoRow
+                      icon={<CalendarDays className="h-3.5 w-3.5 text-amber-500" />}
+                      label="Cycle Duration"
+                      value={`Day ${cycleDays}`}
+                    />
                   )}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
           {/* ── Recent Deposits ── */}
-          <Card className="glass-card border border-border/70 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Recent Deposits
-              </CardTitle>
+          <div className="glass-card rounded-3xl border border-border/60 overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between px-4 pt-4 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/12 ring-1 ring-emerald-500/20">
+                  <CreditCard className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Recent Deposits
+                </span>
+              </div>
               <Link
                 href="/app/members"
-                className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                className="flex items-center gap-1 rounded-xl bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
               >
-                <span>View All</span>
-                <ArrowUpRight className="h-3.5 w-3.5" />
+                View All <ChevronRight className="h-3 w-3" />
               </Link>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
+            </div>
+
+            <div className="px-4 pb-4 pt-1">
               {recentDeposits.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-8 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                    <Wallet className="h-5 w-5 text-muted-foreground" />
+                <div className="flex flex-col items-center gap-3 py-10 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-muted/60 ring-1 ring-border/50">
+                    <Wallet className="h-6 w-6 text-muted-foreground/50" />
                   </div>
-                  <p className="text-sm text-muted-foreground">No deposits yet this cycle.</p>
+                  <div>
+                    <p className="text-sm font-semibold text-muted-foreground">No deposits yet</p>
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">Your deposits will appear here</p>
+                  </div>
                 </div>
               ) : (
-                <div className="divide-y divide-border/50">
-                  {recentDeposits.map((deposit, idx) => {
+                <div className="space-y-1">
+                  {recentDeposits.map((deposit) => {
                     const isCarryForward =
                       deposit.note?.toLowerCase().includes('carry') ||
                       deposit.note?.toLowerCase().includes('forward') ||
@@ -468,23 +528,20 @@ export function MemberDashboard() {
                     return (
                       <div
                         key={deposit.id}
-                        className={cn(
-                          'flex items-center justify-between gap-3 py-2.5 transition-colors',
-                          idx === 0 && 'pt-0'
-                        )}
+                        className="group flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-all duration-150 hover:bg-muted/50"
                       >
                         {/* Left icon */}
                         <div
                           className={cn(
-                            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ring-1 transition-transform duration-150 group-hover:scale-105',
                             isRefund
-                              ? 'bg-rose-500/10 text-rose-500'
+                              ? 'bg-rose-500/12 ring-rose-500/20 text-rose-500'
                               : isCarryForward
-                              ? 'bg-violet-500/10 text-violet-500'
-                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                ? 'bg-violet-500/12 ring-violet-500/20 text-violet-500'
+                                : 'bg-emerald-500/12 ring-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                           )}
                         >
-                          <Wallet className="h-3.5 w-3.5" />
+                          <Wallet className="h-4 w-4" />
                         </div>
 
                         {/* Center info */}
@@ -494,14 +551,14 @@ export function MemberDashboard() {
                               {deposit.note?.trim() || 'Deposit'}
                             </p>
                             {isCarryForward && (
-                              <Badge variant="secondary" className="text-[9px] py-0 h-4 font-bold">
+                              <Badge variant="secondary" className="text-[9px] py-0 h-4 font-bold shrink-0">
                                 Carry-Forward
                               </Badge>
                             )}
                             {isRefund && (
                               <Badge
                                 variant="destructive"
-                                className="text-[9px] py-0 h-4 font-bold opacity-80"
+                                className="text-[9px] py-0 h-4 font-bold opacity-80 shrink-0"
                               >
                                 Refund
                               </Badge>
@@ -512,13 +569,13 @@ export function MemberDashboard() {
                           </p>
                         </div>
 
-                        {/* Amount */}
+                        {/* Amount pill */}
                         <span
                           className={cn(
-                            'shrink-0 text-sm font-extrabold tabular-nums',
+                            'shrink-0 rounded-xl px-2.5 py-1 text-xs font-black tabular-nums',
                             isRefund
-                              ? 'text-rose-500'
-                              : 'text-emerald-600 dark:text-emerald-400'
+                              ? 'bg-rose-500/10 text-rose-500'
+                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                           )}
                         >
                           {isRefund ? '-' : '+'}৳{Math.abs(deposit.amount).toFixed(2)}
@@ -528,8 +585,8 @@ export function MemberDashboard() {
                   })}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </>
       )}
     </div>

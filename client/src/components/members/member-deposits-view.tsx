@@ -132,8 +132,8 @@ function TxCard({ deposit }: { deposit: CycleDeposit }) {
   const iconCls = isRefund
     ? 'bg-rose-500/10 text-rose-500'
     : isCarry
-    ? 'bg-violet-500/10 text-violet-500'
-    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+      ? 'bg-violet-500/10 text-violet-500'
+      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
 
   const Icon = isRefund ? ArrowDown : isCarry ? Repeat2 : ArrowUp;
   const amountCls = isRefund ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400';
@@ -421,24 +421,13 @@ export function MemberDepositsView() {
               <span className="font-heading text-4xl font-extrabold tracking-tight sm:text-5xl">
                 {cycleStats.balance >= 0 ? '+' : '-'}{formatCurrency(cycleStats.balance)}
               </span>
-              <span className="text-sm text-white/70 font-medium">
-                {cycleStats.balance >= 0 ? 'surplus / credit' : 'owed to mess'}
-              </span>
+              <p className="mt-1 text-sm font-semibold text-white/60">
+                {cycleStats.balance >= 0 ? 'surplus' : 'owed to mess'}
+              </p>
             </div>
-
-            {/* Utilization bar */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-[10px] text-white/70 font-medium">
-                <span>Deposited: {formatCurrency(cycleStats.totalDeposited)}</span>
-                <span>Used: {cycleStats.utilPct}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-black/25">
-                <div
-                  className={cn('h-full rounded-full transition-all duration-700', cycleStats.balance >= 0 ? 'bg-gradient-to-r from-emerald-200 to-teal-100' : 'bg-gradient-to-r from-rose-200 to-orange-100')}
-                  style={{ width: `${cycleStats.utilPct}%` }}
-                />
-              </div>
-            </div>
+            <p className="text-sm font-semibold text-white/60">
+              {cycleStats.balance >= 0 ? "You're all clear 🎉" : 'Please clear your due'}
+            </p>
 
             {/* Cost breakdown sub-boxes */}
             <div className="grid grid-cols-3 gap-2">
