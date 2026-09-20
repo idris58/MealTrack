@@ -2,6 +2,7 @@ import React, { createContext, useContext, useCallback, useEffect, useMemo, useR
 
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from './supabase';
+import { allocateIntegerBalances } from './settlement-math';
 import {
   enqueue,
   dequeueAll,
@@ -724,7 +725,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const fixedCostPerMember = memberCount > 0 ? totalFixedExpenses / memberCount : 0;
     const remainingCash = totalDeposits - (totalMealExpenses + totalFixedExpenses);
 
-    const computedMembers = baseMembers.map((member) => {
+    const rawMembers = baseMembers.map((member) => {
       const mealCost = member.mealsEaten * currentMealRate;
       const fixedCost = fixedCostPerMember;
       const totalCost = mealCost + fixedCost;
@@ -738,6 +739,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
         balance,
       };
     });
+
+    // When cycle is finalized (pending settlement or closed), apportion whole-Taka balances
+    // using the Largest-Remainder Method so member bills, dues, and refunds match settlement math.
+    const isFinalizedCycle = cycle.status === 'pending' || cycle.status === 'closed';
+    let computedMembers = rawMembers;
+
+    if (isFinalizedCycle && rawMembers.length > 0) {
+      const roundedRemainingCash = Math.round(remainingCash);
+      const allocatedMap = allocateIntegerBalances(rawMembers, roundedRemainingCash);
+      computedMembers = rawMembers.map((member) => {
+        const allocatedBalance = allocatedMap.get(member.id);
+        if (allocatedBalance === undefined) return member;
+        return {
+          ...member,
+          balance: allocatedBalance,
+        };
+      });
+    }
 
     return {
       cycle,

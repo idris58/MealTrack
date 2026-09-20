@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import { log } from "./logger";
+import { allocateIntegerBalances } from "@shared/settlement-math";
 
 /**
  * Wrap an async Express handler so that rejected promises are caught,
@@ -143,7 +144,7 @@ function buildSharedPayload(
   const fixedCostPerMember =
     memberCount > 0 ? totalFixedExpenses / memberCount : 0;
 
-  const memberSummaries = members.map((member) => {
+  const rawSummaries = members.map((member) => {
     const mealsEaten = mealLogs
       .filter((log) => log.memberId === member.id)
       .reduce((sum, log) => sum + log.count, 0);
@@ -164,11 +165,27 @@ function buildSharedPayload(
     };
   });
 
-  const totalDeposits = memberSummaries.reduce(
+  const totalDeposits = rawSummaries.reduce(
     (sum, member) => sum + member.deposit,
     0,
   );
   const remainingCash = totalDeposits - (totalMealExpenses + totalFixedExpenses);
+
+  const isFinalized = cycle.status === "pending" || cycle.status === "closed";
+  let memberSummaries = rawSummaries;
+
+  if (isFinalized && rawSummaries.length > 0) {
+    const roundedRemainingCash = Math.round(remainingCash);
+    const allocatedMap = allocateIntegerBalances(rawSummaries, roundedRemainingCash);
+    memberSummaries = rawSummaries.map((member) => {
+      const allocatedBalance = allocatedMap.get(member.id);
+      if (allocatedBalance === undefined) return member;
+      return {
+        ...member,
+        balance: allocatedBalance,
+      };
+    });
+  }
 
   return {
     cycle: {
