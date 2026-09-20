@@ -66,10 +66,10 @@ function AppLoadingSkeleton({ message }: { message: string }) {
 }
 
 function Router() {
-  const { loading, dataError, retryLoadData } = useMeal();
+  const { initialLoading, dataError, retryLoadData } = useMeal();
   const [location] = useLocation();
 
-  if (loading && !dataError) {
+  if (initialLoading && !dataError) {
     return <AppLoadingSkeleton message="Loading your meal data..." />;
   }
 

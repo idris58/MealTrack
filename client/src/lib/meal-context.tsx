@@ -127,6 +127,8 @@ interface MealContextType {
   activeCycle: Cycle | null;
   pendingCycle: Cycle | null;
   loading: boolean;
+  initialLoading: boolean;
+  refreshing: boolean;
   addMember: (name: string) => Promise<void>;
   updateMember: (id: string, updates: Partial<Member>) => Promise<void>;
   removeMember: (id: string) => Promise<void>;
@@ -441,6 +443,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [cycleDetailsLoadingById, setCycleDetailsLoadingById] = useState<Record<string, boolean>>({});
   const [cycleDetailsErrorById, setCycleDetailsErrorById] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedDataRef = useRef(false);
+  const loadedScopeRef = useRef<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [messId, setMessId] = useState<string | null>(null);
   const [pendingSyncIds, setPendingSyncIds] = useState<Set<string>>(new Set());
@@ -505,6 +510,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (userId && messId) {
+      const scopeKey = `${userId}:${messId}`;
+      if (loadedScopeRef.current !== scopeKey) {
+        loadedScopeRef.current = scopeKey;
+        hasLoadedDataRef.current = false;
+        setLoading(true);
+        setDataError(null);
+      }
       void loadData();
     }
   }, [userId, messId]);
@@ -808,6 +820,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const loadData = async () => {
     if (!userId || !messId) return;
 
+    const isInitialLoad = !hasLoadedDataRef.current;
+    setRefreshing(true);
+
     const cacheKey = `mealtrack-data-cache-${userId}-${messId}`;
 
     // ── Offline path: hydrate from localStorage cache ────────────────────────
@@ -832,20 +847,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
           setAllChangelogEntries(snap.changelog);
           setLoadedCycleIds(new Set(snap.loadedCycleIds));
           setDataError(null);
+          hasLoadedDataRef.current = true;
           setLoading(false);
+          setRefreshing(false);
           return;
         }
       } catch {
         // corrupt cache – fall through to show error
       }
       setDataError('You are offline and no cached data was found. Connect to the internet to load your data.');
+      hasLoadedDataRef.current = true;
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     // ── Online path ──────────────────────────────────────────────────────────
     try {
-      setLoading(true);
+      if (isInitialLoad) setLoading(true);
 
       const [membersResult, cyclesResult, changelogResult, profilesResult] = await Promise.all([
         supabase
@@ -934,6 +953,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setAllChangelogEntries(nextChangelogEntries);
       setHasMoreChangelogEntries(nextChangelogEntries.length === CHANGELOG_PAGE_SIZE);
       setDataError(null);
+      hasLoadedDataRef.current = true;
 
       // Persist snapshot to localStorage for offline access
       try {
@@ -974,19 +994,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
             setAllChangelogEntries(snap.changelog);
             setLoadedCycleIds(new Set(snap.loadedCycleIds));
             setDataError(null);
+            hasLoadedDataRef.current = true;
             setLoading(false);
+            setRefreshing(false);
             return;
           }
         } catch { /* ignore */ }
       }
 
-      setDataError(
-        error instanceof Error
-          ? error.message
-          : 'Unable to load your meal data. Please check your connection and try again.',
-      );
+      if (isInitialLoad) {
+        setDataError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load your meal data. Please check your connection and try again.',
+        );
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -2179,6 +2204,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
         activeCycle,
         pendingCycle,
         loading,
+        initialLoading: loading,
+        refreshing,
         addMember,
         updateMember,
         removeMember,
