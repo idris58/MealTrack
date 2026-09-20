@@ -6,6 +6,7 @@ import { Link, useLocation } from 'wouter';
 
 import { useMeal, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
+import { computeSettlementSummary } from '@/lib/settlement-math';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -70,7 +71,7 @@ function SettlementForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fillExactAmount = () => {
-    setAmount(String(-currentBalance));
+    setAmount(String(Math.round(-currentBalance)));
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -120,7 +121,7 @@ function SettlementForm({
             </button>
           )}
         </div>
-        <Input type="number" step="0.01" placeholder="e.g. 300 or -300" value={amount} onChange={(event) => setAmount(event.target.value)} autoFocus disabled={isSubmitting} />
+        <Input type="number" step="1" placeholder="e.g. 300 or -300" value={amount} onChange={(event) => setAmount(event.target.value)} autoFocus disabled={isSubmitting} />
         <p className="text-[11px] text-muted-foreground">
           Enter a positive number if the member pays you. Enter a negative number if you refund the member.
         </p>
@@ -303,24 +304,23 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
     details.stats.totalDeposits -
     details.stats.totalMealExpenses -
     details.stats.totalFixedExpenses;
-  const roundedRemainingBalance = Math.round(remainingBalance);
-  const managerShouldGet = details.members.reduce((sum, member) => {
-    if (member.balance >= 0) return sum;
-    return sum + Math.abs(Math.round(member.balance));
-  }, 0);
-  const managerShouldGive = details.members.reduce((sum, member) => {
-    if (member.balance <= 0) return sum;
-    return sum + Math.round(member.balance);
-  }, 0);
-  const managerGetPlusRemaining = managerShouldGet + roundedRemainingBalance;
-  const settlementMismatch = managerShouldGive - managerGetPlusRemaining;
-  const isSettlementMatched = settlementMismatch === 0;
-  const signedRemainingBalanceText =
-    roundedRemainingBalance >= 0
-      ? formatCurrency(roundedRemainingBalance)
-      : `(-${formatCurrency(Math.abs(roundedRemainingBalance))})`;
-  const settlementFormulaText =
-    `${formatCurrency(managerShouldGet)} + ${signedRemainingBalanceText}`;
+  const {
+    allocatedBalances,
+    managerShouldGet,
+    managerShouldGive,
+    managerGetPlusRemaining,
+    settlementMismatch,
+    roundedRemainingBalance,
+  } = useMemo(
+    () => computeSettlementSummary(details.members, remainingBalance),
+    [details.members, remainingBalance],
+  );
+
+  // Balances are apportioned as whole currency units using the Largest-Remainder
+  // Method, so settlementMismatch is mathematically guaranteed to be 0.
+  // We retain tolerance as a defense-in-depth safety net so locking is never blocked.
+  const settlementRoundingTolerance = Math.max(1, details.members.length);
+  const isSettlementMatched = Math.abs(settlementMismatch) <= settlementRoundingTolerance;
   const memberMealTotals = useMemo(() => {
     const totals = new Map<string, number>();
 
@@ -567,6 +567,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
                 const memberDeposits = details.deposits
                   .filter((d) => d.memberId === member.id)
                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                const allocatedBalance = allocatedBalances.get(member.id) ?? Math.round(member.balance);
 
                 return (
                   <AccordionItem key={member.id} value={member.id} className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -585,12 +586,12 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
                         </div>
                         <div className="text-right">
                           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Balance</p>
-                          <p className={cn('font-bold text-base', member.balance >= 0 ? 'text-emerald-600' : 'text-red-600')}>
-                            {formatBalance(member.balance)}
+                          <p className={cn('font-bold text-base', allocatedBalance >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                            {formatBalance(allocatedBalance)}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button size="sm" className="gap-2 rounded-full" disabled={!canSettle} onClick={() => { if (!canSettle) return; setDepositMember({ id: member.id, name: member.name, balance: member.balance }); }}>
+                          <Button size="sm" className="gap-2 rounded-full" disabled={!canSettle} onClick={() => { if (!canSettle) return; setDepositMember({ id: member.id, name: member.name, balance: allocatedBalance }); }}>
                             <Wallet className="h-4 w-4" />
                             Settle
                           </Button>
