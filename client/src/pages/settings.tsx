@@ -606,8 +606,28 @@ function ShareSettingsCard() {
     try {
       const payload: Record<string, any> = { user_id: user.id, profile_id: user.id, token: nextConfig.token, is_enabled: nextConfig.is_enabled, updated_at: new Date().toISOString() };
       if (profile?.mess_id) payload.mess_id = profile.mess_id;
-      const { data, error: upsertError } = await supabase.from('share_links').upsert(payload, { onConflict: 'user_id' }).select('token, is_enabled').single();
+      let data: { token: string; is_enabled: boolean } | null = null;
+      let upsertError: any = null;
+      if (profile?.mess_id) {
+        const result = await supabase.from('share_links').upsert(payload, { onConflict: 'mess_id' }).select('token, is_enabled').single();
+        data = result.data;
+        upsertError = result.error;
+      } else {
+        const existing = await supabase.from('share_links').select('token, is_enabled').eq('user_id', user.id).maybeSingle();
+        if (existing.error) {
+          upsertError = existing.error;
+        } else if (existing.data) {
+          const result = await supabase.from('share_links').update(payload).eq('user_id', user.id).select('token, is_enabled').single();
+          data = result.data;
+          upsertError = result.error;
+        } else {
+          const result = await supabase.from('share_links').insert(payload).select('token, is_enabled').single();
+          data = result.data;
+          upsertError = result.error;
+        }
+      }
       if (upsertError) throw upsertError;
+      if (!data) throw new Error('Unable to save share settings.');
       setConfig({ token: data.token, is_enabled: data.is_enabled }); return data;
     } catch (caughtError: any) {
       console.error('Error saving share config:', caughtError);

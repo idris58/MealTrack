@@ -14,6 +14,13 @@ update public.notices set profile_id = user_id where profile_id is null and user
 update public.share_links set profile_id = user_id where profile_id is null and user_id is not null;
 update public.push_subscriptions set profile_id = user_id where profile_id is null and user_id is not null;
 update public.notification_deliveries set profile_id = user_id where profile_id is null and user_id is not null;
+update public.push_subscriptions as subscriptions
+set mess_id = links.mess_id
+from public.share_links as links
+where subscriptions.audience = 'shared'
+  and subscriptions.mess_id is null
+  and subscriptions.share_token = links.token
+  and links.mess_id is not null;
 
 do $$
 declare u record; c record; active_id uuid; season text; base_name text; candidate text; suffix integer;
@@ -36,4 +43,3 @@ begin
     end loop;
   end loop;
 end $$;
-

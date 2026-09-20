@@ -601,7 +601,7 @@ export async function registerRoutes(
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: shareLink, error } = await supabaseAdmin
       .from("share_links")
-      .select("user_id, is_enabled")
+      .select("user_id, mess_id, is_enabled")
       .eq("token", token)
       .maybeSingle();
 
@@ -615,6 +615,7 @@ export async function registerRoutes(
 
     await upsertPushSubscription({
       userId: shareLink.user_id,
+      messId: shareLink.mess_id,
       audience: "shared",
       shareToken: token,
       subscription,
@@ -635,7 +636,7 @@ export async function registerRoutes(
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: shareLink, error: shareLinkError } = await supabaseAdmin
       .from("share_links")
-      .select("user_id, is_enabled")
+      .select("user_id, mess_id, is_enabled")
       .eq("token", token)
       .maybeSingle();
 
@@ -650,7 +651,7 @@ export async function registerRoutes(
     const { data, error } = await supabaseAdmin
       .from("push_subscriptions")
       .select("id")
-      .eq("user_id", shareLink.user_id)
+      .eq("mess_id", shareLink.mess_id)
       .eq("audience", "shared")
       .eq("share_token", token)
       .eq("endpoint", endpoint)
@@ -674,7 +675,7 @@ export async function registerRoutes(
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: shareLink, error } = await supabaseAdmin
       .from("share_links")
-      .select("user_id")
+      .select("user_id, mess_id")
       .eq("token", token)
       .maybeSingle();
 
@@ -686,6 +687,7 @@ export async function registerRoutes(
       await removePushSubscription({
         endpoint,
         userId: shareLink.user_id,
+        messId: shareLink.mess_id,
         audience: "shared",
         shareToken: token,
       });
@@ -753,7 +755,7 @@ export async function registerRoutes(
     const activeNotice = await getActiveNoticeForScope(scope);
     broadcastNoticeUpdate(scopeKey(scope), activeNotice);
     // Push to shared-view visitors
-    void sendNoticePushToSharedSubscribers(userId, activeNotice);
+    void sendNoticePushToSharedSubscribers(scope.messId, activeNotice);
     // Push to all logged-in mess members (main audience)
     void sendNoticePushToMessMembers(scope.messId, userId, activeNotice);
 

@@ -133,7 +133,7 @@ create table if not exists public.notices (
 );
 
 create table if not exists public.share_links (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
   token text not null unique,
   is_enabled boolean not null default false,
   created_at timestamptz not null default now(),

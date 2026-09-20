@@ -185,12 +185,14 @@ async function sendPushToRows(
 
 export async function upsertPushSubscription({
   userId,
+  messId,
   audience,
   shareToken,
   subscription,
   userAgent,
 }: {
   userId: string;
+  messId?: string | null;
   audience: PushAudience;
   shareToken?: string | null;
   subscription: { endpoint: string; p256dh: string; auth: string };
@@ -220,6 +222,10 @@ export async function upsertPushSubscription({
     .eq("user_id", userId)
     .eq("audience", audience)
     .eq("endpoint", subscription.endpoint);
+
+  if (audience === "shared" && messId) {
+    existingQuery = existingQuery.eq("mess_id", messId);
+  }
 
   existingQuery =
     normalizedShareToken === null
@@ -256,6 +262,7 @@ export async function upsertPushSubscription({
     .from("push_subscriptions")
     .insert({
       user_id: userId,
+      mess_id: messId ?? null,
       audience,
       share_token: normalizedShareToken,
       endpoint: subscription.endpoint,
@@ -274,11 +281,13 @@ export async function upsertPushSubscription({
 export async function removePushSubscription({
   endpoint,
   userId,
+  messId,
   audience,
   shareToken,
 }: {
   endpoint: string;
   userId?: string;
+  messId?: string | null;
   audience?: PushAudience;
   shareToken?: string | null;
 }) {
@@ -287,6 +296,10 @@ export async function removePushSubscription({
 
   if (userId) {
     query = query.eq("user_id", userId);
+  }
+
+  if (messId) {
+    query = query.eq("mess_id", messId);
   }
 
   if (audience) {
@@ -304,12 +317,12 @@ export async function removePushSubscription({
   }
 }
 
-async function getEnabledShareTokenForUser(userId: string) {
+async function getEnabledShareTokenForMess(messId: string) {
   const supabase = assertSupabaseAdmin();
   const { data, error } = await supabase
     .from("share_links")
-    .select("token")
-    .eq("user_id", userId)
+    .select("token, user_id")
+    .eq("mess_id", messId)
     .eq("is_enabled", true)
     .maybeSingle();
 
@@ -317,7 +330,9 @@ async function getEnabledShareTokenForUser(userId: string) {
     throw error;
   }
 
-  return typeof data?.token === "string" ? data.token : null;
+  return typeof data?.token === "string" && typeof data?.user_id === "string"
+    ? { token: data.token, ownerUserId: data.user_id }
+    : null;
 }
 
 function truncateNotificationBody(value: string) {
@@ -355,20 +370,23 @@ async function removeDelivery(userId: string, type: NotificationType, dedupeKey:
 }
 
 export async function sendNoticePushToSharedSubscribers(
-  userId: string,
+  messId: string | null,
   notice: { id: string; title: string; content: string; expiresAt: string } | null,
 ) {
   if (!notice) {
     return;
   }
 
-  const shareToken = await getEnabledShareTokenForUser(userId);
-  if (!shareToken) {
+  if (!messId) return;
+
+  const shareLink = await getEnabledShareTokenForMess(messId);
+  if (!shareLink) {
     return;
   }
+  const { token: shareToken, ownerUserId } = shareLink;
 
   const deliveryRecorded = await recordDelivery(
-    userId,
+    ownerUserId,
     "notice_posted",
     `${notice.id}:${notice.expiresAt}`,
   );
@@ -381,13 +399,13 @@ export async function sendNoticePushToSharedSubscribers(
   const { data, error } = await supabase
     .from("push_subscriptions")
     .select("id, user_id, endpoint, p256dh, auth")
-    .eq("user_id", userId)
+    .eq("mess_id", messId)
     .eq("audience", "shared")
     .eq("share_token", shareToken);
 
   if (error) {
     console.error("Error loading shared push subscriptions:", error);
-    await removeDelivery(userId, "notice_posted", `${notice.id}:${notice.expiresAt}`);
+    await removeDelivery(ownerUserId, "notice_posted", `${notice.id}:${notice.expiresAt}`);
     return;
   }
 
@@ -397,7 +415,7 @@ export async function sendNoticePushToSharedSubscribers(
     url: `/shared/${shareToken}`,
     tag: `notice-${notice.id}`,
   });
-  if (failedUserIds.has(userId)) await removeDelivery(userId, "notice_posted", `${notice.id}:${notice.expiresAt}`);
+  if (failedUserIds.size > 0) await removeDelivery(ownerUserId, "notice_posted", `${notice.id}:${notice.expiresAt}`);
 }
 
 /**
