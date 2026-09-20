@@ -63,7 +63,7 @@ drop policy if exists mess_notices on public.notices;
 drop policy if exists notices_read on public.notices;
 drop policy if exists notices_manage on public.notices;
 create policy notices_read on public.notices for select to authenticated using (mess_id = public.current_mess_id());
-create policy notices_manage on public.notices for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager']));
+create policy notices_manage on public.notices for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator']));
 
 drop policy if exists own_manage_share_links on public.share_links;
 drop policy if exists mess_share_links on public.share_links;
@@ -73,4 +73,3 @@ create policy share_links_read on public.share_links for select to authenticated
 create policy share_links_manage on public.share_links for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager'])) with check (mess_id = public.current_mess_id());
 
 revoke all on table public.member_invites from anon, authenticated;
-
