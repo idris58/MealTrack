@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, startOfDay, endOfDay } from 'date-fns';
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import ExcelJS from 'exceljs';
 import { CalendarIcon, ChefHat, ClipboardCopy, Download, FileImage, FileSpreadsheet, FileText, Loader2, Play, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -126,10 +122,15 @@ export default function ReportsPage() {
   const baseName = `Mealtrack Report-${fromKey}-to-${toKey}`;
   const makePng = async () => {
     if (!previewRef.current) throw new Error('The report preview is not available.');
+    const { toPng } = await import('html-to-image');
     const dataUrl = await toPng(previewRef.current, { cacheBust: true, pixelRatio: 2, backgroundColor: '#ffffff' });
     return { blob: await (await fetch(dataUrl)).blob() };
   };
-  const makePdf = () => {
+  const makePdf = async () => {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF({ unit: 'pt', format: 'a4' }); const pageWidth = doc.internal.pageSize.getWidth();
     doc.setFillColor(15, 23, 42); doc.rect(0, 0, pageWidth, 104, 'F'); doc.setFillColor(20, 184, 166); doc.circle(52, 51, 18, 'F');
     doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('M', 46, 57); doc.setFontSize(21); doc.text('MealTrack', 82, 45); doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text('Meal Report', 82, 64); doc.text(rangeLabel, 82, 81);
@@ -140,6 +141,7 @@ export default function ReportsPage() {
   };
   if (profile?.role === 'member') return null;
   const makeXlsx = async () => {
+    const { default: ExcelJS } = await import('exceljs');
     const wb = new ExcelJS.Workbook();
     const summaryData: (string | number)[][] = [
       ['MealTrack - Meal Report'],
@@ -226,7 +228,7 @@ export default function ReportsPage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Download report</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => void run(async () => { download(makePdf(), `${baseName}.pdf`); toast.success('PDF exported', { description: 'Your report download has started.' }); })}>
+                <DropdownMenuItem onSelect={() => void run(async () => { download(await makePdf(), `${baseName}.pdf`); toast.success('PDF exported', { description: 'Your report download has started.' }); })}>
                   <FileText className="h-4 w-4" /> PDF document
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void run(async () => { download(new Blob([await makeXlsx()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${baseName}.xlsx`); toast.success('Excel exported', { description: 'Your spreadsheet download has started.' }); })}>
@@ -246,7 +248,7 @@ export default function ReportsPage() {
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Share report</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => void run(async () => { await share(makePdf(), `${baseName}.pdf`, 'application/pdf'); })}>
+                <DropdownMenuItem onSelect={() => void run(async () => { await share(await makePdf(), `${baseName}.pdf`, 'application/pdf'); })}>
                   <FileText className="h-4 w-4" /> Share PDF
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void run(async () => { await share(new Blob([await makeXlsx()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${baseName}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); })}>

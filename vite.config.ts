@@ -27,7 +27,15 @@ export default defineConfig({
       manifest: false,
       injectManifest: {
         globPatterns: ["**/*.{js,css,html,png,jpg,jpeg,svg,webmanifest,woff2}"],
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        // Keep the initial app shell available offline, while report exporters
+        // are fetched only when a user asks to export a report.
+        maximumFileSizeToCacheInBytes: 768 * 1024,
+        globIgnores: [
+          "assets/exceljs.min-*.js",
+          "assets/html2canvas.esm-*.js",
+          "assets/jspdf.es.min-*.js",
+          "assets/jspdf.plugin.autotable-*.js",
+        ],
       },
       devOptions: {
         enabled: false,

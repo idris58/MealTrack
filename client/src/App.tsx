@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Route, Switch, useLocation, useRoute } from "wouter";
 import { AlertTriangle, Bell, RefreshCw, X } from "lucide-react";
 
@@ -15,20 +15,21 @@ import { supabase } from "@/lib/supabase";
 import { usePushNotifications } from "@/lib/push-notifications";
 import { getNotificationPreferences } from "@/lib/notification-preferences";
 import { ErrorBoundary } from "@/components/error-boundary";
-import AuthPage from "@/pages/auth";
-import ChangelogPage from "@/pages/changelog";
-import Dashboard from "@/pages/dashboard";
-import Expenses from "@/pages/expenses";
-import HistoryPage from "@/pages/history";
-import ReportsPage from "@/pages/reports";
-import Meals from "@/pages/meals";
-import Members from "@/pages/members";
-import OnboardingPage from "@/pages/onboarding";
-import NotFound from "@/pages/not-found";
-import Settings from "@/pages/settings";
-import ProfilePage from "@/pages/profile";
-import SharedPage, { SharedAccessPage } from "@/pages/shared";
-import InvitePage from "@/pages/invite";
+const AuthPage = lazy(() => import("@/pages/auth"));
+const ChangelogPage = lazy(() => import("@/pages/changelog"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Expenses = lazy(() => import("@/pages/expenses"));
+const HistoryPage = lazy(() => import("@/pages/history"));
+const ReportsPage = lazy(() => import("@/pages/reports"));
+const Meals = lazy(() => import("@/pages/meals"));
+const Members = lazy(() => import("@/pages/members"));
+const OnboardingPage = lazy(() => import("@/pages/onboarding"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Settings = lazy(() => import("@/pages/settings"));
+const ProfilePage = lazy(() => import("@/pages/profile"));
+const SharedPage = lazy(() => import("@/pages/shared").then(({ default: Component }) => ({ default: Component })));
+const SharedAccessPage = lazy(() => import("@/pages/shared").then(({ SharedAccessPage: Component }) => ({ default: Component })));
+const InvitePage = lazy(() => import("@/pages/invite"));
 
 function AppLoadingSkeleton({ message }: { message: string }) {
   return (
@@ -600,7 +601,9 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <PwaUpdateNotifier />
-        <AppShell />
+        <Suspense fallback={<AppLoadingSkeleton message="Loading MealTrack..." />}>
+          <AppShell />
+        </Suspense>
         <Toaster />
       </AuthProvider>
     </ErrorBoundary>
