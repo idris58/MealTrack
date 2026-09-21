@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
+import rateLimit from "express-rate-limit";
 import { log } from "./logger";
 import { allocateIntegerBalances } from "@shared/settlement-math";
 
@@ -79,6 +80,18 @@ type MealLogRow = {
   member_id: string;
   count: number | string;
 };
+
+// Share tokens are intentionally short and public, so keep all token-based
+// reads and subscription operations behind one per-IP budget. Sharing the
+// limiter across these routes prevents bypassing the limit by rotating
+// between the data, SSE, and push endpoints.
+const sharedTokenRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { message: "Too many shared-view requests. Please try again shortly." },
+});
 
 type CycleDepositRow = {
   id: string;
@@ -653,7 +666,7 @@ export async function registerRoutes(
     return res.json({ reminderTime: String(data.reminder_time || "22:00").slice(0, 5), ...(data.notification_preferences ?? {}) });
   }));
 
-  app.post("/api/push/shared/:token/subscribe", asyncHandler(async (req, res) => {
+  app.post("/api/push/shared/:token/subscribe", sharedTokenRateLimit, asyncHandler(async (req, res) => {
     const token = String(req.params.token || "").trim();
 
     if (!token) {
@@ -696,7 +709,7 @@ export async function registerRoutes(
     return res.json({ ok: true });
   }));
 
-  app.post("/api/push/shared/:token/status", asyncHandler(async (req, res) => {
+  app.post("/api/push/shared/:token/status", sharedTokenRateLimit, asyncHandler(async (req, res) => {
     const token = String(req.params.token || "").trim();
     const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
 
@@ -735,7 +748,7 @@ export async function registerRoutes(
     return res.json({ subscribed: Boolean(data) });
   }));
 
-  app.post("/api/push/shared/:token/unsubscribe", asyncHandler(async (req, res) => {
+  app.post("/api/push/shared/:token/unsubscribe", sharedTokenRateLimit, asyncHandler(async (req, res) => {
     const token = String(req.params.token || "").trim();
     const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
 
@@ -767,7 +780,7 @@ export async function registerRoutes(
     return res.json({ ok: true });
   }));
 
-  app.get("/api/share/:token/events", asyncHandler(async (req, res) => {
+  app.get("/api/share/:token/events", sharedTokenRateLimit, asyncHandler(async (req, res) => {
     const token = String(req.params.token || "").trim();
 
     if (!token) {
@@ -850,7 +863,7 @@ export async function registerRoutes(
     return res.json({ data: null });
   }));
 
-  app.get("/api/share/:token", asyncHandler(async (req, res) => {
+  app.get("/api/share/:token", sharedTokenRateLimit, asyncHandler(async (req, res) => {
     const token = String(req.params.token || "").trim();
 
     if (!token) {
