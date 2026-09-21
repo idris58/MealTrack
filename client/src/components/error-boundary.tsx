@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from "react";
 import { AlertTriangle, RefreshCw, Home, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { captureError } from "@/lib/error-tracking";
 
 interface Props {
   children: ReactNode;
@@ -34,6 +35,10 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught an unhandled error:", error, errorInfo);
     this.setState({ errorInfo });
+    captureError(error, {
+      componentStack: errorInfo.componentStack ?? undefined,
+      boundary: this.props.title ?? "ErrorBoundary",
+    });
   }
 
   private handleReset = () => {

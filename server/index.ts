@@ -6,6 +6,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startMealReminderScheduler, startNotificationDeliveryCleanupScheduler, startSoftDeleteCleanupScheduler } from "./push";
 import { log } from "./logger";
+import { initServerErrorTracking, captureServerError } from "./error-tracking";
 
 const app = express();
 const httpServer = createServer(app);
@@ -48,6 +49,7 @@ app.use((req, res, next) => {
   // ── Process-level safety nets ────────────────────────────────────────────
   process.on("uncaughtException", (err) => {
     log(`Uncaught Exception: ${err.stack || err.message}`, "error");
+    captureServerError(err, { type: "uncaughtException" });
     // Let the process stay alive — Express can still serve requests.
     // If you want a hard restart in orchestrated environments, swap to:
     //   process.exit(1);
@@ -59,8 +61,10 @@ app.use((req, res, next) => {
         ? reason.stack || reason.message
         : String(reason);
     log(`Unhandled Rejection: ${message}`, "error");
+    captureServerError(reason, { type: "unhandledRejection" });
   });
 
+  await initServerErrorTracking();
   await registerRoutes(httpServer, app);
   startMealReminderScheduler();
   startNotificationDeliveryCleanupScheduler();
@@ -71,6 +75,9 @@ app.use((req, res, next) => {
     const message = status >= 500 ? "Internal Server Error" : err.message || "Internal Server Error";
 
     log(`Error ${status}: ${err.message || err}\n${err.stack || ""}`, "error");
+    if (status >= 500) {
+      captureServerError(err, { status, path: _req.path, method: _req.method });
+    }
 
     if (!res.headersSent) {
       res.status(status).json({ message });

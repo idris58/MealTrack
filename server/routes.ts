@@ -499,6 +499,21 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // ── Health-check endpoints ───────────────────────────────────────────────
+  // Lightweight probes for load-balancers, uptime monitors, and CI smoke tests.
+  // Registered before any middleware that might reject requests (auth, etc.).
+  function healthPayload() {
+    return {
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+      environment: process.env.NODE_ENV ?? "development",
+    };
+  }
+
+  app.get("/healthz", (_req, res) => res.status(200).json(healthPayload()));
+  app.get("/api/health", (_req, res) => res.status(200).json(healthPayload()));
+
   app.get("/api/push/vapid-public-key", (_req, res) => {
     const publicKey = getVapidPublicKey();
 
@@ -511,6 +526,8 @@ export async function registerRoutes(
 
     return res.json({ configured: true, publicKey });
   });
+
+
 
   app.post("/api/push/subscribe", asyncHandler(async (req, res) => {
     const userId = await getAuthenticatedUserId(req.get("authorization"));
