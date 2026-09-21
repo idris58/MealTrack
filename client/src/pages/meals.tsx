@@ -185,10 +185,7 @@ export default function Meals() {
           ) : null}
         </Card>
       ) : (
-        <MealLogTable
-          members={members}
-          mealLogs={mealLogs}
-          days={days}
+        <MealLogTable members={members} mealLogs={mealLogs} days={days}
           onDayClick={canOperateMeals ? openEditorForDate : undefined}
           renderLog={(log) => <><span>{formatMealCount(log.count)}</span><SyncBadge itemId={log.id!} className="[&>span:last-child]:hidden px-1 py-0" /></>}
         />
