@@ -516,11 +516,10 @@ function isReminderDue(currentTime: string, configuredTime: string) {
 
   const currentTotal = currentHour * 60 + currentMinute;
   const configuredTotal = configuredHour * 60 + configuredMinute;
-  // Cron can fire a few seconds/minutes late, especially after a hosted
-  // process wakes. Keep a short window; notification_deliveries deduplicates
-  // repeated scheduler runs for the same profile/cycle/day.
+  // A missed cron tick should not suppress the reminder for the rest of the
+  // day. notification_deliveries deduplicates repeated scheduler runs.
   const elapsed = currentTotal - configuredTotal;
-  return elapsed >= 0 && elapsed <= 5;
+  return elapsed >= 0;
 }
 
 export async function sendMealLogReminders() {
@@ -539,77 +538,87 @@ export async function sendMealLogReminders() {
     return;
   }
 
+  const cycles = (activeCycles || []) as ActiveCycleRow[];
+  if (cycles.length === 0) return;
+
   const now = new Date();
-  for (const cycle of (activeCycles || []) as ActiveCycleRow[]) {
-    let profilesQuery = supabase
-      .from("profiles")
-      .select("id, mess_id, reminder_time, notification_preferences");
-    profilesQuery = cycle.mess_id
-      ? profilesQuery.eq("mess_id", cycle.mess_id)
-      : profilesQuery.eq("id", cycle.user_id);
-    const { data: profiles, error: profilesError } = await profilesQuery;
-    if (profilesError) { console.error("Error loading reminder profiles:", profilesError); continue; }
+  const local = safeLocalDateTime(DEFAULT_TIMEZONE, now);
+  const messIds = Array.from(new Set(cycles.map((cycle) => cycle.mess_id).filter((id): id is string => Boolean(id))));
+  const legacyUserIds = cycles.filter((cycle) => !cycle.mess_id).map((cycle) => cycle.user_id);
+  let profilesQuery = supabase
+    .from("profiles")
+    .select("id, mess_id, reminder_time, notification_preferences")
+    .lte("reminder_time", `${local.time}:00`);
+  if (messIds.length > 0 || legacyUserIds.length > 0) {
+    const filters = [
+      ...(messIds.length > 0 ? [`mess_id.in.(${messIds.join(",")})`] : []),
+      ...(legacyUserIds.length > 0 ? [`id.in.(${legacyUserIds.join(",")})`] : []),
+    ];
+    profilesQuery = profilesQuery.or(filters.join(","));
+  }
+  const { data: dueProfiles, error: profilesError } = await profilesQuery;
+  if (profilesError) {
+    console.error("Error loading profiles due for meal reminders:", profilesError);
+    return;
+  }
 
-    for (const profile of (profiles || []) as ReminderProfileRow[]) {
-      if (!allowsNotification(profile.notification_preferences, "mealReminders")) continue;
-      const local = safeLocalDateTime(DEFAULT_TIMEZONE, now);
-      const configuredTime = (profile.reminder_time || "22:00").slice(0, 5);
-      if (!isReminderDue(local.time, configuredTime)) continue;
+  const profiles = (dueProfiles || []).filter((profile: ReminderProfileRow) =>
+    allowsNotification(profile.notification_preferences, "mealReminders") &&
+    isReminderDue(local.time, (profile.reminder_time || "22:00").slice(0, 5)),
+  ) as ReminderProfileRow[];
+  if (profiles.length === 0) return;
 
-      const { data: subscriptions, error: subscriptionError } = await supabase
-        .from("push_subscriptions")
-        .select("id, user_id, endpoint, p256dh, auth")
-        .eq("user_id", profile.id)
-        .eq("audience", "main");
-      if (subscriptionError) { console.error("Error loading main push subscriptions:", subscriptionError); continue; }
-      const rows = (subscriptions || []) as PushSubscriptionRow[];
+  const profileIds = profiles.map((profile) => profile.id);
+  const { data: subscriptions, error: subscriptionError } = await supabase
+    .from("push_subscriptions")
+    .select("id, user_id, endpoint, p256dh, auth")
+    .in("user_id", profileIds)
+    .eq("audience", "main");
+  if (subscriptionError) {
+    console.error("Error loading main push subscriptions:", subscriptionError);
+    return;
+  }
+  const subscriptionsByUser = new Map<string, PushSubscriptionRow[]>();
+  for (const row of (subscriptions || []) as PushSubscriptionRow[]) {
+    const rows = subscriptionsByUser.get(row.user_id) || [];
+    rows.push(row);
+    subscriptionsByUser.set(row.user_id, rows);
+  }
+
+  const cycleIds = cycles.map((cycle) => cycle.id);
+  let mealLogsQuery = supabase
+    .from("meal_logs")
+    .select("cycle_id, mess_id, user_id")
+    .in("cycle_id", cycleIds)
+    .eq("date", local.date);
+  const { data: mealLogs, error: mealLogsError } = await mealLogsQuery;
+  if (mealLogsError) {
+    console.error("Error checking today's meal logs:", mealLogsError);
+    return;
+  }
+  const loggedCycleIds = new Set((mealLogs || []).map((row: { cycle_id: string }) => row.cycle_id));
+
+  for (const cycle of cycles) {
+    if (loggedCycleIds.has(cycle.id)) continue;
+    const cycleProfiles = profiles.filter((profile) =>
+      cycle.mess_id ? profile.mess_id === cycle.mess_id : profile.id === cycle.user_id,
+    );
+    for (const profile of cycleProfiles) {
+      const rows = subscriptionsByUser.get(profile.id) || [];
       if (rows.length === 0) continue;
-      const today = local.date;
-
-    // Scope by mess, not user: a coordinator may have logged today's meals, and
-    // those rows carry the coordinator's user_id. Falling back to user_id only
-    // covers legacy rows that were never migrated into a mess.
-      let mealLogQuery = supabase
-      .from("meal_logs")
-      .select("id")
-      .eq("cycle_id", cycle.id)
-      .eq("date", today);
-
-      mealLogQuery = cycle.mess_id
-      ? mealLogQuery.eq("mess_id", cycle.mess_id)
-      : mealLogQuery.eq("user_id", cycle.user_id);
-
-      const { data: mealLog, error: mealLogError } = await mealLogQuery
-      .limit(1)
-      .maybeSingle();
-
-      if (mealLogError) {
-      console.error("Error checking today's meal logs:", mealLogError);
-        continue;
-      }
-
-      if (mealLog) continue;
-
-      const deliveryRecorded = await recordDelivery(
-      profile.id,
-      "meal_log_reminder",
-      `${today}:${cycle.id}`,
-    ).catch((error) => {
-      console.error("Error recording meal reminder delivery:", error);
-      return false;
-    });
-
+      const dedupeKey = `${local.date}:${cycle.id}`;
+      const deliveryRecorded = await recordDelivery(profile.id, "meal_log_reminder", dedupeKey).catch((error) => {
+        console.error("Error recording meal reminder delivery:", error);
+        return false;
+      });
       if (!deliveryRecorded) continue;
-
       const failedUserIds = await sendPushToRows(rows, {
         title: "Meal log reminder",
         body: "Today's meal has not been logged yet.",
         url: "/app/meals",
-        tag: `meal-log-reminder-${today}-${cycle.id}`,
+        tag: `meal-log-reminder-${local.date}-${cycle.id}`,
       });
-      if (failedUserIds.has(profile.id)) {
-        await removeDelivery(profile.id, "meal_log_reminder", `${today}:${cycle.id}`);
-      }
+      if (failedUserIds.has(profile.id)) await removeDelivery(profile.id, "meal_log_reminder", dedupeKey);
     }
   }
 }
@@ -626,6 +635,15 @@ export async function cleanupOldNotificationDeliveries() {
   if (error) {
     console.error("Error deleting old notification deliveries:", error);
   }
+}
+
+export async function cleanupExpiredNotices() {
+  const supabase = assertSupabaseAdmin();
+  const { error } = await supabase
+    .from("notices")
+    .delete()
+    .lte("expires_at", new Date().toISOString());
+  if (error) console.error("Error deleting expired notices:", error);
 }
 
 export function startMealReminderScheduler() {
@@ -651,9 +669,11 @@ export function startNotificationDeliveryCleanupScheduler() {
   }
 
   void cleanupOldNotificationDeliveries();
+  void cleanupExpiredNotices();
 
   cron.schedule("0 * * * *", () => {
     void cleanupOldNotificationDeliveries();
+    void cleanupExpiredNotices();
   });
 }
 export async function cleanupExpiredSoftDeletes() {

@@ -35,13 +35,16 @@ create unique index if not exists cycles_one_pending_per_mess_idx on public.cycl
 create unique index if not exists cycles_mess_name_unique_idx on public.cycles(mess_id, lower(name)) where mess_id is not null;
 create index if not exists expenses_mess_id_idx on public.expenses(mess_id);
 create index if not exists expenses_profile_id_idx on public.expenses(profile_id);
+create index if not exists expenses_mess_cycle_date_idx on public.expenses(mess_id, cycle_id, date);
 create index if not exists meal_logs_mess_id_idx on public.meal_logs(mess_id);
 create index if not exists meal_logs_profile_id_idx on public.meal_logs(profile_id);
+create index if not exists meal_logs_mess_cycle_date_idx on public.meal_logs(mess_id, cycle_id, date);
 alter table if exists public.meal_logs drop constraint if exists meal_logs_member_id_date_key;
 alter table if exists public.meal_logs drop constraint if exists meal_logs_member_id_date_cycle_key;
 alter table if exists public.meal_logs add constraint meal_logs_member_id_date_cycle_key unique (member_id, date, cycle_id);
 create index if not exists cycle_deposits_mess_id_idx on public.cycle_deposits(mess_id);
 create index if not exists cycle_deposits_profile_id_idx on public.cycle_deposits(profile_id);
+create index if not exists cycle_deposits_mess_cycle_idx on public.cycle_deposits(mess_id, cycle_id);
 create index if not exists changelog_entries_mess_id_idx on public.changelog_entries(mess_id);
 create index if not exists changelog_entries_profile_id_idx on public.changelog_entries(profile_id);
 create index if not exists notices_mess_id_idx on public.notices(mess_id);

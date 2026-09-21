@@ -251,6 +251,7 @@ function scopeFilter(scope: Scope): ["mess_id" | "user_id", string] {
 }
 
 const shareEventClients = new Map<string, Set<Response>>();
+const sharedBroadcastTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function addShareEventClient(key: string, res: Response) {
   const clients = shareEventClients.get(key) ?? new Set<Response>();
@@ -301,16 +302,6 @@ async function getActiveNoticeForScope(scope: Scope): Promise<ActiveNotice> {
   const supabaseAdmin = assertSupabaseAdmin();
   const now = new Date().toISOString();
 
-  const { error: cleanupError } = await supabaseAdmin
-    .from("notices")
-    .delete()
-    .eq(...scopeFilter(scope))
-    .lte("expires_at", now);
-
-  if (cleanupError) {
-    console.error("Error deleting expired notices:", cleanupError);
-  }
-
   const { data, error } = await supabaseAdmin
     .from("notices")
     .select("id, title, content, expires_at")
@@ -334,6 +325,20 @@ async function getActiveNoticeForScope(scope: Scope): Promise<ActiveNotice> {
         expiresAt: noticeRow.expires_at,
       }
     : null;
+}
+
+function scheduleSharedBroadcast(scope: Scope) {
+  const key = scopeKey(scope);
+  if (!shareEventClients.has(key) || sharedBroadcastTimers.has(key)) return;
+
+  const timer = setTimeout(() => {
+    sharedBroadcastTimers.delete(key);
+    if (!shareEventClients.has(key)) return;
+    void getSharedPayloadForScope(scope)
+      .then((data) => broadcastSharedPayload(key, data))
+      .catch((error) => console.error("Error broadcasting shared update:", error));
+  }, 100);
+  sharedBroadcastTimers.set(key, timer);
 }
 
 async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | null> {
@@ -463,6 +468,22 @@ async function requireMessOperator(userId: string) {
   if (error) throw error;
   if (!data?.mess_id || (data.role !== "manager" && data.role !== "coordinator")) {
     const error = new Error("Only mess managers and coordinators can broadcast updates.");
+    (error as Error & { status?: number }).status = 403;
+    throw error;
+  }
+  return data.mess_id as string;
+}
+
+async function requireMessMember(userId: string) {
+  const supabaseAdmin = assertSupabaseAdmin();
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("mess_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.mess_id) {
+    const error = new Error("You must belong to a mess to broadcast updates.");
     (error as Error & { status?: number }).status = 403;
     throw error;
   }
@@ -804,13 +825,12 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid authorization token." });
     }
 
-    await requireMessOperator(userId);
+    await requireMessMember(userId);
 
     const scope = await resolveScopeForUserId(userId);
-    const data = await getSharedPayloadForScope(scope);
-    broadcastSharedPayload(scopeKey(scope), data);
+    scheduleSharedBroadcast(scope);
 
-    return res.json({ data });
+    return res.json({ data: null });
   }));
 
   app.get("/api/share/:token", asyncHandler(async (req, res) => {
