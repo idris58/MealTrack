@@ -13,6 +13,10 @@ drop policy if exists "users can insert their own profile" on public.profiles;
 create policy "users can insert their own profile" on public.profiles for insert to authenticated with check (auth.uid() = id);
 drop policy if exists "users can update their own profile" on public.profiles;
 create policy "users can update their own profile" on public.profiles for update to authenticated using (auth.uid() = id) with check (auth.uid() = id);
+
+revoke update on public.profiles from authenticated;
+grant update (full_name, picture_url, reminder_time, notification_preferences)
+  on public.profiles to authenticated;
 drop policy if exists "members can read their mess" on public.messes;
 create policy "members can read their mess" on public.messes for select to authenticated using (id = public.current_mess_id());
 
