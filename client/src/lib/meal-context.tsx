@@ -10,6 +10,7 @@ import {
   getPendingIds,
   type OfflineOp,
 } from './offline-queue';
+import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
 
 export interface Member {
   id: string;
@@ -834,9 +835,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     // ── Offline path: hydrate from localStorage cache ────────────────────────
     if (!navigator.onLine) {
       try {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          const snap = JSON.parse(cached) as {
+        const snap = await readOfflineSnapshot<{
             members: Member[];
             cycles: Cycle[];
             deposits: CycleDeposit[];
@@ -844,7 +843,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
             mealLogs: MealLog[];
             changelog: ChangelogEntry[];
             loadedCycleIds: string[];
-          };
+          }>(cacheKey);
+        if (snap) {
           setMemberRoster(snap.members);
           setCycles(snap.cycles);
           setAllDeposits(snap.deposits);
@@ -961,9 +961,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setDataError(null);
       hasLoadedDataRef.current = true;
 
-      // Persist snapshot to localStorage for offline access
+      // Persist the potentially large snapshot in IndexedDB, not localStorage.
       try {
-        localStorage.setItem(cacheKey, JSON.stringify({
+        await writeOfflineSnapshot(cacheKey, {
           members: nextMembers,
           cycles: nextCycles,
           deposits: nextDeposits,
@@ -971,7 +971,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           mealLogs: nextMealLogs,
           changelog: nextChangelogEntries,
           loadedCycleIds: initialCycleIds,
-        }));
+        });
       } catch {
         // Quota exceeded or private browsing — non-fatal
       }
@@ -981,9 +981,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       // If we go offline mid-load, try falling back to cache
       if (!navigator.onLine) {
         try {
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            const snap = JSON.parse(cached) as {
+          const snap = await readOfflineSnapshot<{
               members: Member[];
               cycles: Cycle[];
               deposits: CycleDeposit[];
@@ -991,7 +989,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
               mealLogs: MealLog[];
               changelog: ChangelogEntry[];
               loadedCycleIds: string[];
-            };
+            }>(cacheKey);
+          if (snap) {
             setMemberRoster(snap.members);
             setCycles(snap.cycles);
             setAllDeposits(snap.deposits);

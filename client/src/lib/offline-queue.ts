@@ -25,7 +25,7 @@ export interface OfflineOp {
 
 const DB_NAME = 'mealtrack-offline';
 const STORE_NAME = 'sync-queue';
-const DB_VERSION = 1;
+export const OFFLINE_DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -33,12 +33,15 @@ function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
 
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(DB_NAME, OFFLINE_DB_VERSION);
 
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('data-cache')) {
+        db.createObjectStore('data-cache', { keyPath: 'key' });
       }
     };
 
