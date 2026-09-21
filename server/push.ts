@@ -51,7 +51,7 @@ function allowsNotification(value: unknown, category: "notices" | "mealReminders
   return preferences.categories?.[category] !== false;
 }
 
-const DEFAULT_TIMEZONE = "Asia/Dhaka";
+const DEFAULT_TIMEZONE = process.env.NOTIFICATION_TIMEZONE || "Asia/Dhaka";
 const NOTIFICATION_DELIVERY_RETENTION_MS = 24 * 60 * 60 * 1000;
 let vapidConfigured = false;
 let hasLoggedMissingVapid = false;
@@ -151,6 +151,7 @@ async function sendPushToRows(
 
   const successfulUserIds = new Set<string>();
   const transientFailureUserIds = new Set<string>();
+  const staleSubscriptionUserIds = new Set<string>();
 
   await Promise.all(
     rows.map(async (row) => {
@@ -165,6 +166,7 @@ async function sendPushToRows(
 
         if (statusCode === 404 || statusCode === 410) {
           await deleteSubscription(row.id);
+          staleSubscriptionUserIds.add(row.user_id);
           return;
         }
 
@@ -175,6 +177,11 @@ async function sendPushToRows(
   );
 
   transientFailureUserIds.forEach((userId) => {
+    if (!successfulUserIds.has(userId)) {
+      failedUserIds.add(userId);
+    }
+  });
+  staleSubscriptionUserIds.forEach((userId) => {
     if (!successfulUserIds.has(userId)) {
       failedUserIds.add(userId);
     }
@@ -616,7 +623,9 @@ export function startMealReminderScheduler() {
   cron.schedule(
     "* * * * *",
     () => {
-      void sendMealLogReminders();
+      void sendMealLogReminders().catch((error) => {
+        console.error("Meal reminder scheduler run failed:", error);
+      });
     },
   );
 }
