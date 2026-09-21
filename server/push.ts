@@ -146,7 +146,7 @@ async function sendPushToRows(
   const data = JSON.stringify({
     ...payload,
     icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    badge: "/badge-96.png",
   });
 
   const successfulUserIds = new Set<string>();
