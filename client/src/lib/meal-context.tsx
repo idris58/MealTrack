@@ -114,7 +114,7 @@ export interface CycleDetails {
   deposits: CycleDeposit[];
 }
 
-interface MealContextType {
+export interface MealDataContextType {
   members: Member[];
   expenses: Expense[];
   deposits: CycleDeposit[];
@@ -130,6 +130,22 @@ interface MealContextType {
   loading: boolean;
   initialLoading: boolean;
   refreshing: boolean;
+  stats: CycleDetails['stats'];
+  pendingSyncIds: Set<string>;
+  dataError: string | null;
+  getMemberStats: (memberId: string, cycleId?: string) => {
+    mealCost: number;
+    fixedCost: number;
+    totalCost: number;
+    balance: number;
+    mealsEaten: number;
+  };
+  getCycleDetails: (cycleId: string) => CycleDetails | null;
+  isCycleDetailsLoading: (cycleId: string) => boolean;
+  getCycleDetailsError: (cycleId: string) => string | null;
+}
+
+export interface MealActionsContextType {
   addMember: (name: string) => Promise<void>;
   updateMember: (id: string, updates: Partial<Member>) => Promise<void>;
   removeMember: (id: string) => Promise<void>;
@@ -153,10 +169,6 @@ interface MealContextType {
   closeActiveCycle: () => Promise<void>;
   /**
    * Creates a new active cycle. Only callable when there is no current active cycle.
-   * @param carryForwards - Optional list of members whose positive balance should be
-   *   carried forward from the current pending cycle into the new cycle as opening deposits.
-   *   A two-sided transfer is performed: a negative correction is added to the pending cycle
-   *   (so it can still be locked cleanly) and a positive opening deposit is added to the new cycle.
    */
   startNewCycle: (
     name: string,
@@ -168,30 +180,18 @@ interface MealContextType {
   markCycleClosed: (cycleId: string) => Promise<void>;
   deleteCycle: (cycleId: string) => Promise<void>;
   restoreCycle: (cycleId: string) => Promise<void>;
-  stats: CycleDetails['stats'];
-  getMemberStats: (memberId: string, cycleId?: string) => {
-    mealCost: number;
-    fixedCost: number;
-    totalCost: number;
-    balance: number;
-    mealsEaten: number;
-  };
-  getCycleDetails: (cycleId: string) => CycleDetails | null;
   loadCycleDetails: (cycleId: string, options?: { force?: boolean }) => Promise<void>;
-  isCycleDetailsLoading: (cycleId: string) => boolean;
-  getCycleDetailsError: (cycleId: string) => string | null;
   loadMoreChangelogEntries: () => Promise<void>;
-  /** Set of temporary IDs for items that are queued for sync (offline items). */
-  pendingSyncIds: Set<string>;
   /** Flush the offline queue against Supabase — called when back online. */
   triggerSync: () => Promise<void>;
-  /** Error message when initial data load fails (null = no error). */
-  dataError: string | null;
   /** Retry the initial data load after a failure. */
   retryLoadData: () => void;
 }
 
-const MealContext = createContext<MealContextType | undefined>(undefined);
+export type MealContextType = MealDataContextType & MealActionsContextType;
+
+export const MealDataContext = createContext<MealDataContextType | undefined>(undefined);
+export const MealActionsContext = createContext<MealActionsContextType | undefined>(undefined);
 
 const SOFT_DELETE_GRACE_MS = 10 * 1000;
 
@@ -440,7 +440,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [changelogLoading, setChangelogLoading] = useState(false);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [loadedCycleIds, setLoadedCycleIds] = useState<Set<string>>(new Set());
-  const [cycleDetailsById, setCycleDetailsById] = useState<Record<string, CycleDetails>>({});
   const [cycleDetailsLoadingById, setCycleDetailsLoadingById] = useState<Record<string, boolean>>({});
   const [cycleDetailsErrorById, setCycleDetailsErrorById] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -455,8 +454,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [dataError, setDataError] = useState<string | null>(null);
 
   // ─── Offline-aware identity resolution ─────────────────────────────────────
-  // Use getSession() — the Supabase client caches the session in localStorage so
-  // this works without a network connection. getUser() always hits the network.
   useEffect(() => {
     const resolveIdentity = async () => {
       const { data } = await supabase.auth.getSession();
@@ -534,7 +531,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
   const activeCycleChangelogEntries = useMemo(
     () => activeCycle ? allChangelogEntries.filter((entry) => entry.cycleId === activeCycle.id) : [],
-    [activeCycle, allChangelogEntries],
+    [allChangelogEntries, activeCycle],
   );
 
   const pendingCycleChangelogEntries = useMemo(
@@ -542,7 +539,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     [allChangelogEntries, pendingCycle],
   );
 
-  const getCycleMembers = (cycleId: string) => {
+  const getCycleMembers = useCallback((cycleId: string): Member[] => {
     const cycle = cycles.find((entry) => entry.id === cycleId);
     if (!cycle) {
       return [];
@@ -565,14 +562,14 @@ export function MealProvider({ children }: { children: ReactNode }) {
       deposit: 0,
       mealsEaten: 0,
     }));
-  };
+  }, [cycles, memberRoster]);
 
-  const getMemberName = (memberId: string, cycleId?: string) => {
+  const getMemberName = useCallback((memberId: string, cycleId?: string) => {
     const scopedMembers = cycleId ? getCycleMembers(cycleId) : memberRoster;
     return scopedMembers.find((member) => member.id === memberId)?.name ?? 'Unknown member';
-  };
+  }, [getCycleMembers, memberRoster]);
 
-  const recordChangelog = async ({
+  const recordChangelog = useCallback(async ({
     cycleId,
     entityType,
     entityId,
@@ -632,10 +629,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       createdAt: data.created_at,
       actor: currentActor,
     }, ...prev]);
-  };
+  }, [userId, messId]);
 
-
-  const fetchCycleRows = async (cycleId: string) => {
+  const fetchCycleRows = useCallback(async (cycleId: string) => {
     if (!userId || !messId) {
       return null;
     }
@@ -671,9 +667,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       expenses: mapExpenseRows((expensesResult.data || []) as ExpenseRow[]),
       mealLogs: mapMealLogRows((mealLogsResult.data || []) as MealLogRow[]),
     };
-  };
+  }, [userId, messId]);
 
-  const buildCycleDetails = (
+  const buildCycleDetails = useCallback((
     cycleId: string,
     source: {
       deposits?: CycleDeposit[];
@@ -774,17 +770,33 @@ export function MealProvider({ children }: { children: ReactNode }) {
       mealLogs: cycleMealLogs,
       deposits: cycleDeposits,
     };
-  };
+  }, [cycles, getCycleMembers, allExpenses, allMealLogs, allDeposits]);
 
-  const getCycleDetails = (cycleId: string): CycleDetails | null => {
+  // Derived synchronously via useMemo — eliminates extra render pass and stale first paint
+  const cycleDetailsById = useMemo(() => {
+    if (loadedCycleIds.size === 0) {
+      return {};
+    }
+
+    const nextDetails: Record<string, CycleDetails> = {};
+    for (const cycleId of Array.from(loadedCycleIds)) {
+      const details = buildCycleDetails(cycleId);
+      if (details) {
+        nextDetails[cycleId] = details;
+      }
+    }
+    return nextDetails;
+  }, [loadedCycleIds, buildCycleDetails]);
+
+  const getCycleDetails = useCallback((cycleId: string): CycleDetails | null => {
     return cycleDetailsById[cycleId] ?? null;
-  };
+  }, [cycleDetailsById]);
 
-  const isCycleDetailsLoading = (cycleId: string) => Boolean(cycleDetailsLoadingById[cycleId]);
+  const isCycleDetailsLoading = useCallback((cycleId: string) => Boolean(cycleDetailsLoadingById[cycleId]), [cycleDetailsLoadingById]);
 
-  const getCycleDetailsError = (cycleId: string) => cycleDetailsErrorById[cycleId] ?? null;
+  const getCycleDetailsError = useCallback((cycleId: string) => cycleDetailsErrorById[cycleId] ?? null, [cycleDetailsErrorById]);
 
-  const loadCycleDetails = async (cycleId: string, options: { force?: boolean } = {}) => {
+  const loadCycleDetails = useCallback(async (cycleId: string, options: { force?: boolean } = {}) => {
     if (!userId || !messId) return;
     if (!options.force && cycleDetailsById[cycleId]) return;
     if (cycleDetailsLoadingById[cycleId]) return;
@@ -800,11 +812,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setAllExpenses((prev) => [...prev.filter((expense) => expense.cycleId !== cycleId), ...rows.expenses]);
       setAllMealLogs((prev) => [...prev.filter((log) => log.cycleId !== cycleId), ...rows.mealLogs]);
       setLoadedCycleIds((prev) => new Set(prev).add(cycleId));
-
-      const details = buildCycleDetails(cycleId, rows);
-      if (details) {
-        setCycleDetailsById((prev) => ({ ...prev, [cycleId]: details }));
-      }
     } catch (error) {
       console.error('Error loading cycle details:', error);
       setCycleDetailsErrorById((prev) => ({
@@ -814,29 +821,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
     } finally {
       setCycleDetailsLoadingById((prev) => ({ ...prev, [cycleId]: false }));
     }
-  };
+  }, [userId, messId, cycleDetailsById, cycleDetailsLoadingById, fetchCycleRows]);
 
-  useEffect(() => {
-    if (loadedCycleIds.size === 0) {
-      setCycleDetailsById({});
-      return;
-    }
-
-    const nextDetails: Record<string, CycleDetails> = {};
-    for (const cycleId of Array.from(loadedCycleIds)) {
-      const details = buildCycleDetails(cycleId);
-      if (details) {
-        nextDetails[cycleId] = details;
-      }
-    }
-    setCycleDetailsById(nextDetails);
-  }, [loadedCycleIds, cycles, memberRoster, allExpenses, allMealLogs, allDeposits]);
-
-
-
-  const DATA_CACHE_KEY = userId && messId ? `mealtrack-data-cache-${userId}-${messId}` : null;
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!userId || !messId) return;
 
     const isInitialLoad = !hasLoadedDataRef.current;
@@ -1032,16 +1019,16 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [userId, messId, fetchCycleRows]);
 
   const retryLoadData = useCallback(() => {
     if (userId && messId) {
       setDataError(null);
       void loadData();
     }
-  }, [userId, messId]);
+  }, [userId, messId, loadData]);
 
-  const loadMoreChangelogEntries = async () => {
+  const loadMoreChangelogEntries = useCallback(async () => {
     if (!userId || changelogLoading || !hasMoreChangelogEntries) return;
 
     setChangelogLoading(true);
@@ -1071,18 +1058,17 @@ export function MealProvider({ children }: { children: ReactNode }) {
     } finally {
       setChangelogLoading(false);
     }
-  };
+  }, [userId, messId, changelogLoading, hasMoreChangelogEntries, allChangelogEntries.length]);
 
-
-  const getRequiredCycleId = (requestedCycleId?: string) => {
+  const getRequiredCycleId = useCallback((requestedCycleId?: string) => {
     return requestedCycleId ?? activeCycle?.id ?? null;
-  };
+  }, [activeCycle?.id]);
 
-  const allowsNegativeExpenseAmount = (cycleId: string) => {
+  const allowsNegativeExpenseAmount = useCallback((cycleId: string) => {
     return cycles.find((cycle) => cycle.id === cycleId)?.status === 'pending';
-  };
+  }, [cycles]);
 
-  const addMember = async (name: string) => {
+  const addMember = useCallback(async (name: string) => {
     if (!userId || !messId) return;
     const targetCycleId = activeCycle?.id ?? null;
 
@@ -1120,9 +1106,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       ],
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, activeCycle?.id, memberRoster.length, recordChangelog]);
 
-  const reorderMembers = async (memberIds: string[]) => {
+  const reorderMembers = useCallback(async (memberIds: string[]) => {
     if (!userId || memberIds.length !== memberRoster.length) return;
     const byId = new Map(memberRoster.map((member) => [member.id, member]));
     const nextRoster = memberIds.map((id) => byId.get(id)).filter((member): member is Member => Boolean(member));
@@ -1136,9 +1122,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       throw new Error("Could not save member order.");
     }
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, memberRoster]);
 
-  const updateMember = async (id: string, updates: Partial<Member>) => {
+  const updateMember = useCallback(async (id: string, updates: Partial<Member>) => {
     if (!userId || !messId) return;
     const existingMember = memberRoster.find((member) => member.id === id);
     const targetCycleId = activeCycle?.id ?? null;
@@ -1188,9 +1174,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       changes,
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, memberRoster, activeCycle?.id, recordChangelog]);
 
-  const removeMember = async (id: string) => {
+  const removeMember = useCallback(async (id: string) => {
     if (!userId || !messId) return;
     const existingMember = memberRoster.find((member) => member.id === id);
     const targetCycleId = activeCycle?.id ?? null;
@@ -1225,9 +1211,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       ],
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, memberRoster, activeCycle?.id, recordChangelog]);
 
-  const restoreMember = async (id: string) => {
+  const restoreMember = useCallback(async (id: string) => {
     if (!userId || !messId) return;
 
     const { data, error } = await supabase
@@ -1265,9 +1251,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     void loadData();
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, loadData]);
 
-  const addExpense = async (
+  const addExpense = useCallback(async (
     amount: number,
     description: string,
     type: 'meal' | 'fixed',
@@ -1309,18 +1295,22 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     // ── Online path ───────────────────────────────────────────────────────────
+    const insertPayload: Record<string, unknown> = {
+      amount,
+      description,
+      type,
+      paid_by: paidBy,
+      user_id: userId,
+      mess_id: messId,
+      cycle_id: targetCycleId,
+    };
+    if (expenseDate) {
+      insertPayload.date = expenseDate;
+    }
+
     const { data, error } = await supabase
       .from('expenses')
-      .insert([{
-        amount,
-        description,
-        type,
-        paid_by: paidBy,
-        date: expenseDate ?? new Date().toISOString(),
-        user_id: userId,
-        mess_id: messId,
-        cycle_id: targetCycleId,
-      }])
+      .insert([insertPayload])
       .select()
       .single();
 
@@ -1329,15 +1319,18 @@ export function MealProvider({ children }: { children: ReactNode }) {
       throw new Error('Unable to add expense. Please try again.');
     }
 
-    setAllExpenses((prev) => [{
-      id: data.id,
-      cycleId: data.cycle_id,
-      amount: Number(data.amount),
-      description: data.description,
-      type: data.type,
-      date: data.date,
-      paidBy: data.paid_by,
-    }, ...prev]);
+    setAllExpenses((prev) => [
+      {
+        id: data.id,
+        cycleId: data.cycle_id,
+        amount: Number(data.amount),
+        description: data.description,
+        type: data.type,
+        date: data.date,
+        paidBy: data.paid_by,
+      },
+      ...prev,
+    ]);
 
     await recordChangelog({
       cycleId: targetCycleId,
@@ -1349,14 +1342,12 @@ export function MealProvider({ children }: { children: ReactNode }) {
         buildSnapshotChange('description', 'Description', data.description),
         buildSnapshotChange('amount', 'Amount', Number(data.amount)),
         buildSnapshotChange('type', 'Type', data.type),
-        buildSnapshotChange('paid_by', 'Paid By', data.paid_by),
-        buildSnapshotChange('date', 'Date', data.date),
       ],
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, getRequiredCycleId, allowsNegativeExpenseAmount, recordChangelog]);
 
-  const updateExpense = async (
+  const updateExpense = useCallback(async (
     id: string,
     updates: {
       amount: number;
@@ -1367,41 +1358,37 @@ export function MealProvider({ children }: { children: ReactNode }) {
     },
   ) => {
     if (!userId || !messId) return;
+
     const existingExpense = allExpenses.find((expense) => expense.id === id);
     if (!existingExpense) return;
-    if (updates.amount < 0 && !allowsNegativeExpenseAmount(existingExpense.cycleId)) {
-      console.error('Negative expense amounts are only allowed for pending-cycle corrections.');
-      return;
-    }
-
-    const oldDateKey = existingExpense.date ? new Date(existingExpense.date).toISOString().slice(0, 10) : '';
-    const newDateKey = updates.date ? new Date(updates.date).toISOString().slice(0, 10) : oldDateKey;
-    const isDateChanged = Boolean(updates.date && oldDateKey !== newDateKey);
 
     const changes = [
-      buildUpdateChange('amount', 'Amount', existingExpense.amount, updates.amount),
       buildUpdateChange('description', 'Description', existingExpense.description, updates.description),
+      buildUpdateChange('amount', 'Amount', existingExpense.amount, updates.amount),
       buildUpdateChange('type', 'Type', existingExpense.type, updates.type),
       buildUpdateChange('paid_by', 'Paid By', existingExpense.paidBy, updates.paidBy),
-      isDateChanged ? buildUpdateChange('date', 'Date', oldDateKey, newDateKey) : null,
+      updates.date ? buildUpdateChange('date', 'Date', existingExpense.date, updates.date) : null,
     ].filter((change): change is ChangelogChange => Boolean(change));
 
     if (changes.length === 0) {
       return;
     }
 
-    const nextDate = updates.date ? (updates.date.includes('T') ? updates.date : new Date(updates.date).toISOString()) : existingExpense.date;
-
+    // ── Offline path ──────────────────────────────────────────────────────────
     if (!navigator.onLine) {
-      setAllExpenses((prev) => prev.map((expense) => expense.id === id ? {
-        ...expense, amount: updates.amount, description: updates.description, type: updates.type,
-        paidBy: updates.paidBy, date: nextDate,
-      } : expense));
-      setPendingSyncIds((prev) => new Set(prev).add(id));
+      const tempId = `offline-${uuidv4()}`;
+      setAllExpenses((prev) =>
+        prev.map((expense) =>
+          expense.id === id
+            ? { ...expense, ...updates, date: updates.date ?? expense.date }
+            : expense,
+        ),
+      );
+      setPendingSyncIds((prev) => new Set(prev).add(tempId));
       await enqueue({
-        id: `offline-${uuidv4()}`,
+        id: tempId,
         type: 'UPDATE_EXPENSE',
-        payload: { id, amount: updates.amount, description: updates.description, type: updates.type, paidBy: updates.paidBy, date: nextDate, cycleId: existingExpense.cycleId, changes, userId, messId },
+        payload: { id, ...updates, date: updates.date ?? existingExpense.date, cycleId: existingExpense.cycleId, changes },
         createdAt: Date.now(),
       });
       return;
@@ -1414,7 +1401,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         description: updates.description,
         type: updates.type,
         paid_by: updates.paidBy,
-        date: nextDate,
+        ...(updates.date ? { date: updates.date } : {}),
       })
       .eq('id', id)
       .eq('mess_id', messId);
@@ -1428,11 +1415,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
       expense.id === id
         ? {
           ...expense,
-          amount: updates.amount,
-          description: updates.description,
-          type: updates.type,
-          paidBy: updates.paidBy,
-          date: nextDate,
+          ...updates,
+          date: updates.date ?? expense.date,
         }
         : expense
     )));
@@ -1442,13 +1426,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
       entityType: 'expense',
       entityId: id,
       action: 'update',
-      title: `Updated ${existingExpense.type} expense`,
+      title: `Updated ${updates.type} expense`,
       changes,
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, allExpenses, recordChangelog]);
 
-  const deleteExpense = async (id: string) => {
+  const deleteExpense = useCallback(async (id: string) => {
     if (!userId || !messId) return;
     const existingExpense = allExpenses.find((expense) => expense.id === id);
     if (!existingExpense) return;
@@ -1503,9 +1487,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       ],
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, allExpenses, recordChangelog]);
 
-  const restoreExpense = async (id: string) => {
+  const restoreExpense = useCallback(async (id: string) => {
     if (!userId || !messId) return;
 
     const { data, error } = await supabase
@@ -1541,9 +1525,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId]);
 
-  const addDeposit = async (memberId: string, amount: number, cycleId?: string, note?: string) => {
+  const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string) => {
     if (!userId || amount === 0) return;
 
     const targetCycleId = getRequiredCycleId(cycleId);
@@ -1618,9 +1602,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       ],
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, getRequiredCycleId, getMemberName, allDeposits, recordChangelog]);
 
-  const saveMealLogs = async (
+  const saveMealLogs = useCallback(async (
     entries: Array<{ memberId: string; count: number }>,
     dateStr: string,
     cycleId?: string,
@@ -1633,7 +1617,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     // ── Offline path ──────────────────────────────────────────────────────────
     if (!navigator.onLine) {
       const tempId = `offline-${uuidv4()}`;
-      // Apply optimistic updates: update/insert local meal log state
       setAllMealLogs((prev) => {
         let next = [...prev];
         for (const entry of entries) {
@@ -1719,54 +1702,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
       ],
     });
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, getRequiredCycleId, getMemberName, recordChangelog]);
 
-  const logMeal = async (memberId: string, count: number, dateStr: string, cycleId?: string) => {
+  const logMeal = useCallback(async (memberId: string, count: number, dateStr: string, cycleId?: string) => {
     await saveMealLogs([{ memberId, count }], dateStr, cycleId);
-  };
+  }, [saveMealLogs]);
 
-  /**
-   * Flush the offline queue against Supabase.
-   * Called by OfflineToastManager when connectivity is restored.
-   */
-  const triggerSync = useCallback(async () => {
-    if (isSyncingRef.current) return;
-    isSyncingRef.current = true;
-
-    try {
-      const ops = await dequeueAll();
-      if (ops.length === 0) return;
-
-      for (const op of ops) {
-        try {
-          await replayOp(op);
-          await removeFromQueue(op.id);
-          setPendingSyncIds((prev) => {
-            const next = new Set(prev);
-            next.delete(op.id);
-            return next;
-          });
-        } catch (err) {
-          console.error(`[offline-sync] Failed to replay op ${op.id}:`, err);
-          // Keep the op in the queue so it retries next time
-        }
-      }
-
-      // Refresh data after sync to get real server IDs
-      void broadcastSharedUpdate();
-      void loadData();
-    } finally {
-      isSyncingRef.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, messId]);
-
-  /**
-   * Replay a single queued operation against Supabase.
-   * The optimistic local item (with its `offline-` prefixed ID) is replaced
-   * by the real server record after a successful write.
-   */
-  const replayOp = async (op: OfflineOp) => {
+  const replayOp = useCallback(async (op: OfflineOp) => {
     if (!userId || !messId) throw new Error('Not authenticated');
 
     if (op.type === 'ADD_EXPENSE') {
@@ -1789,7 +1731,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
         .select()
         .single();
       if (error) throw error;
-      // Replace the optimistic record with the real one
       setAllExpenses((prev) => [
         { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by },
         ...prev.filter((e) => e.id !== op.id),
@@ -1858,15 +1799,42 @@ export function MealProvider({ children }: { children: ReactNode }) {
         entries: Array<{ memberId: string; count: number }>;
         dateStr: string; cycleId: string; userId: string; messId: string;
       };
-      // Delegate to saveMealLogs which now runs online
       await saveMealLogs(p.entries, p.dateStr, p.cycleId);
-      // Remove optimistic offline-meal-* entries — loadData() will refresh
       setAllMealLogs((prev) => prev.filter((log) => !log.id.startsWith('offline-')));
       return;
     }
-  };
+  }, [userId, messId, recordChangelog, getMemberName, saveMealLogs]);
 
-  const renameActiveCycle = async (name: string) => {
+  const triggerSync = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+
+    try {
+      const ops = await dequeueAll();
+      if (ops.length === 0) return;
+
+      for (const op of ops) {
+        try {
+          await replayOp(op);
+          await removeFromQueue(op.id);
+          setPendingSyncIds((prev) => {
+            const next = new Set(prev);
+            next.delete(op.id);
+            return next;
+          });
+        } catch (err) {
+          console.error(`[offline-sync] Failed to replay op ${op.id}:`, err);
+        }
+      }
+
+      void broadcastSharedUpdate();
+      void loadData();
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, [replayOp, loadData]);
+
+  const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !activeCycle) return;
 
     const trimmedName = name.trim();
@@ -1906,9 +1874,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       cycle.id === activeCycle.id ? { ...cycle, name: trimmedName } : cycle
     )));
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, activeCycle, cycles]);
 
-  const closeActiveCycle = async () => {
+  const closeActiveCycle = useCallback(async () => {
     if (!userId || !activeCycle) return;
     if (pendingCycle) {
       throw new Error('Finish the pending cycle settlement before closing another cycle.');
@@ -1943,18 +1911,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
         : cycle,
     ));
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, activeCycle, pendingCycle, memberRoster]);
 
-  /**
-   * Perform a two-sided carry-forward transfer for a set of members:
-   * 1. Add a negative correction deposit to the source (pending) cycle — zeroes the member
-   *    so the settlement math (`isSettlementMatched`) still passes cleanly.
-   * 2. Add a positive opening deposit to the new (active) cycle — the member starts ahead.
-   *
-   * Both writes go through the existing `addDeposit` function, so the offline queue and
-   * changelog pipeline are inherited automatically at no extra cost.
-   */
-  const carryForwardDeposits = async (
+  const carryForwardDeposits = useCallback(async (
     newCycleId: string,
     sourceCycleId: string,
     sourceCycleName: string,
@@ -1963,14 +1922,12 @@ export function MealProvider({ children }: { children: ReactNode }) {
     for (const { memberId, amount } of entries) {
       if (amount <= 0) continue;
       const rounded = Math.round(amount * 100) / 100;
-      // Step 1 — Zero out the member in the source/pending cycle
       await addDeposit(
         memberId,
         -rounded,
         sourceCycleId,
         `Carry-forward correction — balance moved to next cycle`,
       );
-      // Step 2 — Open the new cycle with that amount
       await addDeposit(
         memberId,
         rounded,
@@ -1978,9 +1935,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
         `Carry-forward from ${sourceCycleName}`,
       );
     }
-  };
+  }, [addDeposit]);
 
-  const startNewCycle = async (
+  const startNewCycle = useCallback(async (
     name: string,
     startedAt?: string,
     carryForwards?: Array<{ memberId: string; amount: number }>,
@@ -2038,7 +1995,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     ]);
     setLoadedCycleIds((prev) => new Set(prev).add(newCycle.id));
 
-    // Carry-forward: two-sided deposit transfer from the pending cycle (if any)
     if (carryForwards && carryForwards.length > 0 && pendingCycle) {
       await carryForwardDeposits(
         newCycle.id,
@@ -2049,13 +2005,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId, activeCycle, cycles, pendingCycle, carryForwardDeposits]);
 
-  const suggestCycleName = (date?: Date) => {
+  const suggestCycleName = useCallback((date?: Date) => {
     return generateUniqueCycleName(date ?? new Date(), cycles);
-  };
+  }, [cycles]);
 
-  const markCycleClosed = async (cycleId: string) => {
+  const markCycleClosed = useCallback(async (cycleId: string) => {
     if (!userId || !messId) return;
 
     const finalizedAt = new Date().toISOString();
@@ -2081,7 +2037,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     if (changelogError) {
       console.error('Error deleting cycle changelog entries:', changelogError);
-      // Non-fatal: the cycle is already closed, just log and continue
     }
 
     setCycles((prev) => prev.map((cycle) => (
@@ -2089,9 +2044,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
     )));
     setAllChangelogEntries((prev) => prev.filter((entry) => entry.cycleId !== cycleId));
     void broadcastSharedUpdate();
-  };
+  }, [userId, messId]);
 
-  const deleteCycle = async (cycleId: string) => {
+  const deleteCycle = useCallback(async (cycleId: string) => {
     if (!userId || !messId) return;
 
     const targetCycle = cycles.find((cycle) => cycle.id === cycleId);
@@ -2122,16 +2077,12 @@ export function MealProvider({ children }: { children: ReactNode }) {
       next.delete(cycleId);
       return next;
     });
-    setCycleDetailsById((prev) => {
-      const { [cycleId]: _removed, ...next } = prev;
-      return next;
-    });
     setAllDeposits((prev) => prev.filter((deposit) => deposit.cycleId !== cycleId));
     setAllExpenses((prev) => prev.filter((expense) => expense.cycleId !== cycleId));
     setAllMealLogs((prev) => prev.filter((log) => log.cycleId !== cycleId));
-  };
+  }, [userId, messId, cycles]);
 
-  const restoreCycle = async (cycleId: string) => {
+  const restoreCycle = useCallback(async (cycleId: string) => {
     if (!userId || !messId) return;
 
     const { data, error } = await supabase
@@ -2168,30 +2119,38 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     void loadData();
-  };
+  }, [userId, messId, loadData]);
 
-  const activeDetails = activeCycle ? getCycleDetails(activeCycle.id) : null;
+  const activeDetails = useMemo(
+    () => (activeCycle ? cycleDetailsById[activeCycle.id] ?? null : null),
+    [activeCycle, cycleDetailsById],
+  );
 
-  const members = activeDetails?.members ?? [];
-  const expenses = activeDetails?.expenses ?? [];
-  const mealLogs = activeDetails?.mealLogs ?? [];
-  const stats = activeDetails?.stats ?? {
-    totalDeposits: 0,
-    totalMealExpenses: 0,
-    totalFixedExpenses: 0,
-    totalMealsConsumed: 0,
-    currentMealRate: 0,
-    fixedCostPerMember: 0,
-    remainingCash: 0,
-  };
+  const members = useMemo(() => activeDetails?.members ?? [], [activeDetails]);
+  const expenses = useMemo(() => activeDetails?.expenses ?? [], [activeDetails]);
+  const mealLogs = useMemo(() => activeDetails?.mealLogs ?? [], [activeDetails]);
+  const deposits = useMemo(() => activeDetails?.deposits ?? [], [activeDetails]);
+  const stats = useMemo(
+    () =>
+      activeDetails?.stats ?? {
+        totalDeposits: 0,
+        totalMealExpenses: 0,
+        totalFixedExpenses: 0,
+        totalMealsConsumed: 0,
+        currentMealRate: 0,
+        fixedCostPerMember: 0,
+        remainingCash: 0,
+      },
+    [activeDetails],
+  );
 
-  const getMemberStats = (memberId: string, cycleId?: string) => {
+  const getMemberStats = useCallback((memberId: string, cycleId?: string) => {
     const targetCycleId = getRequiredCycleId(cycleId);
     if (!targetCycleId) {
       return { mealCost: 0, fixedCost: 0, totalCost: 0, balance: 0, mealsEaten: 0 };
     }
 
-    const details = getCycleDetails(targetCycleId);
+    const details = cycleDetailsById[targetCycleId];
     const member = details?.members.find((entry) => entry.id === memberId);
 
     if (!member) {
@@ -2205,67 +2164,132 @@ export function MealProvider({ children }: { children: ReactNode }) {
       balance: member.balance,
       mealsEaten: member.mealsEaten,
     };
-  };
+  }, [getRequiredCycleId, cycleDetailsById]);
+
+  const dataValue = useMemo<MealDataContextType>(() => ({
+    members,
+    expenses,
+    deposits,
+    mealLogs,
+    cycles,
+    activeCycleChangelogEntries,
+    pendingCycleChangelogEntries,
+    changelogEntries: allChangelogEntries,
+    hasMoreChangelogEntries,
+    changelogLoading,
+    activeCycle,
+    pendingCycle,
+    loading,
+    initialLoading: loading && !hasLoadedDataRef.current,
+    refreshing,
+    stats,
+    pendingSyncIds,
+    dataError,
+    getMemberStats,
+    getCycleDetails,
+    isCycleDetailsLoading,
+    getCycleDetailsError,
+  }), [
+    members,
+    expenses,
+    deposits,
+    mealLogs,
+    cycles,
+    activeCycleChangelogEntries,
+    pendingCycleChangelogEntries,
+    allChangelogEntries,
+    hasMoreChangelogEntries,
+    changelogLoading,
+    activeCycle,
+    pendingCycle,
+    loading,
+    refreshing,
+    stats,
+    pendingSyncIds,
+    dataError,
+    getMemberStats,
+    getCycleDetails,
+    isCycleDetailsLoading,
+    getCycleDetailsError,
+  ]);
+
+  const actionsValue = useMemo<MealActionsContextType>(() => ({
+    addMember,
+    updateMember,
+    removeMember,
+    restoreMember,
+    reorderMembers,
+    addExpense,
+    updateExpense,
+    deleteExpense,
+    restoreExpense,
+    addDeposit,
+    saveMealLogs,
+    logMeal,
+    renameActiveCycle,
+    closeActiveCycle,
+    startNewCycle,
+    suggestCycleName,
+    markCycleClosed,
+    deleteCycle,
+    restoreCycle,
+    loadCycleDetails,
+    loadMoreChangelogEntries,
+    triggerSync,
+    retryLoadData,
+  }), [
+    addMember,
+    updateMember,
+    removeMember,
+    restoreMember,
+    reorderMembers,
+    addExpense,
+    updateExpense,
+    deleteExpense,
+    restoreExpense,
+    addDeposit,
+    saveMealLogs,
+    logMeal,
+    renameActiveCycle,
+    closeActiveCycle,
+    startNewCycle,
+    suggestCycleName,
+    markCycleClosed,
+    deleteCycle,
+    restoreCycle,
+    loadCycleDetails,
+    loadMoreChangelogEntries,
+    triggerSync,
+    retryLoadData,
+  ]);
 
   return (
-    <MealContext.Provider
-      value={{
-        members,
-        expenses,
-        deposits: activeDetails?.deposits ?? [],
-        mealLogs,
-        cycles,
-        activeCycleChangelogEntries,
-        pendingCycleChangelogEntries,
-        changelogEntries: allChangelogEntries,
-        hasMoreChangelogEntries,
-        changelogLoading,
-        activeCycle,
-        pendingCycle,
-        loading,
-        initialLoading: loading,
-        refreshing,
-        addMember,
-        updateMember,
-        removeMember,
-        restoreMember,
-        reorderMembers,
-        addExpense,
-        updateExpense,
-        deleteExpense,
-        restoreExpense,
-        addDeposit,
-        saveMealLogs,
-        logMeal,
-        renameActiveCycle,
-        closeActiveCycle,
-        startNewCycle,
-        suggestCycleName,
-        markCycleClosed,
-        deleteCycle,
-        restoreCycle,
-        stats,
-        getMemberStats,
-        getCycleDetails,
-        loadCycleDetails,
-        isCycleDetailsLoading,
-        getCycleDetailsError,
-        loadMoreChangelogEntries,
-        pendingSyncIds,
-        triggerSync,
-        dataError,
-        retryLoadData,
-      }}
-    >
-      {children}
-    </MealContext.Provider>
+    <MealActionsContext.Provider value={actionsValue}>
+      <MealDataContext.Provider value={dataValue}>
+        {children}
+      </MealDataContext.Provider>
+    </MealActionsContext.Provider>
   );
 }
 
-export function useMeal() {
-  const context = useContext(MealContext);
+export function useMealData() {
+  const context = useContext(MealDataContext);
   if (context === undefined) {
-    throw new Error('useMeal must be used within a MealProvider');
+    throw new Error('useMealData must be used within a MealProvider');
   }
   return context;
+}
+
+export function useMealActions() {
+  const context = useContext(MealActionsContext);
+  if (context === undefined) {
+    throw new Error('useMealActions must be used within a MealProvider');
+  }
+  return context;
+}
+
+export function useMeal(): MealContextType {
+  const data = useMealData();
+  const actions = useMealActions();
+  return useMemo(() => ({ ...data, ...actions }), [data, actions]);
 }
