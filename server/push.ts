@@ -509,6 +509,20 @@ function safeLocalDateTime(timeZone: string | null | undefined, now = new Date()
   }
 }
 
+function isReminderDue(currentTime: string, configuredTime: string) {
+  const [currentHour, currentMinute] = currentTime.split(":").map(Number);
+  const [configuredHour, configuredMinute] = configuredTime.split(":").map(Number);
+  if (![currentHour, currentMinute, configuredHour, configuredMinute].every(Number.isFinite)) return false;
+
+  const currentTotal = currentHour * 60 + currentMinute;
+  const configuredTotal = configuredHour * 60 + configuredMinute;
+  // Cron can fire a few seconds/minutes late, especially after a hosted
+  // process wakes. Keep a short window; notification_deliveries deduplicates
+  // repeated scheduler runs for the same profile/cycle/day.
+  const elapsed = currentTotal - configuredTotal;
+  return elapsed >= 0 && elapsed <= 5;
+}
+
 export async function sendMealLogReminders() {
   if (!ensureVapidConfigured()) {
     return;
@@ -540,7 +554,7 @@ export async function sendMealLogReminders() {
       if (!allowsNotification(profile.notification_preferences, "mealReminders")) continue;
       const local = safeLocalDateTime(DEFAULT_TIMEZONE, now);
       const configuredTime = (profile.reminder_time || "22:00").slice(0, 5);
-      if (local.time !== configuredTime) continue;
+      if (!isReminderDue(local.time, configuredTime)) continue;
 
       const { data: subscriptions, error: subscriptionError } = await supabase
         .from("push_subscriptions")
