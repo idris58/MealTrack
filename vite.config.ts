@@ -3,7 +3,6 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
-import { metaImagesPlugin } from "./vite-plugin-meta-images";
 
 export default defineConfig({
   plugins: [
@@ -44,18 +43,12 @@ export default defineConfig({
         enabled: false,
       },
     }),
-    metaImagesPlugin(),
   ],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
-    },
-  },
-  css: {
-    postcss: {
-      plugins: [],
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
