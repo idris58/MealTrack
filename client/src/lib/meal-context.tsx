@@ -394,6 +394,10 @@ function buildSnapshotChange(field: string, label: string, value: ChangelogValue
   return { field, label, value };
 }
 
+function calendarDate(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : value;
+}
+
 function getMealLogAction(changes: ChangelogChange[]): ChangelogAction {
   const created = changes.some((change) => change.from === 0 && typeof change.to === 'number' && change.to > 0);
   const deleted = changes.some((change) => typeof change.from === 'number' && change.from > 0 && change.to === 0);
@@ -1367,7 +1371,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       buildUpdateChange('amount', 'Amount', existingExpense.amount, updates.amount),
       buildUpdateChange('type', 'Type', existingExpense.type, updates.type),
       buildUpdateChange('paid_by', 'Paid By', existingExpense.paidBy, updates.paidBy),
-      updates.date ? buildUpdateChange('date', 'Date', existingExpense.date, updates.date) : null,
+      updates.date
+        ? buildUpdateChange('date', 'Date', calendarDate(existingExpense.date), calendarDate(updates.date))
+        : null,
     ].filter((change): change is ChangelogChange => Boolean(change));
 
     if (changes.length === 0) {
@@ -1610,6 +1616,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     cycleId?: string,
   ) => {
     if (!userId || !messId) return;
+    if (entries.length === 0) return;
 
     const targetCycleId = getRequiredCycleId(cycleId);
     if (!targetCycleId) return;
@@ -1657,7 +1664,39 @@ export function MealProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const rows = entries.map((entry) => ({
+    const memberIds = Array.from(new Set(entries.map((entry) => entry.memberId)));
+    const { data: existingLogs, error: existingLogsError } = await supabase
+      .from('meal_logs')
+      .select('member_id, count')
+      .eq('cycle_id', targetCycleId)
+      .eq('date', dateStr)
+      .in('member_id', memberIds);
+
+    if (existingLogsError) {
+      console.error('Error loading existing meal logs for changelog:', existingLogsError);
+      throw new Error('Unable to compare existing meal logs. Please try again.');
+    }
+
+    const previousCounts = new Map(
+      (existingLogs ?? []).map((log) => [log.member_id, Number(log.count)]),
+    );
+    const sortedMealLogChanges = entries
+      .map((entry) => {
+        const nextCount = Number.isNaN(entry.count) ? 0 : entry.count;
+        return buildUpdateChange(
+          `member:${entry.memberId}`,
+          getMemberName(entry.memberId, targetCycleId),
+          previousCounts.get(entry.memberId) ?? 0,
+          nextCount,
+        );
+      })
+      .filter((change): change is ChangelogChange => Boolean(change))
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    if (sortedMealLogChanges.length === 0) return;
+
+    const changedMemberIds = new Set(sortedMealLogChanges.map((change) => change.field.slice('member:'.length)));
+    const rows = entries.filter((entry) => changedMemberIds.has(entry.memberId)).map((entry) => ({
       member_id: entry.memberId,
       cycle_id: targetCycleId,
       date: dateStr,
@@ -1681,20 +1720,12 @@ export function MealProvider({ children }: { children: ReactNode }) {
       ...savedLogs.map((log) => ({ id: log.id, cycleId: log.cycle_id, memberId: log.member_id, date: log.date, count: Number(log.count) })),
     ]);
 
-    const mealLogChanges: ChangelogChange[] = entries.map((entry) => ({
-      field: `member:${entry.memberId}`,
-      label: getMemberName(entry.memberId, targetCycleId),
-      from: null,
-      to: Number.isNaN(entry.count) ? 0 : entry.count,
-    }));
-
-    const sortedMealLogChanges = mealLogChanges.sort((left, right) => left.label.localeCompare(right.label));
     await recordChangelog({
       cycleId: targetCycleId,
       entityType: 'meal_log',
       entityId: targetCycleId,
       action: getMealLogAction(sortedMealLogChanges),
-      title: `Saved meal log for ${sortedMealLogChanges.length} ${sortedMealLogChanges.length === 1 ? 'member' : 'members'}`,
+      title: `Updated meal log for ${sortedMealLogChanges.length} ${sortedMealLogChanges.length === 1 ? 'member' : 'members'}`,
       changes: [
         buildSnapshotChange('date', 'Date', dateStr),
         buildSnapshotChange('members_changed', 'Members Changed', sortedMealLogChanges.length),
