@@ -12,9 +12,12 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { usePushNotifications } from '@/lib/push-notifications';
 import { getNotificationPreferences, saveNotificationPreferences } from '@/lib/notification-preferences';
+import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 
 export function NotificationSettingsCard() {
+  const { profile } = useAuth();
+  const canManageMealReminders = profile?.role === 'manager' || profile?.role === 'coordinator';
   const { supported, permission, hasSubscription, working, error, message, subscribe, refreshSubscriptionState } = usePushNotifications({ mode: 'main' });
   const [reminderTime, setReminderTime] = useState('22:00');
   const [globalEnabled, setGlobalEnabled] = useState(true);
@@ -191,40 +194,44 @@ export function NotificationSettingsCard() {
                   aria-label="Toggle notice notifications"
                 />
               </div>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium">Meal-log reminders</p>
-                  <p className="text-xs text-muted-foreground">Get an alert when today&apos;s active-cycle meal log has not been saved.</p>
-                </div>
-                <Switch
-                  checked={mealRemindersEnabled}
-                  disabled={isBlocked || !globalEnabled || preferencesLoading || preferencesSaving}
-                  onCheckedChange={(checked) => handlePreferenceToggle('mealReminders', checked)}
-                  aria-label="Toggle meal log reminders"
-                />
-              </div>
-              <label className="block space-y-1 text-xs font-medium">
-                Reminder time <span className="font-normal text-muted-foreground">(Dhaka time)</span>
-                <input
-                  type="time"
-                  value={reminderTime}
-                  disabled={isBlocked || !globalEnabled || !mealRemindersEnabled || preferencesLoading || preferencesSaving}
-                  onChange={(event) => setReminderTime(event.target.value)}
-                  className="mt-1 flex h-10 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Next reminder: {!isBlocked && globalEnabled && mealRemindersEnabled ? nextRun : isBlocked ? 'Notifications blocked by browser.' : 'Enable meal reminders to schedule.'}
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void savePreferences({ reminderTime }, 'Reminder time saved.')}
-                disabled={isBlocked || preferencesLoading || preferencesSaving}
-              >
-                {preferencesSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save time
-              </Button>
+              {canManageMealReminders && (
+                <>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium">Meal-log reminders</p>
+                      <p className="text-xs text-muted-foreground">Get an alert when today&apos;s active-cycle meal log has not been saved.</p>
+                    </div>
+                    <Switch
+                      checked={mealRemindersEnabled}
+                      disabled={isBlocked || !globalEnabled || preferencesLoading || preferencesSaving}
+                      onCheckedChange={(checked) => handlePreferenceToggle('mealReminders', checked)}
+                      aria-label="Toggle meal log reminders"
+                    />
+                  </div>
+                  <label className="block space-y-1 text-xs font-medium">
+                    Reminder time <span className="font-normal text-muted-foreground">(Dhaka time)</span>
+                    <input
+                      type="time"
+                      value={reminderTime}
+                      disabled={isBlocked || !globalEnabled || !mealRemindersEnabled || preferencesLoading || preferencesSaving}
+                      onChange={(event) => setReminderTime(event.target.value)}
+                      className="mt-1 flex h-10 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Next reminder: {!isBlocked && globalEnabled && mealRemindersEnabled ? nextRun : isBlocked ? 'Notifications blocked by browser.' : 'Enable meal reminders to schedule.'}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void savePreferences({ reminderTime }, 'Reminder time saved.')}
+                    disabled={isBlocked || preferencesLoading || preferencesSaving}
+                  >
+                    {preferencesSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Save time
+                  </Button>
+                </>
+              )}
             </div>
 
             {preferencesMessage && <p className="text-xs text-emerald-600">{preferencesMessage}</p>}
