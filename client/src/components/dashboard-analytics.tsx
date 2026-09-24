@@ -78,8 +78,7 @@ type InsightTone = 'positive' | 'warning' | 'attention' | 'neutral';
 type Insight = { icon: typeof Info; title: string; detail: string; tone: InsightTone };
 
 function dateKey(value: string) {
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  return format(new Date(value), 'yyyy-MM-dd');
+  return format(parseISO(value), 'yyyy-MM-dd');
 }
 
 function localDate(key: string) {
@@ -93,7 +92,7 @@ function buildDateKeys(startedAt: string) {
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   if (start > end) return [startKey];
   return Array.from({ length: differenceInCalendarDays(end, start) + 1 }, (_, index) =>
-    dateKey(addDays(start, index).toISOString())
+    format(addDays(start, index), 'yyyy-MM-dd')
   );
 }
 
@@ -101,7 +100,7 @@ function aggregatePeriods(dateKeys: string[], expenses: Expense[], deposits: Cyc
   const weekly = dateKeys.length > 30;
   const rows = new Map<string, PeriodRow>();
   const periodKey = (key: string) =>
-    weekly ? dateKey(startOfWeek(localDate(key), { weekStartsOn: 1 }).toISOString()) : key;
+    weekly ? format(startOfWeek(localDate(key), { weekStartsOn: 1 }), 'yyyy-MM-dd') : key;
   const periodLabel = (key: string) =>
     weekly
       ? `${format(localDate(key), 'MMM d')}–${format(addDays(localDate(key), 6), 'MMM d')}`

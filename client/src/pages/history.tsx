@@ -153,7 +153,7 @@ function PendingExpenseEditor({
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
   const [type, setType] = useState<'meal' | 'fixed'>(expense?.type ?? 'meal');
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? '');
-  const [date, setDate] = useState<Date>(expense ? new Date(expense.date) : new Date());
+  const [date, setDate] = useState<Date>(expense ? parseISO(expense.date) : new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -162,7 +162,7 @@ function PendingExpenseEditor({
     setAmount(expense ? String(expense.amount) : '');
     setType(expense?.type ?? 'meal');
     setPaidBy(expense?.paidBy ?? '');
-    setDate(expense ? new Date(expense.date) : new Date());
+    setDate(expense ? parseISO(expense.date) : new Date());
   }, [expense]);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -394,7 +394,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
         <div className="min-w-0">
           <p className="truncate font-medium">{expense.description}</p>
           <p className="text-xs text-muted-foreground">
-            {format(new Date(expense.date), 'MMM d, yyyy')} • Paid by {expense.paidBy}
+            {format(parseISO(expense.date), 'MMM d, yyyy')} • Paid by {expense.paidBy}
           </p>
         </div>
       </div>

@@ -941,7 +941,7 @@ export default function SharedPage({ token }: { token: string }) {
                                 <div>
                                   <p className="font-medium">{expense.description}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    {format(new Date(expense.date), "MMM d, yyyy")} • Paid by {expense.paidBy}
+                                    {format(parseISO(expense.date), "MMM d, yyyy")} • Paid by {expense.paidBy}
                                   </p>
                                 </div>
                               </div>

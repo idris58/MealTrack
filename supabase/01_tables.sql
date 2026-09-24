@@ -72,7 +72,7 @@ create table if not exists public.expenses (
   description text not null,
   type text not null check (type in ('meal', 'fixed')),
   paid_by text not null,
-  date timestamptz default now(),
+  date date default current_date,
   created_at timestamptz default now(),
   user_id uuid references auth.users(id) on delete cascade,
   cycle_id uuid references public.cycles(id) on delete cascade,

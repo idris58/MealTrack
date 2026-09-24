@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { v4 as uuidv4 } from 'uuid';
+import { format } from 'date-fns';
 import { supabase } from './supabase';
 import { allocateIntegerBalances } from './settlement-math';
 import {
@@ -1272,7 +1273,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     // ── Offline path ──────────────────────────────────────────────────────────
     if (!navigator.onLine) {
       const tempId = `offline-${uuidv4()}`;
-      const dateStr = expenseDate ?? new Date().toISOString();
+      const dateStr = expenseDate ?? format(new Date(), 'yyyy-MM-dd');
       const optimisticExpense: Expense = {
         id: tempId,
         cycleId: targetCycleId,

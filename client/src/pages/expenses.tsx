@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
 import { useMeal, Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -55,7 +55,7 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
             <SyncBadge itemId={expense.id} />
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            <span>{format(new Date(expense.date), 'MMM d, yyyy')}</span>
+            <span>{format(parseISO(expense.date), 'MMM d, yyyy')}</span>
             <span>•</span>
             <span>Paid by {expense.paidBy}</span>
           </div>
@@ -88,7 +88,7 @@ function ExpenseEditor({
   onDeleted?: (expense: Expense) => void;
 }) {
   const { addExpense, updateExpense, deleteExpense } = useMeal();
-  const [date, setDate] = useState<Date>(expense ? new Date(expense.date) : new Date());
+  const [date, setDate] = useState<Date>(expense ? parseISO(expense.date) : new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const form = useForm<z.infer<typeof expenseSchema>>({
@@ -108,7 +108,7 @@ function ExpenseEditor({
       type: expense?.type ?? 'meal',
       paidBy: expense?.paidBy ?? '',
     });
-    setDate(expense ? new Date(expense.date) : new Date());
+    setDate(expense ? parseISO(expense.date) : new Date());
   }, [expense, form]);
 
   const onSubmit = async (data: z.infer<typeof expenseSchema>) => {
