@@ -67,6 +67,28 @@ interface NoticeContextValue {
 // ── Context ───────────────────────────────────────────────────────────────────
 
 const NoticeContext = createContext<NoticeContextValue | undefined>(undefined);
+const DISMISSED_NOTICE_PREFIX = 'mealtrack-dismissed-notice-';
+
+function noticeDismissKey(id: string) {
+  return `${DISMISSED_NOTICE_PREFIX}${id}`;
+}
+
+function pruneDismissedNoticeKeys(activeNotice: Notice | null) {
+  const activeId = activeNotice?.id;
+  const activeExpiry = activeNotice ? Date.parse(activeNotice.expiresAt) : 0;
+  const now = Date.now();
+
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(DISMISSED_NOTICE_PREFIX)) continue;
+
+    const noticeId = key.slice(DISMISSED_NOTICE_PREFIX.length);
+    const storedValue = localStorage.getItem(key);
+    const storedExpiry = storedValue === '1' ? activeExpiry : Date.parse(storedValue ?? '');
+    const expired = Number.isFinite(storedExpiry) ? storedExpiry <= now : activeExpiry <= now;
+    if (!activeId || noticeId !== activeId || expired) localStorage.removeItem(key);
+  }
+}
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
@@ -79,11 +101,23 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  const dismissKey = (id: string) => `mealtrack-dismissed-notice-${id}`;
+  const dismissKey = noticeDismissKey;
 
   const checkDismissed = useCallback((n: Notice | null) => {
     if (!n) { setDismissed(false); return; }
-    setDismissed(Boolean(localStorage.getItem(dismissKey(n.id))));
+    const key = dismissKey(n.id);
+    const storedExpiry = localStorage.getItem(key);
+    if (!storedExpiry) { setDismissed(false); return; }
+
+    // Legacy dismissals used the sentinel "1". They remain valid until the
+    // active notice expires and are upgraded the next time the user dismisses.
+    const expiresAt = storedExpiry === '1' ? Date.parse(n.expiresAt) : Date.parse(storedExpiry);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      localStorage.removeItem(key);
+      setDismissed(false);
+      return;
+    }
+    setDismissed(true);
   }, []);
 
   /** Convert a DB row to the Notice interface. */
@@ -165,6 +199,11 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, profile?.mess_id]);
+
+  useEffect(() => {
+    if (loading) return;
+    pruneDismissedNoticeKeys(notice);
+  }, [loading, notice]);
 
   // ── Supabase Realtime ─────────────────────────────────────────────────────────
 
@@ -294,7 +333,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
 
   const dismissNotice = useCallback(() => {
     if (!notice) return;
-    localStorage.setItem(dismissKey(notice.id), '1');
+    localStorage.setItem(dismissKey(notice.id), notice.expiresAt);
     setDismissed(true);
   }, [notice]);
 
