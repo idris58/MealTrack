@@ -31,6 +31,7 @@ type ActiveCycleRow = {
 type ReminderProfileRow = {
   id: string;
   mess_id: string | null;
+  role: "manager" | "coordinator" | "member";
   reminder_time: string | null;
   notification_preferences: unknown;
 };
@@ -547,7 +548,7 @@ export async function sendMealLogReminders() {
   const legacyUserIds = cycles.filter((cycle) => !cycle.mess_id).map((cycle) => cycle.user_id);
   let profilesQuery = supabase
     .from("profiles")
-    .select("id, mess_id, reminder_time, notification_preferences")
+    .select("id, mess_id, role, reminder_time, notification_preferences")
     .lte("reminder_time", `${local.time}:00`);
   if (messIds.length > 0 || legacyUserIds.length > 0) {
     const filters = [
@@ -563,6 +564,7 @@ export async function sendMealLogReminders() {
   }
 
   const profiles = (dueProfiles || []).filter((profile: ReminderProfileRow) =>
+    (profile.role === "manager" || profile.role === "coordinator") &&
     allowsNotification(profile.notification_preferences, "mealReminders") &&
     isReminderDue(local.time, (profile.reminder_time || "22:00").slice(0, 5)),
   ) as ReminderProfileRow[];
