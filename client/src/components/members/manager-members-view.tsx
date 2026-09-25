@@ -257,7 +257,7 @@ function SortableMemberCard({
 
 // ── Main Manager Members View ─────────────────────────────────────────────────
 export function ManagerMembersView() {
-  const { members, removeMember, restoreMember, reorderMembers, getMemberStats, activeCycle } = useMeal();
+  const { members, archivedMembers, removeMember, restoreMember, reorderMembers, getMemberStats, activeCycle } = useMeal();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
@@ -525,6 +525,30 @@ export function ManagerMembersView() {
             </SortableContext>
           </DndContext>
         )}
+
+        {canManageMembers && archivedMembers.length > 0 ? (
+          <Card>
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              <div>
+                <h2 className="font-semibold">Archived members</h2>
+                <p className="text-sm text-muted-foreground">Their meal and deposit history is preserved. Restore one to add them back to the active roster.</p>
+              </div>
+              <div className="divide-y rounded-xl border">
+                {archivedMembers.map((member) => (
+                  <div key={member.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{member.name}</p>
+                      <p className="text-xs text-muted-foreground">Historical records retained</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => void restoreMember(member.id).catch((error) => console.error('Could not restore archived member:', error))}>
+                      <RotateCcw className="h-4 w-4" />Restore
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Dialog open={!!depositMemberId} onOpenChange={(open) => !open && setDepositMemberId(null)}>
           <DialogContent><DialogHeader><DialogTitle>Manage Deposit</DialogTitle></DialogHeader>

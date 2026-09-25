@@ -28,6 +28,18 @@ create or replace function public.has_mess_role(allowed_roles text[])
 returns boolean language sql stable security definer set search_path = public
 as $$ select public.current_mess_role() = any(allowed_roles) $$;
 
+create or replace function public.prevent_member_history_cascade_delete()
+returns trigger language plpgsql set search_path = public
+as $$
+begin
+  if exists (select 1 from public.meal_logs where member_id = old.id)
+     or exists (select 1 from public.cycle_deposits where member_id = old.id) then
+    raise exception 'Members with meal or deposit history must be archived, not deleted';
+  end if;
+  return old;
+end;
+$$;
+
 create or replace function public.create_mess(mess_name text)
 returns public.messes language plpgsql security definer set search_path = public
 as $$

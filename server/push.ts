@@ -692,14 +692,46 @@ export async function cleanupExpiredSoftDeletes() {
     console.error("Error deleting expired soft-deleted expenses:", expenseError);
   }
 
-  const { error: memberError } = await supabase
+  const { data: expiredMembers, error: expiredMembersError } = await supabase
     .from("members")
-    .delete()
+    .select("id")
     .not("deleted_at", "is", null)
     .lte("delete_expires_at", now);
 
-  if (memberError) {
-    console.error("Error deleting expired soft-deleted members:", memberError);
+  if (expiredMembersError) {
+    console.error("Error loading expired soft-deleted members:", expiredMembersError);
+  } else {
+    for (const member of expiredMembers ?? []) {
+      const [mealHistory, depositHistory] = await Promise.all([
+        supabase.from("meal_logs").select("id", { head: true, count: "exact" }).eq("member_id", member.id),
+        supabase.from("cycle_deposits").select("id", { head: true, count: "exact" }).eq("member_id", member.id),
+      ]);
+
+      if (mealHistory.error || depositHistory.error) {
+        // Fail closed: never cascade-delete a member if history could not be checked.
+        console.error("Could not verify history before deleting member:", member.id, mealHistory.error ?? depositHistory.error);
+        continue;
+      }
+
+      if ((mealHistory.count ?? 0) > 0 || (depositHistory.count ?? 0) > 0) {
+        // Migrate older soft-deleted members with history to permanent archive state.
+        const { error } = await supabase
+          .from("members")
+          .update({ delete_expires_at: null })
+          .eq("id", member.id)
+          .not("deleted_at", "is", null);
+        if (error) console.error("Error preserving historical member:", member.id, error);
+        continue;
+      }
+
+      const { error } = await supabase
+        .from("members")
+        .delete()
+        .eq("id", member.id)
+        .not("deleted_at", "is", null)
+        .lte("delete_expires_at", now);
+      if (error) console.error("Error deleting expired member:", member.id, error);
+    }
   }
 
   const { error: cycleError } = await supabase

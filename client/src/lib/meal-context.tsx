@@ -21,6 +21,7 @@ export interface Member {
   avatar?: string;
   profileId?: string | null;
   hasPendingDeposit?: boolean;
+  archived?: boolean;
 }
 
 export interface Expense {
@@ -135,6 +136,7 @@ export interface MealDataContextType {
   stats: CycleDetails['stats'];
   pendingSyncIds: Set<string>;
   failedSyncOps: OfflineOp[];
+  archivedMembers: Member[];
   dataError: string | null;
   getMemberStats: (memberId: string, cycleId?: string) => {
     mealCost: number;
@@ -205,6 +207,7 @@ type MemberRow = {
   name: string;
   avatar: string | null;
   deleted_at?: string | null;
+  delete_expires_at?: string | null;
   sort_order?: number | null;
   profile_id?: string | null;
 };
@@ -441,6 +444,7 @@ async function broadcastSharedUpdate() {
 
 export function MealProvider({ children }: { children: ReactNode }) {
   const [memberRoster, setMemberRoster] = useState<Member[]>([]);
+  const [archivedMemberRoster, setArchivedMemberRoster] = useState<Member[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [allMealLogs, setAllMealLogs] = useState<MealLog[]>([]);
   const [allDeposits, setAllDeposits] = useState<CycleDeposit[]>([]);
@@ -561,22 +565,26 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     const snapshot = cycle.membersSnapshot;
 
-    if (snapshot && cycle.status !== 'active') {
-      return snapshot.map((member) => ({
+    const cycleMemberIds = new Set<string>();
+    const cycleHistoryMemberIds = new Set([
+      ...allMealLogs.filter((log) => log.cycleId === cycleId).map((log) => log.memberId),
+      ...allDeposits.filter((deposit) => deposit.cycleId === cycleId).map((deposit) => deposit.memberId),
+    ]);
+    const snapshotMembers = (snapshot && cycle.status !== 'active' ? snapshot : memberRoster).map((member) => {
+      cycleMemberIds.add(member.id);
+      return {
         id: member.id,
         name: member.name,
         deposit: 0,
         mealsEaten: 0,
         avatar: toAvatar(member.name, member.avatar),
-      }));
-    }
-
-    return memberRoster.map((member) => ({
-      ...member,
-      deposit: 0,
-      mealsEaten: 0,
-    }));
-  }, [cycles, memberRoster]);
+      };
+    });
+    const archivedHistoryMembers = archivedMemberRoster
+      .filter((member) => cycleHistoryMemberIds.has(member.id) && !cycleMemberIds.has(member.id))
+      .map((member) => ({ ...member, deposit: 0, mealsEaten: 0 }));
+    return [...snapshotMembers, ...archivedHistoryMembers];
+  }, [cycles, memberRoster, archivedMemberRoster, allMealLogs, allDeposits]);
 
   const getMemberName = useCallback((memberId: string, cycleId?: string) => {
     const scopedMembers = cycleId ? getCycleMembers(cycleId) : memberRoster;
@@ -850,6 +858,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       try {
         const snap = await readOfflineSnapshot<{
             members: Member[];
+            archivedMembers?: Member[];
             cycles: Cycle[];
             deposits: CycleDeposit[];
             expenses: Expense[];
@@ -859,6 +868,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           }>(cacheKey);
         if (snap) {
           setMemberRoster(snap.members);
+          setArchivedMemberRoster(snap.archivedMembers ?? []);
           setCycles(snap.cycles);
           setAllDeposits(snap.deposits);
           setAllExpenses(snap.expenses);
@@ -890,7 +900,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
           .from('members')
           .select('*')
           .eq('mess_id', messId)
-          .is('deleted_at', null)
           .order('sort_order', { ascending: true, nullsFirst: false })
           .order('created_at', { ascending: true }),
         supabase
@@ -926,7 +935,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
       });
       profilesMapRef.current = nextProfilesMap;
 
-      const nextMembers = ((membersResult.data || []) as MemberRow[])
+      const memberRows = (membersResult.data || []) as MemberRow[];
+      const nextMembers = memberRows
         .filter((member) => !member.deleted_at)
         .map((member) => ({
           id: member.id,
@@ -935,6 +945,20 @@ export function MealProvider({ children }: { children: ReactNode }) {
           mealsEaten: 0,
           avatar: toAvatar(member.name, member.avatar),
           profileId: member.profile_id ?? null,
+        }));
+      const nextArchivedMembers = memberRows
+        // Include both permanent archives and members still in the undo window.
+        // Cycle membership only restores one into calculations when that cycle
+        // actually has meal/deposit history for the member.
+        .filter((member) => Boolean(member.deleted_at))
+        .map((member) => ({
+          id: member.id,
+          name: member.name,
+          deposit: 0,
+          mealsEaten: 0,
+          avatar: toAvatar(member.name, member.avatar),
+          profileId: member.profile_id ?? null,
+          archived: !member.delete_expires_at,
         }));
 
       const nextCycles = ((cyclesResult.data || []) as CycleRow[])
@@ -962,6 +986,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const nextMealLogs = initialRows.flatMap((rows) => rows?.mealLogs ?? []);
 
       setMemberRoster(nextMembers);
+      setArchivedMemberRoster(nextArchivedMembers);
       setCycles(nextCycles);
       setAllDeposits(nextDeposits);
       setAllExpenses(nextExpenses);
@@ -978,6 +1003,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       try {
         await writeOfflineSnapshot(cacheKey, {
           members: nextMembers,
+          archivedMembers: nextArchivedMembers,
           cycles: nextCycles,
           deposits: nextDeposits,
           expenses: nextExpenses,
@@ -996,6 +1022,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         try {
           const snap = await readOfflineSnapshot<{
               members: Member[];
+              archivedMembers?: Member[];
               cycles: Cycle[];
               deposits: CycleDeposit[];
               expenses: Expense[];
@@ -1005,6 +1032,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
             }>(cacheKey);
           if (snap) {
             setMemberRoster(snap.members);
+            setArchivedMemberRoster(snap.archivedMembers ?? []);
             setCycles(snap.cycles);
             setAllDeposits(snap.deposits);
             setAllExpenses(snap.expenses);
@@ -1194,12 +1222,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const targetCycleId = activeCycle?.id ?? null;
     if (!existingMember) return;
 
+    const [mealHistory, depositHistory] = await Promise.all([
+      supabase.from('meal_logs').select('id', { head: true, count: 'exact' }).eq('member_id', id),
+      supabase.from('cycle_deposits').select('id', { head: true, count: 'exact' }).eq('member_id', id),
+    ]);
+    if (mealHistory.error || depositHistory.error) {
+      console.error('Error checking member history before removal:', mealHistory.error ?? depositHistory.error);
+      throw new Error('Unable to verify this member’s history. Please try again.');
+    }
+    const hasHistory = (mealHistory.count ?? 0) > 0 || (depositHistory.count ?? 0) > 0;
+
     const now = new Date();
     const { error } = await supabase
       .from('members')
       .update({
         deleted_at: now.toISOString(),
-        delete_expires_at: new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString(),
+        // A member with history is archived indefinitely; only empty members
+        // enter the undo window and can later be hard-deleted by cleanup.
+        delete_expires_at: hasHistory ? null : new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString(),
       })
       .eq('id', id)
       .eq('mess_id', messId)
@@ -1211,13 +1251,16 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     setMemberRoster((prev) => prev.filter((member) => member.id !== id));
+    if (hasHistory) {
+      setArchivedMemberRoster((prev) => prev.some((member) => member.id === id) ? prev : [...prev, { ...existingMember, archived: true }]);
+    }
 
     await recordChangelog({
       cycleId: targetCycleId,
       entityType: 'member',
       entityId: id,
       action: 'delete',
-      title: `Deleted member ${existingMember.name}`,
+      title: `${hasHistory ? 'Archived' : 'Deleted'} member ${existingMember.name}`,
       changes: [
         buildSnapshotChange('name', 'Name', existingMember.name),
       ],
@@ -1243,6 +1286,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     if (data) {
+      setArchivedMemberRoster((prev) => prev.filter((member) => member.id !== data.id));
       setMemberRoster((prev) => {
         if (prev.some((member) => member.id === data.id)) {
           return prev;
@@ -1996,7 +2040,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       throw new Error('Finish the pending cycle settlement before closing another cycle.');
     }
 
-    const snapshot = memberRoster.map((member) => ({
+    const snapshot = getCycleMembers(activeCycle.id).map((member) => ({
       id: member.id,
       name: member.name,
       avatar: member.avatar,
@@ -2025,7 +2069,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         : cycle,
     ));
     void broadcastSharedUpdate();
-  }, [userId, messId, activeCycle, pendingCycle, memberRoster]);
+  }, [userId, messId, activeCycle, pendingCycle, memberRoster, getCycleMembers]);
 
   const carryForwardDeposits = useCallback(async (
     newCycleId: string,
@@ -2299,6 +2343,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     stats,
     pendingSyncIds,
     failedSyncOps,
+    archivedMembers: archivedMemberRoster.filter((member) => member.archived),
     dataError,
     getMemberStats,
     getCycleDetails,
@@ -2322,6 +2367,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     stats,
     pendingSyncIds,
     failedSyncOps,
+    archivedMemberRoster,
     dataError,
     getMemberStats,
     getCycleDetails,
