@@ -2284,7 +2284,12 @@ export function MealProvider({ children }: { children: ReactNode }) {
     [activeCycle, cycleDetailsById],
   );
 
-  const members = useMemo(() => activeDetails?.members ?? [], [activeDetails]);
+  // Archived members remain in cycle details so historical meals/deposits still
+  // calculate correctly, but they must never appear in the active roster UI.
+  const members = useMemo(
+    () => (activeDetails?.members ?? []).filter((member) => !member.archived),
+    [activeDetails],
+  );
   const expenses = useMemo(() => activeDetails?.expenses ?? [], [activeDetails]);
   const mealLogs = useMemo(() => activeDetails?.mealLogs ?? [], [activeDetails]);
   const deposits = useMemo(() => activeDetails?.deposits ?? [], [activeDetails]);

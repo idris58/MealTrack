@@ -276,6 +276,8 @@ export function ManagerMembersView() {
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [createdInvite, setCreatedInvite] = useState<MemberInvite | null>(null);
   const [inviteManagerOpen, setInviteManagerOpen] = useState(false);
+  const [archivedMembersOpen, setArchivedMembersOpen] = useState(false);
+  const [countdownMemberIds, setCountdownMemberIds] = useState<Set<string>>(new Set());
   const [invites, setInvites] = useState<MemberInvite[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
@@ -287,19 +289,25 @@ export function ManagerMembersView() {
     const member = members[memberIndex];
     if (!member) return;
     const stats = getMemberStats(memberId);
+    const expiresAt = Date.now() + DELETE_GRACE_MS;
+    setCountdownMemberIds((prev) => new Set(prev).add(memberId));
     setDeletingMemberId(memberId);
     try {
       await removeMember(memberId);
       setDeletedMembers((prev) => [
         ...prev.filter((entry) => entry.member.id !== memberId),
-        { member, stats, index: Math.max(0, memberIndex), expiresAt: Date.now() + DELETE_GRACE_MS },
+        { member, stats, index: Math.max(0, memberIndex), expiresAt },
       ]);
+    } catch (error) {
+      setCountdownMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; });
+      throw error;
     } finally { setDeletingMemberId(null); }
   };
 
   const handleUndoMember = async (memberId: string) => {
-    setDeletedMembers((prev) => prev.filter((entry) => entry.member.id !== memberId));
     await restoreMember(memberId);
+    setDeletedMembers((prev) => prev.filter((entry) => entry.member.id !== memberId));
+    setCountdownMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -392,6 +400,7 @@ export function ManagerMembersView() {
     }
     return cards;
   }, [deletedMembers, members]);
+  const visibleArchivedMembers = archivedMembers.filter((member) => !countdownMemberIds.has(member.id));
 
   return (
     <TooltipProvider>
@@ -418,6 +427,9 @@ export function ManagerMembersView() {
                   <DropdownMenuItem onSelect={() => { setInviteError(null); setInviteOpen(true); }}><Send className="h-4 w-4" />Invite Member</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setIsAddOpen(true)}><Plus className="h-4 w-4" />Add Offline Member</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setArchivedMembersOpen(true)} disabled={visibleArchivedMembers.length === 0}>
+                    <RotateCcw className="h-4 w-4" />Archived Members{visibleArchivedMembers.length ? ` (${visibleArchivedMembers.length})` : ''}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setInviteManagerOpen(true)}><Clipboard className="h-4 w-4" />Manage Invite Links</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -492,6 +504,30 @@ export function ManagerMembersView() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={archivedMembersOpen} onOpenChange={setArchivedMembersOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Archived members</DialogTitle></DialogHeader>
+            <p className="text-sm text-muted-foreground">Historical meal and deposit records are preserved. Restore a member to add them back to the active roster.</p>
+            {visibleArchivedMembers.length === 0 ? (
+              <p className="py-5 text-center text-sm text-muted-foreground">No archived members.</p>
+            ) : (
+              <div className="max-h-[55vh] divide-y overflow-y-auto rounded-xl border">
+                {visibleArchivedMembers.map((member) => (
+                  <div key={member.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{member.name}</p>
+                      <p className="text-xs text-muted-foreground">Historical records retained</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => void restoreMember(member.id).catch((error) => console.error('Could not restore archived member:', error))}>
+                      <RotateCcw className="h-4 w-4" />Restore
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Member list / empty states */}
         {!activeCycle ? (
           <Card className="border-dashed border-2 flex flex-col items-center justify-center p-8 text-center bg-card/50 backdrop-blur-sm min-h-[350px] animate-in fade-in-50 duration-300">
@@ -514,7 +550,10 @@ export function ManagerMembersView() {
                 {memberCards.map((item) => {
                   if (item.type === 'deleted') {
                     const { ghost } = item;
-                    return <UndoDeleteGhost key={`deleted-${ghost.member.id}`} message={`Member '${ghost.member.name}' deleted.`} expiresAt={ghost.expiresAt} onUndo={() => void handleUndoMember(ghost.member.id)} onExpired={() => setDeletedMembers((prev) => prev.filter((entry) => entry.member.id !== ghost.member.id))} className="min-h-full"><MemberCard member={ghost.member} stats={ghost.stats} /></UndoDeleteGhost>;
+                    return <UndoDeleteGhost key={`deleted-${ghost.member.id}`} message={`Member '${ghost.member.name}' deleted.`} expiresAt={ghost.expiresAt} onUndo={() => void handleUndoMember(ghost.member.id)} onExpired={() => {
+                      setDeletedMembers((prev) => prev.filter((entry) => entry.member.id !== ghost.member.id));
+                      setCountdownMemberIds((prev) => { const next = new Set(prev); next.delete(ghost.member.id); return next; });
+                    }} className="min-h-full"><MemberCard member={ghost.member} stats={ghost.stats} /></UndoDeleteGhost>;
                   }
                   const stats = getMemberStats(item.member.id);
                   const linkedProfile = profiles.find((profile) => profile.id === item.member.profileId);
@@ -525,30 +564,6 @@ export function ManagerMembersView() {
             </SortableContext>
           </DndContext>
         )}
-
-        {canManageMembers && archivedMembers.length > 0 ? (
-          <Card>
-            <CardContent className="space-y-3 p-4 sm:p-5">
-              <div>
-                <h2 className="font-semibold">Archived members</h2>
-                <p className="text-sm text-muted-foreground">Their meal and deposit history is preserved. Restore one to add them back to the active roster.</p>
-              </div>
-              <div className="divide-y rounded-xl border">
-                {archivedMembers.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between gap-3 p-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{member.name}</p>
-                      <p className="text-xs text-muted-foreground">Historical records retained</p>
-                    </div>
-                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => void restoreMember(member.id).catch((error) => console.error('Could not restore archived member:', error))}>
-                      <RotateCcw className="h-4 w-4" />Restore
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
 
         <Dialog open={!!depositMemberId} onOpenChange={(open) => !open && setDepositMemberId(null)}>
           <DialogContent><DialogHeader><DialogTitle>Manage Deposit</DialogTitle></DialogHeader>
