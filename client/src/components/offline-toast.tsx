@@ -17,7 +17,7 @@
 
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { WifiOff, CloudUpload } from 'lucide-react';
+import { WifiOff, CloudUpload, AlertTriangle } from 'lucide-react';
 import { useNetworkStatus } from '@/lib/pwa';
 import { useMeal } from '@/lib/meal-context';
 
@@ -41,7 +41,7 @@ async function requestBackgroundSync() {
 
 export function OfflineToastManager() {
   const { isOnline } = useNetworkStatus();
-  const { triggerSync } = useMeal();
+  const { triggerSync, failedSyncOps, retryFailedSync, discardFailedSync } = useMeal();
   const prevOnlineRef = useRef(isOnline);
   const hasMountedRef = useRef(false);
 
@@ -120,6 +120,41 @@ export function OfflineToastManager() {
       void requestBackgroundSync();
     }
   }, [isOnline, triggerSync]);
+
+  // The service worker can wake an open client after Background Sync.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'TRIGGER_SYNC' && navigator.onLine) void triggerSync();
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [triggerSync]);
+
+  useEffect(() => {
+    const toastId = 'mealtrack-offline-failed-ops';
+    if (failedSyncOps.length === 0) {
+      toast.dismiss(toastId);
+      return;
+    }
+    const failed = failedSyncOps[0];
+    toast.error(
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{failedSyncOps.length} change{failedSyncOps.length === 1 ? '' : 's'} need attention</p>
+          <p className="text-xs text-muted-foreground">{failed.lastError ?? 'A saved offline change could not sync.'}</p>
+          <div className="mt-2 flex gap-2">
+            {failed.status !== 'conflict' && <button className="text-xs font-semibold underline" onClick={() => void retryFailedSync()}>Retry</button>}
+            <button className="text-xs text-muted-foreground underline" onClick={() => {
+              if (window.confirm(failed.status === 'conflict' ? 'Discard the stale offline change and reload the current expense? Your offline version will be lost.' : 'Discard this change? This cannot be undone.')) void discardFailedSync(failed.id);
+            }}>{failed.status === 'conflict' ? 'Discard & refresh' : 'Discard'}</button>
+          </div>
+        </div>
+      </div>,
+      { id: toastId, duration: Infinity, dismissible: false },
+    );
+  }, [failedSyncOps, retryFailedSync, discardFailedSync]);
 
   return null;
 }

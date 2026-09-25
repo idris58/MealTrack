@@ -8,7 +8,7 @@ import {
   enqueue,
   dequeueAll,
   removeFromQueue,
-  getPendingIds,
+  updateQueuedOp,
   type OfflineOp,
 } from './offline-queue';
 import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
@@ -134,6 +134,7 @@ export interface MealDataContextType {
   refreshing: boolean;
   stats: CycleDetails['stats'];
   pendingSyncIds: Set<string>;
+  failedSyncOps: OfflineOp[];
   dataError: string | null;
   getMemberStats: (memberId: string, cycleId?: string) => {
     mealCost: number;
@@ -186,6 +187,8 @@ export interface MealActionsContextType {
   loadMoreChangelogEntries: () => Promise<void>;
   /** Flush the offline queue against Supabase — called when back online. */
   triggerSync: () => Promise<void>;
+  retryFailedSync: () => Promise<void>;
+  discardFailedSync: (id: string) => Promise<void>;
   /** Retry the initial data load after a failure. */
   retryLoadData: () => void;
 }
@@ -455,6 +458,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [messId, setMessId] = useState<string | null>(null);
   const [pendingSyncIds, setPendingSyncIds] = useState<Set<string>>(new Set());
+  const [failedSyncOps, setFailedSyncOps] = useState<OfflineOp[]>([]);
   const isSyncingRef = useRef(false);
   const profilesMapRef = useRef<Map<string, ChangelogActor>>(new Map());
   const [dataError, setDataError] = useState<string | null>(null);
@@ -507,8 +511,12 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
   // Hydrate pendingSyncIds from IDB on mount so badges survive a page refresh
   useEffect(() => {
-    getPendingIds().then((ids) => {
-      if (ids.length > 0) setPendingSyncIds(new Set(ids));
+    dequeueAll().then((ops) => {
+      setPendingSyncIds(new Set(ops.filter((op) => op.status !== 'failed' && op.status !== 'conflict').map((op) => {
+        if ((op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string') return op.payload.id;
+        return op.id;
+      })));
+      setFailedSyncOps(ops.filter((op) => op.status === 'failed' || op.status === 'conflict'));
     }).catch(() => { /* non-fatal */ });
   }, []);
 
@@ -1379,6 +1387,14 @@ export function MealProvider({ children }: { children: ReactNode }) {
     if (changes.length === 0) {
       return;
     }
+    if (id.startsWith('offline-')) {
+      const queuedAdd = (await dequeueAll()).find((op) => op.type === 'ADD_EXPENSE' && op.id === id);
+      if (queuedAdd) {
+        await enqueue({ ...queuedAdd, payload: { ...queuedAdd.payload, ...updates, paidBy: updates.paidBy, date: updates.date ?? existingExpense.date } });
+        setAllExpenses((prev) => prev.map((expense) => expense.id === id ? { ...expense, ...updates, date: updates.date ?? expense.date } : expense));
+        return;
+      }
+    }
 
     // ── Offline path ──────────────────────────────────────────────────────────
     if (!navigator.onLine) {
@@ -1390,11 +1406,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
             : expense,
         ),
       );
-      setPendingSyncIds((prev) => new Set(prev).add(tempId));
+      setPendingSyncIds((prev) => new Set(prev).add(id));
       await enqueue({
         id: tempId,
         type: 'UPDATE_EXPENSE',
-        payload: { id, ...updates, date: updates.date ?? existingExpense.date, cycleId: existingExpense.cycleId, changes },
+        payload: { id, ...updates, date: updates.date ?? existingExpense.date, cycleId: existingExpense.cycleId, changes, expected: { amount: existingExpense.amount, description: existingExpense.description, type: existingExpense.type, paidBy: existingExpense.paidBy, date: existingExpense.date } },
         createdAt: Date.now(),
       });
       return;
@@ -1443,10 +1459,21 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const existingExpense = allExpenses.find((expense) => expense.id === id);
     if (!existingExpense) return;
 
+    if (id.startsWith('offline-')) {
+      const queued = await dequeueAll();
+      const related = queued.filter((op) => (op.type === 'ADD_EXPENSE' && op.id === id) || ((op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && op.payload.id === id));
+      if (related.some((op) => op.type === 'ADD_EXPENSE')) {
+        await Promise.all(related.map((op) => removeFromQueue(op.id)));
+        setPendingSyncIds((prev) => { const next = new Set(prev); related.forEach((op) => { next.delete(op.id); }); next.delete(id); return next; });
+        setAllExpenses((prev) => prev.filter((expense) => expense.id !== id));
+        return;
+      }
+    }
+
     if (!navigator.onLine) {
       const tempId = `offline-${uuidv4()}`;
       setAllExpenses((prev) => prev.filter((expense) => expense.id !== id));
-      setPendingSyncIds((prev) => new Set(prev).add(tempId));
+      setPendingSyncIds((prev) => new Set(prev).add(id));
       await enqueue({
         id: tempId,
         type: 'DELETE_EXPENSE',
@@ -1454,6 +1481,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           id, cycleId: existingExpense.cycleId, description: existingExpense.description,
           amount: existingExpense.amount, type: existingExpense.type, paidBy: existingExpense.paidBy,
           date: existingExpense.date, userId, messId,
+          expected: { amount: existingExpense.amount, description: existingExpense.description, type: existingExpense.type, paidBy: existingExpense.paidBy, date: existingExpense.date },
         },
         createdAt: Date.now(),
       });
@@ -1775,9 +1803,18 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     if (op.type === 'UPDATE_EXPENSE') {
-      const p = op.payload as { id: string; amount: number; description: string; type: 'meal' | 'fixed'; paidBy: string; date: string; cycleId: string; changes: ChangelogChange[] };
-      const { error } = await supabase.from('expenses').update({ amount: p.amount, description: p.description, type: p.type, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId);
+      const p = op.payload as { id: string; amount: number; description: string; type: 'meal' | 'fixed'; paidBy: string; date: string; cycleId: string; changes: ChangelogChange[]; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
+      if (readError) throw readError;
+      if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline change.');
+      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== p.expected.type || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
+        const conflict = new Error('This expense changed on another device. Review it before applying your offline edit.') as Error & { code?: string };
+        conflict.code = 'OFFLINE_CONFLICT';
+        throw conflict;
+      }
+      const { data: updated, error } = await supabase.from('expenses').update({ amount: p.amount, description: p.description, type: p.type, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId).select('id').maybeSingle();
       if (error) throw error;
+      if (!updated) throw new Error('The expense could not be found to update.');
       setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: p.type, paidBy: p.paidBy, date: p.date } : expense));
       setPendingSyncIds((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
       await recordChangelog({ cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'update', title: `Updated ${p.type} expense`, changes: p.changes });
@@ -1785,10 +1822,19 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     if (op.type === 'DELETE_EXPENSE') {
-      const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: 'meal' | 'fixed'; paidBy: string; date: string };
+      const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: 'meal' | 'fixed'; paidBy: string; date: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
+      if (readError) throw readError;
+      if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline deletion.');
+      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== p.expected.type || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
+        const conflict = new Error('This expense changed on another device. Review it before applying your offline deletion.') as Error & { code?: string };
+        conflict.code = 'OFFLINE_CONFLICT';
+        throw conflict;
+      }
       const now = new Date();
-      const { error } = await supabase.from('expenses').update({ deleted_at: now.toISOString(), delete_expires_at: new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString() }).eq('id', p.id).eq('mess_id', messId).is('deleted_at', null);
+      const { data: deleted, error } = await supabase.from('expenses').update({ deleted_at: now.toISOString(), delete_expires_at: new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString() }).eq('id', p.id).eq('mess_id', messId).is('deleted_at', null).select('id').maybeSingle();
       if (error) throw error;
+      if (!deleted) throw new Error('The expense could not be found to delete.');
       await recordChangelog({
         cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'delete', title: `Deleted ${p.type} expense`,
         changes: [buildSnapshotChange('description', 'Description', p.description), buildSnapshotChange('amount', 'Amount', p.amount), buildSnapshotChange('type', 'Type', p.type), buildSnapshotChange('paid_by', 'Paid By', p.paidBy), buildSnapshotChange('date', 'Date', p.date)],
@@ -1841,7 +1887,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     isSyncingRef.current = true;
 
     try {
-      const ops = await dequeueAll();
+      const ops = (await dequeueAll()).filter((op) => op.status !== 'failed' && op.status !== 'conflict');
       if (ops.length === 0) return;
 
       for (const op of ops) {
@@ -1855,6 +1901,20 @@ export function MealProvider({ children }: { children: ReactNode }) {
           });
         } catch (err) {
           console.error(`[offline-sync] Failed to replay op ${op.id}:`, err);
+          const error = err as Error & { code?: string };
+          const attempts = (op.attempts ?? 0) + 1;
+          const failedOp: OfflineOp = {
+            ...op,
+            attempts,
+            status: error.code === 'OFFLINE_CONFLICT' ? 'conflict' : attempts >= 5 ? 'failed' : 'pending',
+            lastError: error.message || 'Unable to sync this change.',
+          };
+          await updateQueuedOp(failedOp);
+          if (failedOp.status === 'failed' || failedOp.status === 'conflict') {
+            setFailedSyncOps((prev) => [...prev.filter((item) => item.id !== op.id), failedOp]);
+            const itemId = (op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string' ? op.payload.id : op.id;
+            setPendingSyncIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
+          }
         }
       }
 
@@ -1864,6 +1924,29 @@ export function MealProvider({ children }: { children: ReactNode }) {
       isSyncingRef.current = false;
     }
   }, [replayOp, loadData]);
+
+  const retryFailedSync = useCallback(async () => {
+    const failed = await dequeueAll();
+    const targets = failed.filter((op) => op.status === 'failed');
+    for (const op of targets) {
+      const retry = { ...op, attempts: 0, status: 'pending' as const, lastError: undefined };
+      await updateQueuedOp(retry);
+      const itemId = (op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string' ? op.payload.id : op.id;
+      setPendingSyncIds((prev) => new Set(prev).add(itemId));
+    }
+    setFailedSyncOps((prev) => prev.filter((op) => op.status === 'conflict'));
+    await triggerSync();
+  }, [triggerSync]);
+
+  const discardFailedSync = useCallback(async (id: string) => {
+    const op = (await dequeueAll()).find((item) => item.id === id);
+    if (!op) return;
+    await removeFromQueue(id);
+    const itemId = (op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string' ? op.payload.id : op.id;
+    setPendingSyncIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
+    setFailedSyncOps((prev) => prev.filter((item) => item.id !== id));
+    void loadData();
+  }, [loadData]);
 
   const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !activeCycle) return;
@@ -2215,6 +2298,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     refreshing,
     stats,
     pendingSyncIds,
+    failedSyncOps,
     dataError,
     getMemberStats,
     getCycleDetails,
@@ -2237,6 +2321,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     refreshing,
     stats,
     pendingSyncIds,
+    failedSyncOps,
     dataError,
     getMemberStats,
     getCycleDetails,
@@ -2267,6 +2352,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     loadCycleDetails,
     loadMoreChangelogEntries,
     triggerSync,
+    retryFailedSync,
+    discardFailedSync,
     retryLoadData,
   }), [
     addMember,
@@ -2291,6 +2378,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     loadCycleDetails,
     loadMoreChangelogEntries,
     triggerSync,
+    retryFailedSync,
+    discardFailedSync,
     retryLoadData,
   ]);
 

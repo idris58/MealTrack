@@ -21,6 +21,9 @@ export interface OfflineOp {
   type: OfflineOpType;
   payload: Record<string, unknown>;
   createdAt: number;    // Date.now()
+  attempts?: number;
+  status?: 'pending' | 'failed' | 'conflict';
+  lastError?: string;
 }
 
 const DB_NAME = 'mealtrack-offline';
@@ -98,6 +101,11 @@ export async function getPendingIds(): Promise<string[]> {
     req.onsuccess = () => resolve(req.result as string[]);
     req.onerror = () => reject(req.error);
   });
+}
+
+/** Persist retry/dead-letter metadata without removing the user's queued change. */
+export async function updateQueuedOp(op: OfflineOp): Promise<void> {
+  return enqueue(op);
 }
 
 /** Clear the entire queue (use carefully — only after a successful full sync). */
