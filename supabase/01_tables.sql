@@ -21,7 +21,7 @@ alter table public.profiles
 create table if not exists public.messes (
   id uuid primary key default gen_random_uuid(),
   name text not null check (length(trim(name)) > 0),
-  creator_id uuid not null references public.profiles(id) on delete restrict,
+  creator_id uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -42,7 +42,7 @@ create table if not exists public.members (
   name text not null,
   avatar text,
   created_at timestamptz default now(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   mess_id uuid references public.messes(id) on delete set null,
   profile_id uuid references public.profiles(id) on delete set null,
   deleted_at timestamptz,
@@ -52,7 +52,7 @@ create table if not exists public.members (
 
 create table if not exists public.cycles (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   name text not null,
   status text not null check (status in ('active', 'pending', 'closed')),
   started_at timestamptz not null default now(),
@@ -74,7 +74,7 @@ create table if not exists public.expenses (
   paid_by text not null,
   date date default current_date,
   created_at timestamptz default now(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   cycle_id uuid references public.cycles(id) on delete cascade,
   mess_id uuid references public.messes(id) on delete set null,
   profile_id uuid references public.profiles(id) on delete set null,
@@ -88,7 +88,7 @@ create table if not exists public.meal_logs (
   date date not null,
   count decimal(4, 2) not null default 0,
   created_at timestamptz default now(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   cycle_id uuid references public.cycles(id) on delete cascade,
   mess_id uuid references public.messes(id) on delete set null,
   profile_id uuid references public.profiles(id) on delete set null,
@@ -97,7 +97,7 @@ create table if not exists public.meal_logs (
 
 create table if not exists public.cycle_deposits (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   cycle_id uuid not null references public.cycles(id) on delete cascade,
   member_id uuid not null references public.members(id) on delete cascade,
   amount numeric not null,
@@ -109,7 +109,7 @@ create table if not exists public.cycle_deposits (
 
 create table if not exists public.changelog_entries (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   cycle_id uuid not null references public.cycles(id) on delete cascade,
   entity_type text not null check (entity_type in ('member', 'expense', 'meal_log', 'deposit')),
   entity_id uuid not null,
@@ -123,7 +123,7 @@ create table if not exists public.changelog_entries (
 
 create table if not exists public.notices (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   title text not null,
   content text not null,
   expires_at timestamptz not null,
@@ -133,7 +133,7 @@ create table if not exists public.notices (
 );
 
 create table if not exists public.share_links (
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   token text not null unique,
   is_enabled boolean not null default false,
   created_at timestamptz not null default now(),
@@ -144,7 +144,7 @@ create table if not exists public.share_links (
 
 create table if not exists public.push_subscriptions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   audience text not null check (audience in ('main', 'shared')),
   share_token text,
   endpoint text not null,
@@ -160,7 +160,7 @@ create table if not exists public.push_subscriptions (
 
 create table if not exists public.notification_deliveries (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete set null,
   type text not null check (type in ('meal_log_reminder', 'notice_posted')),
   dedupe_key text not null,
   sent_at timestamptz not null default now(),
@@ -172,7 +172,7 @@ create table if not exists public.member_invites (
   id uuid primary key default gen_random_uuid(),
   mess_id uuid not null references public.messes(id) on delete cascade,
   target_member_id uuid references public.members(id) on delete set null,
-  created_by_profile_id uuid not null references public.profiles(id) on delete restrict,
+  created_by_profile_id uuid references public.profiles(id) on delete set null,
   expires_at timestamptz not null default (now() + interval '7 days'),
   claimed_by_profile_id uuid references public.profiles(id) on delete set null,
   claimed_at timestamptz,

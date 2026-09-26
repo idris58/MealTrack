@@ -1,5 +1,53 @@
 -- Consolidated indexes and uniqueness rules.
 -- Remove uniqueness rules superseded by the final multi-mess model.
+
+-- user_id is retained as nullable audit/legacy attribution. Mess-owned rows
+-- must survive deletion of the operator account; ownership is mess_id/profile_id.
+do $$
+declare
+  table_name text;
+  constraint_name text;
+begin
+  foreach table_name in array array[
+    'members', 'cycles', 'expenses', 'meal_logs', 'cycle_deposits',
+    'changelog_entries', 'notices', 'share_links', 'push_subscriptions',
+    'notification_deliveries'
+  ] loop
+    execute format('alter table public.%I alter column user_id drop not null', table_name);
+    for constraint_name in
+      select c.conname
+      from pg_constraint c
+      where c.conrelid = format('public.%I', table_name)::regclass
+        and c.contype = 'f'
+        and c.confrelid = 'auth.users'::regclass
+        and exists (
+          select 1
+          from unnest(c.conkey) as key(attnum)
+          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = key.attnum
+          where a.attname = 'user_id'
+        )
+    loop
+      execute format('alter table public.%I drop constraint %I', table_name, constraint_name);
+    end loop;
+    execute format(
+      'alter table public.%I add constraint %I foreign key (user_id) references auth.users(id) on delete set null',
+      table_name,
+      table_name || '_user_id_fkey'
+    );
+  end loop;
+end $$;
+
+-- Account deletion must not be blocked by mess creator/invite audit links.
+alter table public.messes alter column creator_id drop not null;
+alter table public.messes drop constraint if exists messes_creator_id_fkey;
+alter table public.messes add constraint messes_creator_id_fkey
+  foreign key (creator_id) references public.profiles(id) on delete set null;
+
+alter table public.member_invites alter column created_by_profile_id drop not null;
+alter table public.member_invites drop constraint if exists member_invites_created_by_profile_id_fkey;
+alter table public.member_invites add constraint member_invites_created_by_profile_id_fkey
+  foreign key (created_by_profile_id) references public.profiles(id) on delete set null;
+
 drop index if exists public.cycles_one_active_per_user_idx;
 drop index if exists public.cycles_one_pending_per_user_idx;
 drop index if exists public.cycles_user_name_unique_idx;
