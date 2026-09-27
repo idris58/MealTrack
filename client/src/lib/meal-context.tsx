@@ -573,6 +573,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const snapshotMembers = (snapshot && cycle.status !== 'active' ? snapshot : memberRoster).map((member) => {
       cycleMemberIds.add(member.id);
       return {
+        ...member,
         id: member.id,
         name: member.name,
         deposit: 0,

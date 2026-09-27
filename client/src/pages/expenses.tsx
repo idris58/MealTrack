@@ -15,7 +15,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -147,13 +146,30 @@ function ExpenseEditor({
           render={({ field }) => (
             <FormItem>
               <FormLabel>Expense Type</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
-                <SelectContent>
-                  <SelectItem value="meal">Meal (Grocery/Food)</SelectItem>
-                  <SelectItem value="fixed">Fixed (Bills/Utilities)</SelectItem>
-                </SelectContent>
-              </Select>
+              <FormControl>
+                <div role="radiogroup" aria-label="Expense type" className="grid grid-cols-2 rounded-xl border bg-muted/40 p-1">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={field.value === 'meal'}
+                    onClick={() => field.onChange('meal')}
+                    className={cn('rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors', field.value === 'meal' ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground')}
+                  >
+                    <ShoppingBag className="mr-1.5 inline-block h-4 w-4" />Meal
+                    <span className="ml-1 hidden text-xs font-normal opacity-80 sm:inline">(Food)</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={field.value === 'fixed'}
+                    onClick={() => field.onChange('fixed')}
+                    className={cn('rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors', field.value === 'fixed' ? 'bg-slate-700 text-white shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground')}
+                  >
+                    <Zap className="mr-1.5 inline-block h-4 w-4" />Fixed
+                    <span className="ml-1 hidden text-xs font-normal opacity-80 sm:inline">(Bills)</span>
+                  </button>
+                </div>
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
