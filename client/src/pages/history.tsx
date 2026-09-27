@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { MealLogTable } from '@/components/meal-log-table';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { MealCountEditor } from '@/components/meal-count-editor';
+import { ExpenseForm } from '@/components/expense-form';
 
 function formatCurrency(amount: number) {
   return `৳${amount.toFixed(2)}`;
@@ -725,9 +726,11 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
         <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
           <DialogContent>
             <DialogHeader><DialogTitle>{editingExpense ? 'Edit Expense' : 'Add Expense Correction'}</DialogTitle></DialogHeader>
-            <PendingExpenseEditor
+            <ExpenseForm
+              mode={editingExpense ? 'edit' : 'create'}
               cycleId={details.cycle.id}
               expense={editingExpense}
+              allowNegativeAmount
               onDeleted={handleExpenseDeleted}
               onClose={() => {
                 setExpenseDialogOpen(false);

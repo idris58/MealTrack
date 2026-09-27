@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { SyncBadge } from '@/components/sync-badge';
+import { ExpenseForm } from '@/components/expense-form';
 
 const DELETE_GRACE_MS = 10 * 1000;
 
@@ -365,7 +366,7 @@ export default function Expenses() {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader><DialogTitle>Add New Expense</DialogTitle></DialogHeader>
-                <ExpenseEditor onClose={() => setOpenExpense(false)} />
+        <ExpenseForm mode="create" onClose={() => setOpenExpense(false)} />
               </DialogContent>
             </Dialog>
           ) : null}
@@ -529,7 +530,8 @@ export default function Expenses() {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
           {editingExpense ? (
-            <ExpenseEditor
+            <ExpenseForm
+              mode="edit"
               expense={editingExpense}
               onDeleted={handleExpenseDeleted}
               onClose={() => setEditingExpense(null)}

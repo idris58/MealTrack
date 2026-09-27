@@ -26,6 +26,7 @@ import { DashboardFab } from '@/components/dashboard-fab';
 import { format } from 'date-fns';
 import { Link } from 'wouter';
 import { MealCountEditor } from '@/components/meal-count-editor';
+import { ExpenseForm } from '@/components/expense-form';
 import { DashboardAnalytics } from '@/components/dashboard-analytics';
 
 const expenseSchema = z.object({
@@ -326,7 +327,7 @@ export function ManagerDashboard() {
             </DialogTitle>
             <DialogDescription>Record a grocery, meal, or utility expense for this active cycle.</DialogDescription>
           </DialogHeader>
-          <QuickAddExpense onClose={() => setOpenExpense(false)} />
+          <ExpenseForm mode="create" onClose={() => setOpenExpense(false)} />
         </DialogContent>
       </Dialog>
 
