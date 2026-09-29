@@ -77,6 +77,8 @@ type RateRow = {
 type InsightTone = 'positive' | 'warning' | 'attention' | 'neutral';
 type Insight = { icon: typeof Info; title: string; detail: string; tone: InsightTone };
 
+const MIN_TREND_MEALS = 10;
+
 function dateKey(value: string) {
   return format(parseISO(value), 'yyyy-MM-dd');
 }
@@ -168,15 +170,20 @@ function buildRateSeries(dateKeys: string[], expenses: Expense[], mealLogs: Meal
     };
   });
 
-  // Outlier smoothing: when meals are minimal on Day 1-3, rates can spike to >3x the eventual average.
-  // We identify the stabilized rate and clamp initial wild spikes for visual clarity while keeping accurate latest rate.
-  const validRates = rawRows.filter((r) => r.rawRate !== null && r.cumulativeMeals >= 5);
-  const benchmarkRate = validRates.length > 0 ? validRates[validRates.length - 1].rawRate! : null;
+  // Early rates are unreliable when only a handful of meals have been logged. Keep
+  // those points out of the plotted series so one initial expense cannot flatten
+  // the useful trend for the rest of the cycle.
+  const reliableRates = rawRows.filter((r) => r.rawRate !== null && r.cumulativeMeals >= MIN_TREND_MEALS);
+  const hasReliableRate = reliableRates.length > 0;
+  const benchmarkRate = (hasReliableRate ? reliableRates[reliableRates.length - 1] : rawRows.find((r) => r.rawRate !== null))?.rawRate ?? null;
 
   return rawRows.map((row) => {
     if (row.rawRate === null) return row;
-    if (benchmarkRate && row.cumulativeMeals < 5 && row.rawRate > benchmarkRate * 2.5) {
-      // Clamp smoothed display rate to max 2.2x benchmark for the initial few meals so chart stays readable
+    if (hasReliableRate && row.cumulativeMeals < MIN_TREND_MEALS) {
+      return { ...row, rate: null };
+    }
+    if (benchmarkRate && row.cumulativeMeals < MIN_TREND_MEALS * 2 && row.rawRate > benchmarkRate * 2.5) {
+      // Keep a short-lived early spike from dominating the chart scale.
       return { ...row, rate: Math.min(row.rawRate, benchmarkRate * 2.2) };
     }
     return row;
@@ -213,11 +220,11 @@ function buildInsights(
   stats: { totalDeposits: number; remainingCash: number; totalMealExpenses: number; totalFixedExpenses: number; currentMealRate: number }
 ): Insight[] {
   const insights: Insight[] = [];
-  const validRates = rateSeries.filter((item) => item.rawRate !== null);
+  const validRates = rateSeries.filter((item) => item.rate !== null);
 
   if (validRates.length >= 2) {
-    const current = validRates[validRates.length - 1].rawRate ?? 0;
-    const previous = validRates[validRates.length - 2].rawRate ?? current;
+    const current = validRates[validRates.length - 1].rate ?? 0;
+    const previous = validRates[validRates.length - 2].rate ?? current;
     const change = previous ? ((current - previous) / previous) * 100 : 0;
     if (Math.abs(change) >= 0.5) {
       insights.push({
@@ -297,9 +304,9 @@ export function DashboardAnalytics() {
     [rateSeries, periods, expenses, mealLogs, memberBalances, stats]
   );
 
-  const validRates = rateSeries.filter((item) => item.rawRate !== null);
-  const minRate = validRates.length ? Math.min(...validRates.map((r) => r.rawRate!)) : 0;
-  const maxRate = validRates.length ? Math.max(...validRates.map((r) => r.rawRate!)) : 0;
+  const validRates = rateSeries.filter((item) => item.rate !== null);
+  const minRate = validRates.length ? Math.min(...validRates.map((r) => r.rate!)) : 0;
+  const maxRate = validRates.length ? Math.max(...validRates.map((r) => r.rate!)) : 0;
 
   const totalCycleExpenses = stats.totalMealExpenses + stats.totalFixedExpenses;
   const pieData = [
@@ -378,7 +385,7 @@ export function DashboardAnalytics() {
                   <Utensils className="h-4 w-4 text-emerald-500" />
                   Meal Rate Trend
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">Cumulative effective rate over the cycle</p>
+                <p className="text-xs text-muted-foreground">Stabilized effective rate over the cycle</p>
               </div>
               {validRates.length > 0 && (
                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-md">
