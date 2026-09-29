@@ -5,6 +5,7 @@ import {
   CalendarIcon,
   ClipboardCopy,
   Download,
+  FileBarChart,
   FileImage,
   FileSpreadsheet,
   FileText,
@@ -522,22 +523,15 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* ── Page header ── */}
-      <header className="relative overflow-hidden rounded-2xl border p-4 sm:p-7 shadow-sm" style={{ backgroundImage: `linear-gradient(135deg, ${INK} 0%, ${INK_SOFT} 60%, #0A1B17 100%)` }}>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-8 -top-10 select-none font-heading text-[9rem] font-bold leading-none opacity-[0.06]"
-          style={{ color: GOLD }}
-        >
-          M
-        </div>
-        <div className="relative flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl font-heading text-lg font-bold shadow-md" style={{ backgroundColor: GOLD, color: INK }}>
-              M
+      <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 shadow-sm sm:p-7">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 sm:h-11 sm:w-11 sm:rounded-2xl">
+              <FileBarChart className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl font-bold font-heading tracking-tight text-white sm:text-3xl truncate">Reports</h1>
-              <p className="hidden sm:block mt-1 text-sm leading-6" style={{ color: GOLD_SOFT }}>
+              <h1 className="truncate text-xl font-bold font-heading tracking-tight sm:text-3xl">Reports</h1>
+              <p className="mt-1 hidden text-sm leading-6 text-muted-foreground sm:block">
                 Premium statements and exports, ready to share with your mess.
               </p>
             </div>
