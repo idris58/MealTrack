@@ -174,12 +174,11 @@ function buildRateSeries(dateKeys: string[], expenses: Expense[], mealLogs: Meal
   // those points out of the plotted series so one initial expense cannot flatten
   // the useful trend for the rest of the cycle.
   const reliableRates = rawRows.filter((r) => r.rawRate !== null && r.cumulativeMeals >= MIN_TREND_MEALS);
-  const hasReliableRate = reliableRates.length > 0;
-  const benchmarkRate = (hasReliableRate ? reliableRates[reliableRates.length - 1] : rawRows.find((r) => r.rawRate !== null))?.rawRate ?? null;
+  const benchmarkRate = reliableRates[reliableRates.length - 1]?.rawRate ?? null;
 
   return rawRows.map((row) => {
     if (row.rawRate === null) return row;
-    if (hasReliableRate && row.cumulativeMeals < MIN_TREND_MEALS) {
+    if (row.cumulativeMeals < MIN_TREND_MEALS) {
       return { ...row, rate: null };
     }
     if (benchmarkRate && row.cumulativeMeals < MIN_TREND_MEALS * 2 && row.rawRate > benchmarkRate * 2.5) {
@@ -198,6 +197,31 @@ function EmptyChart({ message, subtext }: { message: string; subtext?: string })
       </div>
       <p className="text-sm font-semibold text-foreground">{message}</p>
       <p className="mt-1 text-xs text-muted-foreground">{subtext || 'Add meal and expense logs to unlock analytics.'}</p>
+    </div>
+  );
+}
+
+function RateTrendWarmup({ totalMeals }: { totalMeals: number }) {
+  const progress = Math.min(100, (totalMeals / MIN_TREND_MEALS) * 100);
+  const remainingMeals = Math.max(0, MIN_TREND_MEALS - totalMeals);
+
+  return (
+    <div className="flex h-[240px] flex-col items-center justify-center rounded-xl border border-dashed bg-muted/10 px-6 text-center">
+      <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Utensils className="h-5 w-5" />
+      </div>
+      <p className="text-sm font-semibold text-foreground">Building your meal-rate trend</p>
+      <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+        Log {mealCount(remainingMeals)} more meal{remainingMeals === 1 ? '' : 's'} to unlock a reliable rate trend.
+      </p>
+      <div className="mt-4 w-48">
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+        </div>
+        <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+          {mealCount(totalMeals)} of {MIN_TREND_MEALS} meals logged
+        </p>
+      </div>
     </div>
   );
 }
@@ -307,6 +331,7 @@ export function DashboardAnalytics() {
   const validRates = rateSeries.filter((item) => item.rate !== null);
   const minRate = validRates.length ? Math.min(...validRates.map((r) => r.rate!)) : 0;
   const maxRate = validRates.length ? Math.max(...validRates.map((r) => r.rate!)) : 0;
+  const totalLoggedMeals = mealLogs.reduce((total, log) => total + log.count, 0);
 
   const totalCycleExpenses = stats.totalMealExpenses + stats.totalFixedExpenses;
   const pieData = [
@@ -437,6 +462,8 @@ export function DashboardAnalytics() {
                     </AreaChart>
                   </ChartContainer>
                 </div>
+              ) : totalLoggedMeals > 0 ? (
+                <RateTrendWarmup totalMeals={totalLoggedMeals} />
               ) : (
                 <EmptyChart message="No meal rate data logged yet" />
               )}
