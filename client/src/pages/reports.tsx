@@ -532,7 +532,7 @@ export default function ReportsPage() {
             <div className="min-w-0">
               <h1 className="truncate text-xl font-bold font-heading tracking-tight sm:text-3xl">Reports</h1>
               <p className="mt-1 hidden text-sm leading-6 text-muted-foreground sm:block">
-                Premium statements and exports, ready to share with your mess.
+                Review cycle performance, member balances, and downloadable statements.
               </p>
             </div>
           </div>
