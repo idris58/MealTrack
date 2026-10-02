@@ -209,9 +209,22 @@ function MemberCard({
           {(onDeposit || canManageRoles) ? (
             <div className="flex items-center gap-2 pt-1">
               {onDeposit ? (
-                <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', canManageRoles ? 'shrink-0' : 'w-full')} onClick={onDeposit} disabled={depositDisabled} title={depositDisabled ? 'Start a cycle to manage deposits' : undefined}>
-                  <Wallet className="h-4 w-4 shrink-0" /><span>Deposit</span>
-                </Button>
+                depositDisabled ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0} className={cn('inline-flex', canManageRoles ? 'shrink-0' : 'w-full')}>
+                        <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', canManageRoles ? 'shrink-0' : 'w-full')} disabled>
+                          <Wallet className="h-4 w-4 shrink-0" /><span>Deposit</span>
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Start a cycle first to record this member&apos;s deposits.</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', canManageRoles ? 'shrink-0' : 'w-full')} onClick={onDeposit}>
+                    <Wallet className="h-4 w-4 shrink-0" /><span>Deposit</span>
+                  </Button>
+                )
               ) : null}
               {canManageRoles ? (
                 onCoordinatorAction && profileRole !== 'manager' ? (
