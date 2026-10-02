@@ -21,9 +21,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Check, ChevronDown, Clipboard, Clock3, Copy, GripVertical, Link2, Link2Off,
-  Plus, RotateCcw, Send, ShieldCheck, Trash2, Wallet, Users, Play,
+  Plus, RotateCcw, Send, ShieldCheck, Trash2, Wallet, Users,
 } from 'lucide-react';
-import { Link } from 'wouter';
 import {
   DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter,
   useSensor, useSensors, type DragEndEvent,
@@ -131,11 +130,13 @@ function DepositForm({ memberId, onClose }: { memberId: string; onClose: () => v
 function MemberCard({
   member, stats, deletingMemberId, onDeposit, onDelete, profileRole,
   onCoordinatorAction, canManageRoles = false, isLinked = false, dragHandleProps, isDragging = false,
+  depositDisabled = false,
 }: {
   member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null;
   onDeposit?: () => void; onDelete?: () => void;
   profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void;
   canManageRoles?: boolean; isLinked?: boolean; dragHandleProps?: any; isDragging?: boolean;
+  depositDisabled?: boolean;
 }) {
   return (
     <Card className={`overflow-hidden transition-shadow ${isDragging ? 'shadow-xl ring-2 ring-primary/30' : ''}`}>
@@ -165,7 +166,7 @@ function MemberCard({
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete this member?</AlertDialogTitle>
-                  <AlertDialogDescription>This will remove {member.name} and also delete their meal logs and deposits.</AlertDialogDescription>
+                  <AlertDialogDescription>{member.name} will be removed from the active mess roster. Existing meal and deposit history is preserved, and you can undo this during the countdown.</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -208,7 +209,7 @@ function MemberCard({
           {(onDeposit || canManageRoles) ? (
             <div className="flex items-center gap-2 pt-1">
               {onDeposit ? (
-                <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', canManageRoles ? 'shrink-0' : 'w-full')} onClick={onDeposit}>
+                <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', canManageRoles ? 'shrink-0' : 'w-full')} onClick={onDeposit} disabled={depositDisabled} title={depositDisabled ? 'Start a cycle to manage deposits' : undefined}>
                   <Wallet className="h-4 w-4 shrink-0" /><span>Deposit</span>
                 </Button>
               ) : null}
@@ -240,17 +241,18 @@ function MemberCard({
 }
 
 function SortableMemberCard({
-  member, stats, deletingMemberId, onDeposit, onDelete, profileRole, onCoordinatorAction, canManageRoles, canManageMembers, isLinked,
+  member, stats, deletingMemberId, onDeposit, onDelete, profileRole, onCoordinatorAction, canManageRoles, canManageMembers, isLinked, depositDisabled,
 }: {
   member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null;
   onDeposit?: () => void; onDelete?: () => void;
   profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void;
   canManageRoles?: boolean; canManageMembers?: boolean; isLinked?: boolean;
+  depositDisabled?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: member.id, disabled: !canManageMembers });
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1 : undefined }} className={isDragging ? 'opacity-80' : undefined} {...attributes}>
-      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} dragHandleProps={canManageMembers ? { ref: setActivatorNodeRef, ...listeners } : undefined} />
+      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} depositDisabled={depositDisabled} dragHandleProps={canManageMembers ? { ref: setActivatorNodeRef, ...listeners } : undefined} />
     </div>
   );
 }
@@ -419,7 +421,7 @@ export function ManagerMembersView() {
             {canManageMembers ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" disabled={!activeCycle} className="shrink-0 gap-1.5 whitespace-nowrap shadow-sm sm:h-9">
+                  <Button size="sm" className="shrink-0 gap-1.5 whitespace-nowrap shadow-sm sm:h-9">
                     <Plus className="h-4 w-4" /><span className="hidden sm:inline">Manage </span>Member<ChevronDown className="h-3.5 w-3.5 opacity-80" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -529,18 +531,11 @@ export function ManagerMembersView() {
         </Dialog>
 
         {/* Member list / empty states */}
-        {!activeCycle ? (
-          <Card className="border-dashed border-2 flex flex-col items-center justify-center p-8 text-center bg-card/50 backdrop-blur-sm min-h-[350px] animate-in fade-in-50 duration-300">
-            <div className="rounded-full bg-gradient-to-br from-primary/10 to-primary/5 p-4 mb-4 ring-8 ring-primary/5 text-primary"><Play className="h-10 w-10 text-primary animate-pulse" /></div>
-            <h3 className="font-heading text-lg font-bold text-foreground">No Active Cycle</h3>
-            <p className="text-muted-foreground text-sm max-w-sm mt-2 mb-6 leading-relaxed">You must start an active cycle before managing members.</p>
-            <Link href="/app/settings"><Button className="gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform bg-primary hover:bg-primary/95 text-primary-foreground font-semibold"><Plus className="h-4 w-4" />Start New Cycle</Button></Link>
-          </Card>
-        ) : members.length === 0 ? (
+        {members.length === 0 ? (
           <Card className="border-dashed border-2 flex flex-col items-center justify-center p-8 text-center bg-card/50 backdrop-blur-sm min-h-[350px] animate-in fade-in-50 duration-300">
             <div className="rounded-full bg-gradient-to-br from-primary/10 to-primary/5 p-4 mb-4 ring-8 ring-primary/5 text-primary"><Users className="h-10 w-10 text-primary animate-pulse" /></div>
-            <h3 className="font-heading text-lg font-bold text-foreground">No members in this cycle</h3>
-            <p className="text-muted-foreground text-sm max-w-sm mt-2 mb-6 leading-relaxed">Add roommates, family members, or mess colleagues to start tracking their meals, deposits, and shared expenses.</p>
+            <h3 className="font-heading text-lg font-bold text-foreground">No members in this mess yet</h3>
+            <p className="text-muted-foreground text-sm max-w-sm mt-2 mb-6 leading-relaxed">Add people to your mess roster anytime. Meal and deposit tracking will be available when a cycle is active.</p>
             <Button className="gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform bg-primary hover:bg-primary/95 text-primary-foreground font-semibold" onClick={() => setIsAddOpen(true)}><Plus className="h-4 w-4" />Add Your First Member</Button>
           </Card>
         ) : (
@@ -558,7 +553,7 @@ export function ManagerMembersView() {
                   const stats = getMemberStats(item.member.id);
                   const linkedProfile = profiles.find((profile) => profile.id === item.member.profileId);
                   const coordinatorAction = canManageRoles && linkedProfile && linkedProfile.role !== 'manager' ? () => void toggleCoordinator(linkedProfile.id, linkedProfile.role === 'coordinator' ? 'member' : 'coordinator') : undefined;
-                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} />;
+                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} />;
                 })}
               </div>
             </SortableContext>
