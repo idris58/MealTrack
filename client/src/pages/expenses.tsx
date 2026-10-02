@@ -276,7 +276,8 @@ type TabFilter = 'all' | 'meal' | 'fixed';
 
 export default function Expenses() {
   const { expenses, restoreExpense, activeCycle } = useMeal();
-  const { canManageExpenses } = useAuth();
+  const { canManageExpenses, profile } = useAuth();
+  const isMember = profile?.role === 'member';
   const [openExpense, setOpenExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [deletedExpenses, setDeletedExpenses] = useState<DeletedExpenseGhost[]>([]);
@@ -446,18 +447,22 @@ export default function Expenses() {
       {!activeCycle ? (
         <Card className="border-dashed border-2 flex flex-col items-center justify-center p-8 text-center bg-card/50 backdrop-blur-sm min-h-[350px] animate-in fade-in-50 duration-300">
           <div className="rounded-full bg-gradient-to-br from-primary/10 to-primary/5 p-4 mb-4 ring-8 ring-primary/5 text-primary">
-            <Play className="h-10 w-10 text-primary animate-pulse" />
+            {isMember ? <ShoppingBag className="h-10 w-10 text-primary" /> : <Play className="h-10 w-10 text-primary animate-pulse" />}
           </div>
-          <h3 className="font-heading text-lg font-bold text-foreground">No Active Cycle</h3>
+          <h3 className="font-heading text-lg font-bold text-foreground">{isMember ? 'Expenses will appear here' : 'No Active Cycle'}</h3>
           <p className="text-muted-foreground text-sm max-w-sm mt-2 mb-6 leading-relaxed">
-            You must start an active cycle before adding expenses.
+            {isMember
+              ? 'There is no active mess cycle right now. Ask your manager or coordinator to start one, and shared expenses will appear here.'
+              : 'You must start an active cycle before adding expenses.'}
           </p>
-          <Link href="/app/settings">
-            <Button className="gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform bg-primary hover:bg-primary/95 text-primary-foreground font-semibold">
-              <Plus className="h-4 w-4" />
-              Start New Cycle
-            </Button>
-          </Link>
+          {!isMember ? (
+            <Link href="/app/settings">
+              <Button className="gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform bg-primary hover:bg-primary/95 text-primary-foreground font-semibold">
+                <Plus className="h-4 w-4" />
+                Start New Cycle
+              </Button>
+            </Link>
+          ) : null}
         </Card>
       ) : allExpenses.length === 0 ? (
         <Card className="border-dashed border-2 flex flex-col items-center justify-center p-8 text-center bg-card/50 backdrop-blur-sm min-h-[300px] animate-in fade-in-50 duration-300">
