@@ -13,24 +13,20 @@
  * – Unlinked profile fallback
  */
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { format, isToday, isYesterday, parseISO, differenceInDays } from 'date-fns';
 import { useAuth } from '@/lib/auth-context';
-import { useMeal, type CycleDeposit, type Cycle } from '@/lib/meal-context';
+import { useMeal, type CycleDeposit } from '@/lib/meal-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import {
-  Wallet, TrendingUp, ArrowUpDown, Search, Copy, Check, ChevronDown,
+  Wallet, TrendingUp, ArrowUpDown, Search, Copy, Check,
   AlertCircle, ArrowUp, ArrowDown, Repeat2, Info, MessageCircle,
-  ShoppingBag, Utensils, Banknote, RefreshCw,
+  ShoppingBag, Utensils, Banknote,
 } from 'lucide-react';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup,
-  DropdownMenuRadioItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,38 +86,6 @@ function UnlinkedState({ name }: { name: string }) {
 
 // ── Cycle Selector ────────────────────────────────────────────────────────────
 
-function CycleSelector({
-  cycles, selected, onChange,
-}: { cycles: Cycle[]; selected: string; onChange: (id: string) => void }) {
-  const selectedCycle = cycles.find((c) => c.id === selected);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs font-semibold">
-          <RefreshCw className="h-3 w-3" />
-          <span className="max-w-28 truncate">{selectedCycle?.name ?? 'Select Cycle'}</span>
-          <ChevronDown className="h-3 w-3 opacity-60" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-44">
-        <DropdownMenuRadioGroup value={selected} onValueChange={onChange}>
-          {cycles.map((c) => (
-            <DropdownMenuRadioItem key={c.id} value={c.id} className="text-xs">
-              <span className="truncate">{c.name}</span>
-              <Badge
-                variant={c.status === 'active' ? 'default' : 'secondary'}
-                className="ml-auto shrink-0 text-[9px] px-1.5 h-4 font-bold"
-              >
-                {c.status === 'active' ? 'Active' : 'Pending'}
-              </Badge>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // ── Transaction Card ──────────────────────────────────────────────────────────
 
 function TxCard({ deposit }: { deposit: CycleDeposit }) {
@@ -178,7 +142,7 @@ function TxCard({ deposit }: { deposit: CycleDeposit }) {
 
 // ── Empty State ───────────────────────────────────────────────────────────────
 
-function EmptyState({ filtered }: { filtered: boolean }) {
+function EmptyState({ filtered, noActiveCycle = false }: { filtered: boolean; noActiveCycle?: boolean }) {
   return (
     <div className="flex flex-col items-center gap-3 py-14 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
@@ -186,10 +150,12 @@ function EmptyState({ filtered }: { filtered: boolean }) {
       </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-foreground">
-          {filtered ? 'No matching transactions' : 'No deposits yet'}
+          {noActiveCycle ? 'No active cycle' : filtered ? 'No matching transactions' : 'No deposits yet'}
         </p>
         <p className="text-xs text-muted-foreground">
-          {filtered ? 'Try a different filter or search term.' : 'Your deposits for this cycle will appear here.'}
+          {noActiveCycle
+            ? 'Your balance and transactions will appear here when your manager or coordinator starts a cycle.'
+            : filtered ? 'Try a different filter or search term.' : 'Your deposits for this cycle will appear here.'}
         </p>
       </div>
     </div>
@@ -203,7 +169,7 @@ type SortOrder = 'newest' | 'oldest';
 
 export function MemberDepositsView() {
   const { profile } = useAuth();
-  const { members, deposits, cycles, activeCycle, pendingCycle, stats, getCycleDetails, loadCycleDetails } = useMeal();
+  const { members, deposits, activeCycle, stats } = useMeal();
 
   // ── Resolve linked member ──────────────────────────────────────────────────
   const myMember = useMemo(() => {
@@ -216,55 +182,25 @@ export function MemberDepositsView() {
   }, [members, profile]);
 
   // ── Available cycles (active + pending only) ───────────────────────────────
-  const availableCycles = useMemo(() => {
-    return cycles.filter((c) => c.status === 'active' || c.status === 'pending');
-  }, [cycles]);
-
-  const [selectedCycleId, setSelectedCycleId] = useState<string>(() => activeCycle?.id ?? pendingCycle?.id ?? '');
-  const selectedCycle = availableCycles.find((c) => c.id === selectedCycleId) ?? availableCycles[0] ?? null;
-
-  // Load details for the selected cycle if needed (for pending cycles)
-  useEffect(() => {
-    if (selectedCycleId && selectedCycleId !== activeCycle?.id) {
-      void loadCycleDetails(selectedCycleId);
-    }
-  }, [selectedCycleId, activeCycle?.id, loadCycleDetails]);
+  const selectedCycle = activeCycle;
 
   // ── Deposits for selected cycle ────────────────────────────────────────────
   const cycleDeposits = useMemo(() => {
-    if (!myMember) return [];
-    if (selectedCycleId === activeCycle?.id) {
-      // Active cycle deposits come directly from context
-      return deposits.filter((d) => d.memberId === myMember.id);
-    }
-    // Pending cycle: use getCycleDetails
-    const details = selectedCycleId ? getCycleDetails(selectedCycleId) : null;
-    if (!details) return [];
-    return details.deposits.filter((d) => d.memberId === myMember.id);
-  }, [myMember, selectedCycleId, activeCycle?.id, deposits, getCycleDetails]);
+    if (!myMember || !activeCycle) return [];
+    return deposits.filter((d) => d.memberId === myMember.id);
+  }, [myMember, activeCycle, deposits]);
 
   // ── Cycle-aware stats ──────────────────────────────────────────────────────
   const cycleStats = useMemo(() => {
-    if (!myMember) return null;
-    if (selectedCycleId === activeCycle?.id) {
-      const totalDeposited = cycleDeposits.reduce((s, d) => s + d.amount, 0);
-      const mealCost = stats.currentMealRate * myMember.mealsEaten;
-      const fixedCost = stats.fixedCostPerMember;
-      const totalCost = mealCost + fixedCost;
-      const balance = totalDeposited - totalCost;
-      const utilPct = totalDeposited > 0 ? Math.min(100, Math.round((totalCost / totalDeposited) * 100)) : 0;
-      return { totalDeposited, mealCost, fixedCost, totalCost, balance, utilPct, mealsEaten: myMember.mealsEaten };
-    }
-    // Pending cycle via getCycleDetails
-    const details = getCycleDetails(selectedCycleId);
-    if (!details) return null;
-    const memberDetail = details.members.find((m) => m.id === myMember.id);
-    if (!memberDetail) return null;
+    if (!myMember || !activeCycle) return null;
     const totalDeposited = cycleDeposits.reduce((s, d) => s + d.amount, 0);
-    const { mealCost, fixedCost, totalCost, balance } = memberDetail;
+    const mealCost = stats.currentMealRate * myMember.mealsEaten;
+    const fixedCost = stats.fixedCostPerMember;
+    const totalCost = mealCost + fixedCost;
+    const balance = totalDeposited - totalCost;
     const utilPct = totalDeposited > 0 ? Math.min(100, Math.round((totalCost / totalDeposited) * 100)) : 0;
-    return { totalDeposited, mealCost, fixedCost, totalCost, balance, utilPct, mealsEaten: memberDetail.mealsEaten };
-  }, [myMember, selectedCycleId, activeCycle?.id, cycleDeposits, stats, getCycleDetails]);
+    return { totalDeposited, mealCost, fixedCost, totalCost, balance, utilPct, mealsEaten: myMember.mealsEaten };
+  }, [myMember, activeCycle, cycleDeposits, stats]);
 
   // ── Filter / search / sort ─────────────────────────────────────────────────
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -366,19 +302,17 @@ export function MemberDepositsView() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {availableCycles.length > 1 && (
-              <CycleSelector cycles={availableCycles} selected={selectedCycleId} onChange={setSelectedCycleId} />
-            )}
-            {availableCycles.length <= 1 && selectedCycle && (
-              <Badge variant={selectedCycle.status === 'active' ? 'default' : 'secondary'} className="text-[10px] font-bold">
-                {selectedCycle.name} · {selectedCycle.status === 'active' ? 'Active' : 'Pending'}
-              </Badge>
+            {selectedCycle ? (
+              <Badge variant="default" className="max-w-36 truncate text-[10px] font-bold">{selectedCycle.name} · Active</Badge>
+            ) : (
+              <Badge variant="secondary" className="text-[10px] font-bold">No active cycle</Badge>
             )}
             <Button
               size="sm"
               variant="outline"
               className="gap-1.5 h-8 text-xs font-semibold"
               onClick={() => void copyStatement()}
+              disabled={!selectedCycle}
             >
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
               {copied ? 'Copied!' : 'Statement'}
@@ -515,7 +449,7 @@ export function MemberDepositsView() {
           {/* Transaction list */}
           <div className="space-y-2">
             {filteredDeposits.length === 0 ? (
-              <EmptyState filtered={filterTab !== 'all' || search.trim().length > 0} />
+              <EmptyState filtered={filterTab !== 'all' || search.trim().length > 0} noActiveCycle={!activeCycle} />
             ) : (
               filteredDeposits.map((deposit) => <TxCard key={deposit.id} deposit={deposit} />)
             )}
