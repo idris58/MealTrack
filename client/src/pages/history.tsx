@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { eachDayOfInterval, format, max, min, parseISO, startOfDay } from 'date-fns';
 import { Archive, Check, ChevronDown, History, Lock, Pencil, Plus, ScrollText, ShoppingBag, Trash2, Utensils, Wallet, Zap, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import { Link, useLocation } from 'wouter';
+import { Link } from 'wouter';
 
 import { useMeal, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
@@ -461,18 +461,21 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
           <StatCard title="Meal Rate" value={formatCurrency(details.stats.currentMealRate)} icon={Utensils} iconClass="text-teal-600" iconBgClass="bg-teal-500/10" />
         </div>
 
+        {canCorrect || canLock ? (
         <div className="flex flex-wrap items-center justify-between gap-4 border-y py-4">
+          {canCorrect ? (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="gap-2" disabled={!canCorrect} onClick={() => { if (!canCorrect) return; setEditingExpense(null); setExpenseDialogOpen(true); }}>
+            <Button variant="outline" className="gap-2" onClick={() => { setEditingExpense(null); setExpenseDialogOpen(true); }}>
               <Plus className="h-4 w-4" />
               Add Expense Correction
             </Button>
-            <Button variant="outline" className="gap-2" disabled={!canCorrect} onClick={() => { if (!canCorrect) return; setMealDate(undefined); setMealDialogOpen(true); }}>
+            <Button variant="outline" className="gap-2" onClick={() => { setMealDate(undefined); setMealDialogOpen(true); }}>
               <Plus className="h-4 w-4" />
               Add Meal Correction
             </Button>
           </div>
-          <AlertDialog>
+          ) : null}
+          {canLock ? <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
                 variant={isSettlementMatched ? "default" : "secondary"}
@@ -498,14 +501,19 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
-          </AlertDialog>
+          </AlertDialog> : null}
         </div>
+        ) : null}
 
         <section className="space-y-4">
           <div className="flex items-end justify-between">
             <div>
-              <h3 className="text-lg font-bold">Settlement Hub</h3>
-              <p className="text-sm text-muted-foreground">Adjust deposits until everyone is fully settled (balance = 0).</p>
+              <h3 className="text-lg font-bold">{canSettle ? 'Settlement Hub' : 'Settlement Overview'}</h3>
+              <p className="text-sm text-muted-foreground">
+                {canSettle
+                  ? 'Adjust deposits until everyone is fully settled (balance = 0).'
+                  : 'Review recorded deposits, balances, and the cycle settlement summary.'}
+              </p>
             </div>
           </div>
           
@@ -592,10 +600,12 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button size="sm" className="gap-2 rounded-full" disabled={!canSettle} onClick={() => { if (!canSettle) return; setDepositMember({ id: member.id, name: member.name, balance: allocatedBalance }); }}>
-                            <Wallet className="h-4 w-4" />
-                            Settle
-                          </Button>
+                          {canSettle ? (
+                            <Button size="sm" className="gap-2 rounded-full" onClick={() => setDepositMember({ id: member.id, name: member.name, balance: allocatedBalance })}>
+                              <Wallet className="h-4 w-4" />
+                              Settle
+                            </Button>
+                          ) : null}
                           {memberDeposits.length > 0 && (
                             <AccordionTrigger className="hover:bg-muted rounded-full p-2" title="View Installments" />
                           )}
@@ -1034,20 +1044,9 @@ function StatCard({
 export default function HistoryPage() {
   const { cycles, getCycleDetails, restoreCycle } = useMeal();
   const { profile } = useAuth();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (profile?.role === 'member') {
-      setLocation('/app');
-    }
-  }, [profile?.role, setLocation]);
 
   const [openClosedCycleId, setOpenClosedCycleId] = useState('');
   const [deletedClosedCycles, setDeletedClosedCycles] = useState<DeletedCycleGhost[]>([]);
-
-  if (profile?.role === 'member') {
-    return null;
-  }
 
   const pendingCycles = cycles
     .filter((cycle) => cycle.status === 'pending')
@@ -1094,16 +1093,20 @@ export default function HistoryPage() {
             <div className="min-w-0">
               <h1 className="text-xl font-bold font-heading tracking-tight sm:text-3xl truncate">History</h1>
               <p className="hidden sm:block mt-1 text-sm leading-6 text-muted-foreground">
-                Pending cycles stay editable for settlement and corrections. Closed cycles are read-only.
+                {profile?.role === 'member'
+                  ? 'Review past cycle meal logs, expenses, deposits, and balances.'
+                  : 'Pending cycles stay editable for settlement and corrections. Closed cycles are read-only.'}
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" asChild className="gap-1.5 border-border/80 bg-background/80 shadow-sm transition-all hover:bg-background hover:shadow shrink-0 sm:h-9">
-            <Link href="/app/changelog">
-              <ScrollText className="h-4 w-4 text-primary" />
-              <span>Changelog</span>
-            </Link>
-          </Button>
+          {profile?.role !== 'member' ? (
+            <Button variant="outline" size="sm" asChild className="gap-1.5 border-border/80 bg-background/80 shadow-sm transition-all hover:bg-background hover:shadow shrink-0 sm:h-9">
+              <Link href="/app/changelog">
+                <ScrollText className="h-4 w-4 text-primary" />
+                <span>Changelog</span>
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -1114,7 +1117,9 @@ export default function HistoryPage() {
           </div>
           <h2 className="text-xl font-bold font-heading">No Past Cycles</h2>
           <p className="mt-1.5 text-sm text-muted-foreground max-w-sm mx-auto">
-            Close your active cycle in Settings to see settlement history and member summaries here.
+            {profile?.role === 'member'
+              ? 'Past cycle records and settlement details will appear here once a cycle is closed.'
+              : 'Close your active cycle in Settings to see settlement history and member summaries here.'}
           </p>
         </Card>
       ) : null}

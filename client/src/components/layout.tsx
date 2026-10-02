@@ -68,6 +68,7 @@ const MEMBER_MOBILE_NAV_ITEMS: NavItem[] = [
   { icon: UtensilsCrossed, label: 'Meals', href: '/app/meals' },
   { icon: Receipt, label: 'Expenses', href: '/app/expenses' },
   { icon: WalletCards, label: 'Deposits', href: '/app/members' },
+  { icon: History, label: 'History', href: '/app/history' },
   { icon: Settings, label: 'Settings', href: '/app/settings' },
 ];
 
@@ -76,12 +77,12 @@ const MANAGER_MOBILE_NAV_ITEMS: NavItem[] = [
   { icon: UtensilsCrossed, label: 'Meals', href: '/app/meals' },
   { icon: Receipt, label: 'Expenses', href: '/app/expenses' },
   { icon: Users, label: 'Members', href: '/app/members' },
+  { icon: Settings, label: 'Settings', href: '/app/settings' },
 ];
 
 const MORE_ITEMS = [
   { icon: FileBarChart, label: 'Reports', href: '/app/reports', desc: 'Summary analytics, PDF & Excel export' },
   { icon: History, label: 'History', href: '/app/history', desc: 'Archived cycles, settlements & ledger' },
-  { icon: Settings, label: 'Settings', href: '/app/settings', desc: 'Cycle operations, share links & notices' },
   { icon: Sparkles, label: 'Changelog', href: '/app/changelog', desc: 'Recent features and updates' },
 ];
 
@@ -134,7 +135,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const isMember = profile?.role === 'member';
   const sidebarNavItems = NAV_ITEMS.filter((item) => {
-    if (isMember && (item.href === '/app/reports' || item.href === '/app/history')) return false;
+    if (isMember && item.href === '/app/reports') return false;
     return true;
   }).map((item) => {
     if (isMember && item.href === '/app/members') {
@@ -144,7 +145,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   });
 
   const mobileNavItems = isMember ? MEMBER_MOBILE_NAV_ITEMS : MANAGER_MOBILE_NAV_ITEMS;
-  const isMoreActive = !isMember && ['/app/reports', '/app/history', '/app/settings', '/app/changelog'].includes(location);
+  const isMoreActive = !isMember && ['/app/reports', '/app/history', '/app/changelog'].includes(location);
 
   const initials = getInitials(profile?.full_name, user?.email);
 
@@ -314,12 +315,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Clean 5-Item Bar) */}
+      {/* Mobile Bottom Navigation Bar */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 w-full border-t bg-card md:hidden"
         aria-label="Primary mobile navigation"
       >
-        <div className="grid h-[54px] w-full grid-cols-5 items-center">
+        <div className="grid h-[54px] w-full grid-cols-6 items-center">
           {mobileNavItems.map((item) => {
             const isActive = location === item.href;
             return (
