@@ -45,12 +45,12 @@ function getGreeting(name: string): { greeting: string; emoji: string; sub: stri
   const hour = new Date().getHours();
   const firstName = name.split(' ')[0];
   if (hour >= 5 && hour < 12)
-    return { greeting: 'Good Morning', emoji: '🌅', sub: `Rise & shine, ${firstName}!` };
+    return { greeting: 'Good Morning', emoji: '🌅', sub: `Rise & shine!` };
   if (hour >= 12 && hour < 17)
-    return { greeting: 'Good Afternoon', emoji: '☀️', sub: `Hope your day's going well, ${firstName}!` };
+    return { greeting: 'Good Afternoon', emoji: '☀️', sub: `Hope your day's going well!` };
   if (hour >= 17 && hour < 21)
-    return { greeting: 'Good Evening', emoji: '🌆', sub: `Relax and unwind, ${firstName}!` };
-  return { greeting: 'Good Night', emoji: '🌙', sub: `Rest well, ${firstName}!` };
+    return { greeting: 'Good Evening', emoji: '🌆', sub: `Relax and unwind!` };
+  return { greeting: 'Good Night', emoji: '🌙', sub: `Rest well!` };
 }
 
 function formatRelativeDate(dateStr: string) {
