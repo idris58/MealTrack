@@ -288,7 +288,7 @@ function PageHeader({ cycleName }: { cycleName?: string }) {
       <div className="min-w-0">
         <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Deposits</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {cycleName ? `Your payments, charges and balance in ${cycleName}.` : 'Your payments, charges and balance.'}
+          {cycleName ? `Your payments, costs and balance in ${cycleName}.` : 'Your payments, costs and balance.'}
         </p>
       </div>
     </header>
@@ -552,8 +552,8 @@ export function MemberDepositsView() {
 
           <dl className="grid grid-cols-2 divide-x divide-y divide-white/10 border-t border-white/10 sm:grid-cols-4 sm:divide-y-0">
             {[
-              { label: 'Paid in', value: money(v.paidIn, 0), sub: `${v.payments} payment${v.payments === 1 ? '' : 's'}` },
-              { label: 'Carried forward', value: money(v.carriedIn, 0), sub: 'From last cycle' },
+              { label: 'Total deposited', value: money(v.paidIn, 0), sub: `${v.payments} payment${v.payments === 1 ? '' : 's'}` },
+              { label: 'Previous balance', value: money(v.carriedIn, 0), sub: 'From last cycle' },
               { label: 'Refunded or deducted', value: money(v.takenOut, 0), sub: 'Taken out' },
               { label: 'Last payment', value: v.lastPayment ? format(safeParse(v.lastPayment.createdAt), 'd MMM') : 'None', sub: v.lastPayment ? money(v.lastPayment.amount, 0) : 'No payments yet' },
             ].map((s) => (
@@ -568,7 +568,7 @@ export function MemberDepositsView() {
 
         {/* ── Rail: planner + charges ─────────────────────────────────── */}
         <div className="space-y-5 sm:space-y-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-20 lg:self-start">
-          <Card title="Top-up planner" hint="How much to pay to stay covered" icon={CalendarClock}>
+          <Card title="Recommended payment" hint="How much to pay to stay covered" icon={CalendarClock}>
             <div role="radiogroup" aria-label="Cover me for" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
               {([7, 14, 30] as const).map((d) => (
                 <button
@@ -590,7 +590,7 @@ export function MemberDepositsView() {
                   <p className="text-xs text-muted-foreground">Pay your manager</p>
                   <p className="mt-0.5 font-heading text-3xl font-semibold tabular-nums">{money(planAmount, 0)}</p>
                   <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                    {v.burn > 0 ? `Based on ${money(v.burn)} a day in meals so far.` : 'You have no meal charges yet.'}
+                    {v.burn > 0 ? `Based on ${money(v.burn)} a day in meals so far.` : 'You have no meal costs yet.'}
                     {!positive ? ` This includes your ${money(clearDue, 0)} due.` : ''}
                   </p>
                   <Button className="mt-3 w-full gap-1.5" onClick={() => void copyText(String(planAmount), 'Amount copied')}>
@@ -606,7 +606,7 @@ export function MemberDepositsView() {
             </div>
           </Card>
 
-          <Card title="Your charges" hint="What this cycle has cost you" icon={Receipt}>
+          <Card title="Your costs" hint="What this cycle has cost you" icon={Receipt}>
             <dl className="space-y-3 text-sm">
               <div className="flex items-start justify-between gap-3">
                 <dt className="flex items-center gap-2 text-muted-foreground"><Utensils className="h-4 w-4 text-emerald-500" />
