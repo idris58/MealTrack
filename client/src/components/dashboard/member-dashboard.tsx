@@ -406,7 +406,7 @@ export function MemberDashboard() {
 
   // ── Guard states ───────────────────────────────────────────────────────────
   const Header = (
-    <header className="flex flex-wrap items-end justify-between gap-3">
+    <header className="flex flex-wrap items-end gap-3">
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <GreetIcon className="h-4 w-4" />
@@ -416,18 +416,6 @@ export function MemberDashboard() {
           {greetText}, {firstName}
         </h1>
       </div>
-      {activeCycle && view && (
-        <div className="w-full min-w-[12rem] sm:w-64">
-          <div className="mb-1.5 flex items-baseline justify-between text-xs">
-            <span className="truncate font-medium">{activeCycle.name}</span>
-            <span className="tabular-nums text-muted-foreground">Day {view.elapsed}</span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-            <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, (view.elapsed / 30) * 100)}%` }} />
-          </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Started {format(view.start, 'd MMM yyyy')}</p>
-        </div>
-      )}
     </header>
   );
 
