@@ -479,7 +479,7 @@ export function MemberDepositsView() {
             </div>
 
             <p className="mt-3 font-heading text-5xl font-bold tabular-nums tracking-tight sm:text-6xl">
-              {money(shown)}
+              {signed(shown)}
             </p>
             <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/70">
               {!positive
