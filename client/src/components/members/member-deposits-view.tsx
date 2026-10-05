@@ -106,64 +106,6 @@ async function copyText(text: string, success: string) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Balance chart: running balance across the cycle, split at the zero line
-// ─────────────────────────────────────────────────────────────────────────────
-
-function BalanceChart({ series }: { series: Array<{ label: string; value: number }> }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const data = series.length === 1 ? [series[0], series[0]] : series;
-  const W = 640;
-  const H = 130;
-  const pad = { t: 10, b: 10 };
-  const values = data.map((p) => p.value);
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values);
-  const range = max - min || 1;
-  const x = (i: number) => (i / (data.length - 1)) * W;
-  const y = (v: number) => pad.t + ((max - v) / range) * (H - pad.t - pad.b);
-  const zero = y(0);
-  const line = data.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-  const area = `${line} L${W},${zero} L0,${zero} Z`;
-  const active = hover ?? data.length - 1;
-
-  const scrub = (clientX: number, el: SVGSVGElement) => {
-    const rect = el.getBoundingClientRect();
-    const rel = (clientX - rect.left) / rect.width;
-    setHover(Math.max(0, Math.min(data.length - 1, Math.round(rel * (data.length - 1)))));
-  };
-
-  return (
-    <div>
-      <div className="mb-2 flex items-baseline justify-between text-xs text-white/60">
-        <span>Balance over the cycle</span>
-        <span className="tabular-nums">
-          {data[active].label}: <b className={cn('font-semibold', data[active].value >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{signed(data[active].value, 0)}</b>
-        </span>
-      </div>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="h-24 w-full touch-none sm:h-28"
-        role="img"
-        aria-label="Running balance across the cycle"
-        onMouseMove={(e) => scrub(e.clientX, e.currentTarget)}
-        onTouchMove={(e) => scrub(e.touches[0].clientX, e.currentTarget)}
-        onMouseLeave={() => setHover(null)}
-      >
-        <defs>
-          <clipPath id="dep-above"><rect x="0" y="0" width={W} height={Math.max(0, zero)} /></clipPath>
-          <clipPath id="dep-below"><rect x="0" y={zero} width={W} height={Math.max(0, H - zero)} /></clipPath>
-        </defs>
-        <path d={area} fill="#34d399" fillOpacity="0.22" clipPath="url(#dep-above)" />
-        <path d={area} fill="#fb7185" fillOpacity="0.28" clipPath="url(#dep-below)" />
-        <line x1="0" x2={W} y1={zero} y2={zero} stroke="white" strokeOpacity="0.35" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
-        <path d={line} fill="none" stroke="white" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        <line x1={x(active)} x2={x(active)} y1={pad.t} y2={H - pad.b} stroke="white" strokeOpacity="0.4" vectorEffect="non-scaling-stroke" />
-      </svg>
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Funds bar: what your money was spent on, and what is left
