@@ -394,7 +394,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </SheetHeader>
             <div className="space-y-2 pt-1">
               {MORE_ITEMS.map((item) => {
-                const isActive = location === item.href;
+                const isActive = location === item.href; 
                 return (
                   <Link
                     key={item.href}
