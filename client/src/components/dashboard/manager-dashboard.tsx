@@ -1,349 +1,130 @@
-import { useMeal } from '@/lib/meal-context';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useMemo, useState } from 'react';
+import { Link } from 'wouter';
+import { format, isToday, parseISO } from 'date-fns';
 import {
   ArrowUpRight,
-  CalendarDays,
   CircleDollarSign,
-  ShoppingBag,
-  Users,
+  ClipboardList,
+  Coins,
+  CreditCard,
+  History,
+  Plus,
+  ReceiptText,
+  Sparkles,
+  TrendingDown,
   Utensils,
+  Users,
   Wallet,
+  XCircle,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
+import { useMeal, type Member } from '@/lib/meal-context';
+import { useAuth } from '@/lib/auth-context';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { OnboardingTour } from '@/components/onboarding-tour';
 import { DashboardFab } from '@/components/dashboard-fab';
-import { format } from 'date-fns';
-import { Link } from 'wouter';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { ExpenseForm } from '@/components/expense-form';
-import { DashboardAnalytics } from '@/components/dashboard-analytics';
+import { cn } from '@/lib/utils';
 
-const expenseSchema = z.object({
-  amount: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.coerce.number({ invalid_type_error: 'Amount is required' }).positive('Amount must be greater than zero')
-  ),
-  description: z.string().min(2, 'Description is required'),
-  type: z.enum(['meal', 'fixed']),
-  paidBy: z.string().min(2, 'Shopper name is required'),
-});
+const money = (value: number) => `৳${value.toFixed(2)}`;
+const meals = (value: number) => String(Math.round(value * 1000) / 1000);
 
-function formatMealCount(value: number) {
-  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
-  return rounded.toString();
-}
-
-function formatCurrency(amount: number) {
-  return `৳${amount.toFixed(2)}`;
-}
-
-function QuickAddExpense({ onClose }: { onClose: () => void }) {
-  const { addExpense } = useMeal();
-  const [date, setDate] = useState<Date>(new Date());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const form = useForm<z.infer<typeof expenseSchema>>({
-    resolver: zodResolver(expenseSchema),
-    defaultValues: { amount: undefined, description: '', type: 'meal', paidBy: '' },
-  });
-
-  const onSubmit = async (data: z.infer<typeof expenseSchema>) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      await addExpense(data.amount, data.description, data.type, data.paidBy, undefined, format(date, 'yyyy-MM-dd'));
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
+function MemberRow({ member, balance, onDeposit }: { member: Member; balance: number; onDeposit: () => void }) {
+  const due = balance < 0;
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-        <FormField
-          control={form.control}
-          name="type"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Expense Type</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="meal">Meal (Grocery / Food)</SelectItem>
-                  <SelectItem value="fixed">Fixed (Bills / Utilities)</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Grocery Shopping, WiFi Bill" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Date</label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn('w-full justify-start py-2 text-left text-sm font-normal', !date && 'text-muted-foreground')}
-              >
-                <CalendarDays className="mr-2 h-4 w-4" />
-                {date ? format(date, 'PPP') : <span>Pick a date</span>}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[18rem] rounded-xl border bg-card p-0 shadow-2xl" align="center">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={(d) => {
-                  if (d) setDate(d);
-                }}
-                initialFocus
-                className="p-3"
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-        <FormField
-          control={form.control}
-          name="amount"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Amount (৳)</FormLabel>
-              <FormControl>
-                <Input type="number" step="0.01" placeholder="0.00" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="paidBy"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Who Shopped?</FormLabel>
-              <FormControl>
-                <Input placeholder="Shopper's Name" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type="submit" className="w-full font-semibold" disabled={isSubmitting}>
-          {isSubmitting ? 'Recording Expense...' : 'Add Expense'}
-        </Button>
-      </form>
-    </Form>
+    <div className="flex items-center gap-3 py-3">
+      <Avatar className="h-9 w-9">
+        <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{member.avatar}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{member.name}</p>
+        <p className="text-xs text-muted-foreground">{meals(member.mealsEaten)} meals · {due ? 'Needs deposit' : 'Covered'}</p>
+      </div>
+      <div className="text-right">
+        <p className={cn('font-heading text-sm font-bold tabular-nums', due ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
+          {due ? '-' : '+'}{money(Math.abs(balance))}
+        </p>
+        {due ? <Button variant="ghost" size="sm" className="h-7 px-0 text-xs text-primary hover:bg-transparent hover:underline" onClick={onDeposit}>Add deposit</Button> : null}
+      </div>
+    </div>
+  );
+}
+
+function ActivityRow({ title, action, createdAt }: { title: string; action: string; createdAt: string }) {
+  return (
+    <div className="flex items-start gap-3 border-b py-3 last:border-0 last:pb-0">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><History className="h-3.5 w-3.5" /></div>
+      <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{title}</p><p className="text-xs capitalize text-muted-foreground">{action} · {format(new Date(createdAt), 'MMM d, h:mm a')}</p></div>
+    </div>
   );
 }
 
 export function ManagerDashboard() {
-  const { stats, members, mealLogs } = useMeal();
+  const { profile } = useAuth();
+  const { stats, members, expenses, activeCycle, activeCycleChangelogEntries, getMemberStats, mealLogs } = useMeal();
   const [openExpense, setOpenExpense] = useState(false);
   const [openMeal, setOpenMeal] = useState(false);
+  const [depositMember, setDepositMember] = useState<Member | null>(null);
 
   const totalSpent = stats.totalMealExpenses + stats.totalFixedExpenses;
-  const spentPct = stats.totalDeposits > 0 ? Math.min(100, Math.round((totalSpent / stats.totalDeposits) * 100)) : 0;
-  const mealPct = totalSpent > 0 ? Math.round((stats.totalMealExpenses / totalSpent) * 100) : 0;
-  const fixedPct = totalSpent > 0 ? 100 - mealPct : 0;
+  const dueMembers = useMemo(() => members.map((member) => ({ member, balance: getMemberStats(member.id).balance })).filter(({ balance }) => balance < 0).sort((a, b) => a.balance - b.balance), [members, getMemberStats]);
+  const recentExpenses = useMemo(() => [...expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4), [expenses]);
+  const recentActivity = activeCycleChangelogEntries.slice(0, 5);
+  const loggedToday = mealLogs.some((log) => isToday(parseISO(log.date)));
+  const isCoordinator = profile?.role === 'coordinator';
 
   return (
-    <div className="space-y-5 pb-24">
+    <div className="space-y-6 pb-24">
       <OnboardingTour />
-
-      {/* Primary Financial & Meal Command Center */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Hero Card: Cash Liquidity & Fund Utilization */}
-        <Card className="relative overflow-hidden border-none bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-lg lg:col-span-2">
-          {/* Subtle decorative background blur glow */}
-          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-teal-400/10 blur-2xl" />
-
-          <CardHeader className="pb-1 pt-4 px-4 sm:px-5">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-100/90">
-                <Wallet className="h-3.5 w-3.5 text-emerald-200" />
-                Remaining Cash in Hand
-              </CardTitle>
-              <span
-                className={cn(
-                  'rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md',
-                  stats.remainingCash >= 0
-                    ? 'bg-emerald-400/20 text-emerald-100 border border-emerald-300/30'
-                    : 'bg-rose-500/30 text-rose-100 border border-rose-400/40'
-                )}
-              >
-                {stats.remainingCash >= 0 ? 'Reserve Healthy' : 'Cash Deficit'}
-              </span>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-2.5 px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-1">
-              <span className="font-heading text-3xl font-extrabold tracking-tight sm:text-4xl">
-                {formatCurrency(stats.remainingCash)}
-              </span>
-              <p className="text-xs text-emerald-100/80 font-medium">
-                of <strong className="text-white font-bold">{formatCurrency(stats.totalDeposits)}</strong> collected
-              </p>
-            </div>
-
-            {/* Fund deployment progress bar */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-emerald-100/80 font-medium">
-                <span>Deployed: {formatCurrency(totalSpent)}</span>
-                <span>{spentPct}% utilized</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/25 backdrop-blur-xs">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-200 to-teal-100 transition-all duration-700"
-                  style={{ width: `${spentPct}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Breakdown Sub-boxes */}
-            <div className="grid grid-cols-2 gap-2.5 pt-0.5">
-              <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Meal Cost</p>
-                  <span className="rounded-md bg-emerald-400/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-100">
-                    {mealPct}%
-                  </span>
-                </div>
-                <p className="mt-0.5 font-heading text-lg font-bold tracking-tight text-white">
-                  {formatCurrency(stats.totalMealExpenses)}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Fixed Cost</p>
-                  <span className="rounded-md bg-purple-400/20 px-1.5 py-0.2 text-[9px] font-bold text-purple-100">
-                    {fixedPct}%
-                  </span>
-                </div>
-                <p className="mt-0.5 font-heading text-lg font-bold tracking-tight text-white">
-                  {formatCurrency(stats.totalFixedExpenses)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Card 2: Meal Economy & Consumption */}
-        <Card className="glass-card border border-border/70 shadow-sm flex flex-col justify-between">
-          <CardHeader className="flex flex-row items-center justify-between pb-1 pt-4 px-4 sm:px-5">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Current Meal Rate
-            </CardTitle>
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Utensils className="h-3.5 w-3.5" />
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-3 px-4 pb-4 pt-1 sm:px-5 sm:pb-5">
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-heading text-3xl font-extrabold text-foreground sm:text-4xl">
-                {formatCurrency(stats.currentMealRate)}
-              </span>
-              <span className="text-xs text-muted-foreground font-medium">/ meal</span>
-            </div>
-
-            <div className="space-y-2 border-t pt-2.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Utensils className="h-3.5 w-3.5 text-emerald-500" /> Total Meals:
-                </span>
-                <span className="font-bold text-foreground">{formatMealCount(stats.totalMealsConsumed)}</span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <ShoppingBag className="h-3.5 w-3.5 text-violet-500" /> Fixed Cost/Member:
-                </span>
-                <span className="font-bold text-foreground">{formatCurrency(stats.fixedCostPerMember)}</span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Users className="h-3.5 w-3.5 text-blue-500" /> Active Members:
-                </span>
-                <Link
-                  href="/app/members"
-                  className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
-                >
-                  {members.length} members <ArrowUpRight className="h-3 w-3" />
-                </Link>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <section className="flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">{isCoordinator ? 'Coordinator workspace' : 'Manager workspace'}</p>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Good to see you, {profile?.full_name?.split(' ')[0] ?? 'manager'}.</h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">A focused view of what is happening in your mess and what needs your attention next.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="gap-2" asChild><Link href="/app/members"><Users className="h-4 w-4" /> Members</Link></Button>
+          <Button className="gap-2 shadow-sm" onClick={() => setOpenMeal(true)}><Utensils className="h-4 w-4" /> Log meals</Button>
+        </div>
       </section>
 
-      {/* Analytics & Interactive Charts Workspace */}
-      <DashboardAnalytics />
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="border-primary/20 bg-primary/[0.07] shadow-none"><CardContent className="p-5"><div className="mb-5 flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cash available</span><Wallet className="h-4 w-4 text-primary" /></div><p className="font-heading text-3xl font-semibold tabular-nums">{money(stats.remainingCash)}</p><p className="mt-1 text-xs text-muted-foreground">{money(totalSpent)} spent from {money(stats.totalDeposits)} collected</p></CardContent></Card>
+        <Card className="shadow-none"><CardContent className="p-5"><div className="mb-5 flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Meal rate</span><Coins className="h-4 w-4 text-amber-500" /></div><p className="font-heading text-3xl font-semibold tabular-nums">{money(stats.currentMealRate)}</p><p className="mt-1 text-xs text-muted-foreground">per meal · {meals(stats.totalMealsConsumed)} consumed</p></CardContent></Card>
+        <Card className={cn('shadow-none', dueMembers.length > 0 && 'border-amber-500/30')}><CardContent className="p-5"><div className="mb-5 flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Needs attention</span><XCircle className={cn('h-4 w-4', dueMembers.length ? 'text-amber-500' : 'text-emerald-500')} /></div><p className="font-heading text-3xl font-semibold tabular-nums">{dueMembers.length}</p><p className="mt-1 text-xs text-muted-foreground">members with an outstanding balance</p></CardContent></Card>
+        <Card className="shadow-none"><CardContent className="p-5"><div className="mb-5 flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Roster</span><Users className="h-4 w-4 text-sky-500" /></div><p className="font-heading text-3xl font-semibold tabular-nums">{members.length}</p><p className="mt-1 text-xs text-muted-foreground">active members in this mess</p></CardContent></Card>
+      </section>
 
-      {/* Floating Action Speed Dial Button for Quick Mobile & Desktop Actions */}
-      <DashboardFab
-        onOpenExpense={() => setOpenExpense(true)}
-        onOpenMeal={() => setOpenMeal(true)}
-      />
+      {!activeCycle ? (
+        <Card className="border-dashed shadow-none"><CardContent className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /><h2 className="font-semibold">No active cycle</h2></div><p className="mt-1 text-sm text-muted-foreground">Start a cycle to begin recording meals, expenses, and deposits.</p></div><Button asChild><Link href="/app/settings#cycle-operations">Start a cycle <ArrowUpRight className="ml-2 h-4 w-4" /></Link></Button></CardContent></Card>
+      ) : (
+        <section className="flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><ClipboardList className="h-5 w-5" /></div><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{activeCycle.name}</h2><Badge variant="secondary" className="gap-1.5 text-[10px] uppercase tracking-wider"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active</Badge></div><p className="mt-0.5 text-xs text-muted-foreground">Started {format(parseISO(activeCycle.startedAt), 'MMM d, yyyy')} · {loggedToday ? 'Meals logged today' : 'No meals logged today'}</p></div></div>
+          <Button variant="ghost" className="justify-start text-muted-foreground sm:justify-center" asChild><Link href="/app/settings#cycle-operations">Manage cycle <ArrowUpRight className="ml-2 h-4 w-4" /></Link></Button>
+        </section>
+      )}
 
-      {/* Add Expense Dialog */}
-      <Dialog open={openExpense} onOpenChange={setOpenExpense}>
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CircleDollarSign className="h-5 w-5 text-emerald-500" />
-              Add New Expense
-            </DialogTitle>
-            <DialogDescription>Record a grocery, meal, or utility expense for this active cycle.</DialogDescription>
-          </DialogHeader>
-          <ExpenseForm mode="create" onClose={() => setOpenExpense(false)} />
-        </DialogContent>
-      </Dialog>
+      <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <Card className="shadow-none"><CardHeader className="flex flex-row items-start justify-between space-y-0"><div><CardTitle className="text-lg">Attention queue</CardTitle><p className="mt-1 text-sm text-muted-foreground">Resolve the items that affect your cash position.</p></div><TrendingDown className="h-5 w-5 text-amber-500" /></CardHeader><CardContent>{dueMembers.length ? <div className="divide-y">{dueMembers.slice(0, 5).map(({ member, balance }) => <MemberRow key={member.id} member={member} balance={balance} onDeposit={() => setDepositMember(member)} />)}</div> : <div className="flex items-center gap-3 rounded-xl bg-emerald-500/10 p-4 text-sm text-emerald-700 dark:text-emerald-300"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15"><Sparkles className="h-4 w-4" /></div><div><p className="font-semibold">Everything is covered</p><p className="text-xs opacity-80">No member balances need follow-up right now.</p></div></div>}{dueMembers.length > 5 ? <Link href="/app/members" className="mt-4 inline-flex text-sm font-semibold text-primary hover:underline">View all {dueMembers.length} members <ArrowUpRight className="ml-1 h-4 w-4" /></Link> : null}</CardContent></Card>
 
-      {/* Log Meals Dialog */}
-      <Dialog open={openMeal} onOpenChange={setOpenMeal}>
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Utensils className="h-5 w-5 text-emerald-500" />
-              Log Meals by Date
-            </DialogTitle>
-            <DialogDescription>Update meal counts for each member for the selected date.</DialogDescription>
-          </DialogHeader>
-          <MealCountEditor members={members} mealLogs={mealLogs} onClose={() => setOpenMeal(false)} />
-        </DialogContent>
-      </Dialog>
+        <Card className="shadow-none"><CardHeader className="flex flex-row items-start justify-between space-y-0"><div><CardTitle className="text-lg">Recent expenses</CardTitle><p className="mt-1 text-sm text-muted-foreground">The latest money leaving the cycle.</p></div><ReceiptText className="h-5 w-5 text-muted-foreground" /></CardHeader><CardContent>{recentExpenses.length ? <div className="space-y-1">{recentExpenses.map((expense) => <div key={expense.id} className="flex items-center gap-3 border-b py-3 last:border-0"><div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', expense.type === 'meal' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-600')}><CreditCard className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{expense.description}</p><p className="text-xs text-muted-foreground">{format(parseISO(expense.date), 'MMM d')} · {expense.paidBy}</p></div><p className="font-heading text-sm font-semibold tabular-nums">{money(expense.amount)}</p></div>)}</div> : <p className="py-6 text-sm text-muted-foreground">No expenses recorded in this cycle yet.</p>}<Button variant="ghost" className="mt-2 w-full justify-start px-0 text-primary hover:bg-transparent hover:underline" asChild><Link href="/app/expenses">View expense ledger <ArrowUpRight className="ml-2 h-4 w-4" /></Link></Button></CardContent></Card>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+        <Card className="shadow-none"><CardHeader><CardTitle className="text-lg">Quick actions</CardTitle><p className="mt-1 text-sm text-muted-foreground">Keep the daily workflow moving.</p></CardHeader><CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1"><Button variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => setOpenExpense(true)}><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Plus className="h-4 w-4" /></span><span className="text-left"><span className="block text-sm font-semibold">Record expense</span><span className="block text-xs font-normal text-muted-foreground">Add a grocery or fixed cost</span></span></Button><Button variant="outline" className="h-auto justify-start gap-3 p-3" onClick={() => setOpenMeal(true)}><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"><Utensils className="h-4 w-4" /></span><span className="text-left"><span className="block text-sm font-semibold">Log today's meals</span><span className="block text-xs font-normal text-muted-foreground">Update counts by member</span></span></Button></CardContent></Card>
+        <Card className="shadow-none"><CardHeader className="flex flex-row items-start justify-between space-y-0"><div><CardTitle className="text-lg">Activity</CardTitle><p className="mt-1 text-sm text-muted-foreground">A short audit trail for this cycle.</p></div><History className="h-5 w-5 text-muted-foreground" /></CardHeader><CardContent>{recentActivity.length ? recentActivity.map((entry) => <ActivityRow key={entry.id} title={entry.title} action={entry.action} createdAt={entry.createdAt} />) : <p className="py-4 text-sm text-muted-foreground">No activity recorded yet.</p>}</CardContent></Card>
+      </section>
+
+      <DashboardFab onOpenExpense={() => setOpenExpense(true)} onOpenMeal={() => setOpenMeal(true)} />
+      <Dialog open={openExpense} onOpenChange={setOpenExpense}><DialogContent size="sm"><DialogHeader><DialogTitle>Add expense</DialogTitle><DialogDescription>Record a grocery, meal, or utility expense for this active cycle.</DialogDescription></DialogHeader><ExpenseForm mode="create" onClose={() => setOpenExpense(false)} /></DialogContent></Dialog>
+      <Dialog open={openMeal} onOpenChange={setOpenMeal}><DialogContent size="sm"><DialogHeader><DialogTitle>Log meals</DialogTitle><DialogDescription>Update meal counts for each member for the selected date.</DialogDescription></DialogHeader><MealCountEditor members={members} mealLogs={mealLogs} onClose={() => setOpenMeal(false)} /></DialogContent></Dialog>
+      <Dialog open={Boolean(depositMember)} onOpenChange={(open) => !open && setDepositMember(null)}><DialogContent size="sm"><DialogHeader><DialogTitle>Update deposit</DialogTitle><DialogDescription>Use the Members page to add or deduct a deposit for {depositMember?.name}.</DialogDescription></DialogHeader><Button asChild onClick={() => setDepositMember(null)}><Link href="/app/members">Open members</Link></Button></DialogContent></Dialog>
     </div>
   );
 }
+
+export default ManagerDashboard;
