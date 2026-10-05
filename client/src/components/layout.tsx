@@ -21,7 +21,6 @@ import {
   PanelLeftOpen,
   type LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -54,14 +53,13 @@ type NavItem = {
   icon: LucideIcon;
   label: string;
   href: string;
-  capability?: keyof ReturnType<typeof useAuth>;
 };
 
 const PRIMARY_NAV: NavItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/app" },
   { icon: UtensilsCrossed, label: "Meals", href: "/app/meals" },
   { icon: Receipt, label: "Expenses", href: "/app/expenses" },
-  { icon: Users, label: "Members", href: "/app/members", capability: "canManageMembers" },
+  { icon: Users, label: "Members", href: "/app/members" },
 ];
 
 const SECONDARY_NAV: NavItem[] = [
@@ -172,7 +170,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { user, profile, signOut, canManageMembers } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const { notice } = useNotice();
 
   useEffect(() => {
@@ -226,11 +224,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const isMember = profile?.role === "member";
   const sidebarPrimary = useMemo(
-    () => (isMember ? MEMBER_PRIMARY_NAV : PRIMARY_NAV).filter((item) => {
-      if (item.capability === "canManageMembers") return canManageMembers;
-      return true;
-    }),
-    [canManageMembers, isMember],
+    () => (isMember ? MEMBER_PRIMARY_NAV : PRIMARY_NAV),
+    [isMember],
   );
 
   const sidebarSecondary = isMember ? [] : SECONDARY_NAV;
