@@ -9,10 +9,9 @@
  *  2. Standing         – balance, funds-used ring, runway / top-up guidance (the hero)
  *  3. At a glance      – meals, meal rate, deposited, today
  *  4. Notice           – active mess notice (only if one exists)
- *  5. Funds vs. cost   – cumulative chart across the cycle
- *  6. Meal rhythm      – last 7 days bars + 4-week calendar + streak
- *  7. Where it goes    – meal/fixed split + how you compare with the mess average
- *  8. Activity         – your latest deposits and the mess's latest expenses
+ *  5. Meal rhythm      – last 7 days bars + 4-week calendar + streak
+ *  6. Where it goes    – meal/fixed split + how you compare with the mess average
+ *  7. Activity         – your latest deposits and the mess's latest expenses
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -216,64 +215,6 @@ function FundsRing({ pct, tone }: { pct: number; tone: 'good' | 'warn' | 'bad' }
   );
 }
 
-// Two-line cumulative chart (deposits vs. cost) in plain SVG.
-function FundsChart({ points }: { points: Array<{ label: string; deposits: number; cost: number }> }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const W = 640;
-  const H = 200;
-  const pad = { l: 8, r: 8, t: 14, b: 22 };
-  const data = points.length === 1 ? [points[0], points[0]] : points;
-  const max = Math.max(1, ...data.map((p) => Math.max(p.deposits, p.cost))) * 1.12;
-  const x = (i: number) => pad.l + (i / (data.length - 1)) * (W - pad.l - pad.r);
-  const y = (v: number) => H - pad.b - (v / max) * (H - pad.t - pad.b);
-  const line = (key: 'deposits' | 'cost') => data.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ');
-  const area = `${line('deposits')} L${x(data.length - 1)},${H - pad.b} L${x(0)},${H - pad.b} Z`;
-  const active = hover ?? data.length - 1;
-  const ticks = [0, 0.5, 1].map((t) => max * t);
-
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-500" />Deposited <b className="tabular-nums text-foreground">{money(data[active].deposits, 0)}</b></span>
-        <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-amber-500" />Your cost <b className="tabular-nums text-foreground">{money(data[active].cost, 0)}</b></span>
-        <span className="ml-auto tabular-nums">{data[active].label}</span>
-      </div>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-44 w-full touch-none sm:h-52"
-        preserveAspectRatio="none"
-        onMouseLeave={() => setHover(null)}
-        onMouseMove={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const rel = (e.clientX - rect.left) / rect.width;
-          setHover(Math.max(0, Math.min(data.length - 1, Math.round(rel * (data.length - 1)))));
-        }}
-        onTouchMove={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const rel = (e.touches[0].clientX - rect.left) / rect.width;
-          setHover(Math.max(0, Math.min(data.length - 1, Math.round(rel * (data.length - 1)))));
-        }}
-      >
-        <defs>
-          <linearGradient id="md-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {ticks.map((t) => (
-          <line key={t} x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} className="stroke-border" strokeDasharray="3 4" />
-        ))}
-        <path d={area} fill="url(#md-area)" />
-        <path d={line('deposits')} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        <path d={line('cost')} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        <line x1={x(active)} x2={x(active)} y1={pad.t} y2={H - pad.b} className="stroke-foreground/25" vectorEffect="non-scaling-stroke" />
-        <text x={pad.l} y={H - 6} className="fill-muted-foreground" fontSize="11">{data[0].label}</text>
-        <text x={W - pad.r} y={H - 6} textAnchor="end" className="fill-muted-foreground" fontSize="11">{data[data.length - 1].label}</text>
-      </svg>
-    </div>
-  );
-}
-
 // Donut for the meal/fixed split.
 function SplitDonut({ meal, fixed }: { meal: number; fixed: number }) {
   const total = meal + fixed;
@@ -348,22 +289,6 @@ export function MemberDashboard() {
     const dailyMealCost = mealCost / elapsed;
     const runwayDays = balance > 0 && dailyMealCost > 0 ? Math.floor(balance / dailyMealCost) : null;
 
-    // Cumulative chart (cost = meals so far × current rate + fixed share)
-    const depositsByDate = new Map<string, number>();
-    for (const d of mine) {
-      const k = dayKey(parseISO(d.createdAt));
-      depositsByDate.set(k, (depositsByDate.get(k) ?? 0) + d.amount);
-    }
-    let cumMeals = 0;
-    let cumDeposits = 0;
-    const series = Array.from({ length: elapsed }, (_, i) => {
-      const d = addDays(start, i);
-      const k = dayKey(d);
-      cumMeals += byDate.get(k) ?? 0;
-      cumDeposits += depositsByDate.get(k) ?? 0;
-      return { label: format(d, 'd MMM'), deposits: cumDeposits, cost: cumMeals * stats.currentMealRate + fixedCost };
-    });
-
     // Last 7 days
     const week = Array.from({ length: 7 }, (_, i) => {
       const d = subDays(today, 6 - i);
@@ -396,8 +321,8 @@ export function MemberDashboard() {
     const rank = 1 + Array.from(perMember.values()).filter((v) => v > me.mealsEaten).length;
 
     return {
-      today, start, elapsed, mine, deposited, mealCost, fixedCost, cost, balance, usedPct,
-      todayMeals: countOn(today), dailyMealCost, runwayDays, series, week, weekTotal, cells, streak,
+      today, mine, deposited, mealCost, fixedCost, cost, balance, usedPct,
+      todayMeals: countOn(today), dailyMealCost, runwayDays, week, weekTotal, cells, streak,
       avgMeals, share, rank,
     };
   }, [me, activeCycle, deposits, mealLogs, members, stats]);
@@ -556,11 +481,6 @@ export function MemberDashboard() {
           </div>
         </aside>
       )}
-
-      {/* ── Funds vs. cost ──────────────────────────────────────────────── */}
-      <Panel title="Funds and cost" hint="Cumulative across this cycle. Move over the chart to see any day." icon={TrendingUp}>
-        <FundsChart points={view.series} />
-      </Panel>
 
       <div className="grid gap-5 lg:grid-cols-5 sm:gap-6">
         {/* ── Meal rhythm ───────────────────────────────────────────────── */}
