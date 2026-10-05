@@ -548,7 +548,6 @@ export function MemberDepositsView() {
             </p>
 
             <div className="mt-6"><FundsBar deposited={v.net} mealCost={v.mealCost} fixedCost={v.fixedCost} /></div>
-            <div className="mt-6"><BalanceChart series={v.series} /></div>
           </div>
 
           <dl className="grid grid-cols-2 divide-x divide-y divide-white/10 border-t border-white/10 sm:grid-cols-4 sm:divide-y-0">
