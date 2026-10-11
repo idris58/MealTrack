@@ -12,6 +12,7 @@ import {
   type OfflineOp,
 } from './offline-queue';
 import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
+import { broadcastSharedUpdate } from './shared-update';
 import {
   CHANGELOG_PAGE_SIZE,
   mapChangelogRows,
@@ -19,6 +20,7 @@ import {
   type ChangelogRow,
 } from '@/hooks/use-changelog';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
+import { useMembers } from '@/hooks/use-members';
 
 export interface Member {
   id: string;
@@ -365,30 +367,6 @@ function getMealLogAction(changes: ChangelogChange[]): ChangelogAction {
   if (deleted) return 'delete';
   if (created) return 'create';
   return 'update';
-}
-
-async function broadcastSharedUpdate() {
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data.session?.access_token;
-
-  if (!accessToken) {
-    return;
-  }
-
-  try {
-    const response = await fetch('/api/share/broadcast', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    if (!response.ok) {
-      console.error('Error broadcasting shared update:', await response.text());
-    }
-  } catch (error) {
-    console.error('Error broadcasting shared update:', error);
-  }
 }
 
 export function MealProvider({ children }: { children: ReactNode }) {
@@ -956,206 +934,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
     return cycles.find((cycle) => cycle.id === cycleId)?.status === 'pending';
   }, [cycles]);
 
-  const addMember = useCallback(async (name: string) => {
-    if (!userId || !messId) return;
-    const targetCycleId = activeCycle?.id ?? null;
+  const memberActions = useMembers({
+    userId,
+    messId,
+    activeCycleId: activeCycle?.id ?? null,
+    members: memberRoster,
+    setMembers: setMemberRoster,
+    setArchivedMembers: setArchivedMemberRoster,
+    recordChange: recordChangelog,
+    reload: () => void loadData(),
+    broadcast: () => void broadcastSharedUpdate(),
+  });
 
-    const avatar = name.substring(0, 2).toUpperCase();
-    const { data, error } = await supabase
-      .from('members')
-      .insert([{ name, avatar, user_id: userId, mess_id: messId, profile_id: null, sort_order: memberRoster.length }])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error adding member:', error);
-      throw new Error('Unable to add member. Please try again.');
-    }
-
-    setMemberRoster((prev) => [
-      ...prev,
-      {
-        id: data.id,
-        name: data.name,
-        deposit: 0,
-        mealsEaten: 0,
-        avatar: toAvatar(data.name, data.avatar),
-      },
-    ]);
-
-    await recordChangelog({
-      cycleId: targetCycleId,
-      entityType: 'member',
-      entityId: data.id,
-      action: 'create',
-      title: `Added member ${data.name}`,
-      changes: [
-        buildSnapshotChange('name', 'Name', data.name),
-      ],
-    });
-    void broadcastSharedUpdate();
-  }, [userId, messId, activeCycle?.id, memberRoster.length, recordChangelog]);
-
-  const reorderMembers = useCallback(async (memberIds: string[]) => {
-    if (!userId || memberIds.length !== memberRoster.length) return;
-    const byId = new Map(memberRoster.map((member) => [member.id, member]));
-    const nextRoster = memberIds.map((id) => byId.get(id)).filter((member): member is Member => Boolean(member));
-    if (nextRoster.length !== memberRoster.length) return;
-    const previousRoster = memberRoster;
-    setMemberRoster(nextRoster);
-    const results = await Promise.all(memberIds.map((id, sortOrder) => supabase.from("members").update({ sort_order: sortOrder }).eq("id", id).eq("mess_id", messId)));
-    if (results.some((result) => result.error)) {
-      console.error("Error reordering members:", results.find((result) => result.error)?.error);
-      setMemberRoster(previousRoster);
-      throw new Error("Could not save member order.");
-    }
-    void broadcastSharedUpdate();
-  }, [userId, messId, memberRoster]);
-
-  const updateMember = useCallback(async (id: string, updates: Partial<Member>) => {
-    if (!userId || !messId) return;
-    const existingMember = memberRoster.find((member) => member.id === id);
-    const targetCycleId = activeCycle?.id ?? null;
-    if (!existingMember) return;
-
-    const dbUpdates: Record<string, unknown> = {};
-    if (updates.name !== undefined) dbUpdates.name = updates.name;
-    if (updates.avatar !== undefined) dbUpdates.avatar = updates.avatar;
-
-    const changes = [
-      buildUpdateChange('name', 'Name', existingMember.name, updates.name ?? existingMember.name),
-      buildUpdateChange('avatar', 'Avatar', existingMember.avatar ?? null, updates.avatar ?? existingMember.avatar ?? null),
-    ].filter((change): change is ChangelogChange => Boolean(change));
-
-    if (changes.length === 0) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from('members')
-      .update(dbUpdates)
-      .eq('id', id)
-      .eq('mess_id', messId);
-
-    if (error) {
-      console.error('Error updating member:', error);
-      throw new Error('Unable to update member. Please try again.');
-    }
-
-    setMemberRoster((prev) => prev.map((member) => (
-      member.id === id
-        ? {
-          ...member,
-          ...updates,
-          deposit: member.deposit,
-          mealsEaten: member.mealsEaten,
-        }
-        : member
-    )));
-
-    await recordChangelog({
-      cycleId: targetCycleId,
-      entityType: 'member',
-      entityId: id,
-      action: 'update',
-      title: `Updated member ${existingMember.name}`,
-      changes,
-    });
-    void broadcastSharedUpdate();
-  }, [userId, messId, memberRoster, activeCycle?.id, recordChangelog]);
-
-  const removeMember = useCallback(async (id: string) => {
-    if (!userId || !messId) return;
-    const existingMember = memberRoster.find((member) => member.id === id);
-    const targetCycleId = activeCycle?.id ?? null;
-    if (!existingMember) return;
-
-    const [mealHistory, depositHistory] = await Promise.all([
-      supabase.from('meal_logs').select('id', { head: true, count: 'exact' }).eq('member_id', id),
-      supabase.from('cycle_deposits').select('id', { head: true, count: 'exact' }).eq('member_id', id),
-    ]);
+  /* Removed inline member actions during extraction.
     if (mealHistory.error || depositHistory.error) {
       console.error('Error checking member history before removal:', mealHistory.error ?? depositHistory.error);
       throw new Error('Unable to verify this member’s history. Please try again.');
     }
-    const hasHistory = (mealHistory.count ?? 0) > 0 || (depositHistory.count ?? 0) > 0;
-
-    const now = new Date();
-    const { error } = await supabase
-      .from('members')
-      .update({
-        deleted_at: now.toISOString(),
-        // A member with history is archived indefinitely; only empty members
-        // enter the undo window and can later be hard-deleted by cleanup.
-        delete_expires_at: hasHistory ? null : new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString(),
-      })
-      .eq('id', id)
-      .eq('mess_id', messId)
-      .is('deleted_at', null);
-
-    if (error) {
-      console.error('Error removing member:', error);
-      throw new Error('Unable to remove member. Please try again.');
-    }
-
-    setMemberRoster((prev) => prev.filter((member) => member.id !== id));
-    if (hasHistory) {
-      setArchivedMemberRoster((prev) => prev.some((member) => member.id === id) ? prev : [...prev, { ...existingMember, archived: true }]);
-    }
-
-    await recordChangelog({
-      cycleId: targetCycleId,
-      entityType: 'member',
-      entityId: id,
-      action: 'delete',
-      title: `${hasHistory ? 'Archived' : 'Deleted'} member ${existingMember.name}`,
-      changes: [
-        buildSnapshotChange('name', 'Name', existingMember.name),
-      ],
-    });
-    void broadcastSharedUpdate();
-  }, [userId, messId, memberRoster, activeCycle?.id, recordChangelog]);
-
-  const restoreMember = useCallback(async (id: string) => {
-    if (!userId || !messId) return;
-
-    const { data, error } = await supabase
-      .from('members')
-      .update({ deleted_at: null, delete_expires_at: null })
-      .eq('id', id)
-      .eq('mess_id', messId)
-      .not('deleted_at', 'is', null)
-      .select('id, name, avatar')
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error restoring member:', error);
-      throw new Error('Unable to restore member. Please try again.');
-    }
-
-    if (data) {
-      setArchivedMemberRoster((prev) => prev.filter((member) => member.id !== data.id));
-      setMemberRoster((prev) => {
-        if (prev.some((member) => member.id === data.id)) {
-          return prev;
-        }
-
-        return [
-          ...prev,
-          {
-            id: data.id,
-            name: data.name,
-            deposit: 0,
-            mealsEaten: 0,
-            avatar: toAvatar(data.name, data.avatar),
-          },
-        ];
-      });
-    }
-
-    void loadData();
-    void broadcastSharedUpdate();
-  }, [userId, messId, loadData]);
+  */
 
   const addExpense = useCallback(async (
     amount: number,
@@ -2188,11 +1984,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
   ]);
 
   const actionsValue = useMemo<MealActionsContextType>(() => ({
-    addMember,
-    updateMember,
-    removeMember,
-    restoreMember,
-    reorderMembers,
+    addMember: memberActions.addMember,
+    updateMember: memberActions.updateMember,
+    removeMember: memberActions.removeMember,
+    restoreMember: memberActions.restoreMember,
+    reorderMembers: memberActions.reorderMembers,
     addExpense,
     updateExpense,
     deleteExpense,
@@ -2214,11 +2010,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
     discardFailedSync,
     retryLoadData,
   }), [
-    addMember,
-    updateMember,
-    removeMember,
-    restoreMember,
-    reorderMembers,
+    memberActions.addMember,
+    memberActions.updateMember,
+    memberActions.removeMember,
+    memberActions.restoreMember,
+    memberActions.reorderMembers,
     addExpense,
     updateExpense,
     deleteExpense,

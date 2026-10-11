@@ -7,7 +7,7 @@ import type {
   ChangelogChange,
   ChangelogEntityType,
   ChangelogEntry,
-} from '@/lib/meal-context';
+} from '@/lib/meal-types';
 
 export const CHANGELOG_PAGE_SIZE = 50;
 
