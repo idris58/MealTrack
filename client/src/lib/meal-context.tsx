@@ -12,6 +12,13 @@ import {
   type OfflineOp,
 } from './offline-queue';
 import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
+import {
+  CHANGELOG_PAGE_SIZE,
+  mapChangelogRows,
+  useChangelog,
+  type ChangelogRow,
+} from '@/hooks/use-changelog';
+import { useOfflineSync } from '@/hooks/use-offline-sync';
 
 export interface Member {
   id: string;
@@ -252,27 +259,6 @@ type CycleDepositRow = {
   created_at: string;
 };
 
-type ChangelogRow = {
-  id: string;
-  cycle_id: string;
-  user_id?: string;
-  profile_id?: string | null;
-  entity_type: ChangelogEntityType;
-  entity_id: string;
-  action: ChangelogAction;
-  title: string;
-  changes: ChangelogChange[] | null;
-  created_at: string;
-  profiles?: {
-    id: string;
-    full_name: string;
-    picture_url?: string | null;
-    role?: string | null;
-  } | null;
-};
-
-const CHANGELOG_PAGE_SIZE = 50;
-
 function mapExpenseRows(rows: ExpenseRow[]): Expense[] {
   return rows
     .filter((expense) => Boolean(expense.cycle_id))
@@ -308,43 +294,6 @@ function mapDepositRows(rows: CycleDepositRow[]): CycleDeposit[] {
     note: deposit.note ?? undefined,
     createdAt: deposit.created_at,
   }));
-}
-
-function mapChangelogRows(
-  rows: ChangelogRow[],
-  profilesMap?: Map<string, ChangelogActor>,
-): ChangelogEntry[] {
-  return rows.map((entry) => {
-    let actor: ChangelogActor | null = null;
-    const profileData = Array.isArray(entry.profiles) ? entry.profiles[0] : entry.profiles;
-    if (profileData) {
-      actor = {
-        id: profileData.id,
-        name: profileData.full_name,
-        pictureUrl: profileData.picture_url ?? null,
-        role: (profileData.role as ChangelogActor['role']) ?? null,
-      };
-    } else if (profilesMap) {
-      const matched =
-        (entry.profile_id && profilesMap.get(entry.profile_id)) ||
-        (entry.user_id && profilesMap.get(entry.user_id));
-      if (matched) {
-        actor = matched;
-      }
-    }
-
-    return {
-      id: entry.id,
-      cycleId: entry.cycle_id,
-      entityType: entry.entity_type,
-      entityId: entry.entity_id,
-      action: entry.action,
-      title: entry.title,
-      changes: entry.changes ?? [],
-      createdAt: entry.created_at,
-      actor,
-    };
-  });
 }
 
 function toAvatar(name: string, fallback?: string | null) {
@@ -448,9 +397,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [allMealLogs, setAllMealLogs] = useState<MealLog[]>([]);
   const [allDeposits, setAllDeposits] = useState<CycleDeposit[]>([]);
-  const [allChangelogEntries, setAllChangelogEntries] = useState<ChangelogEntry[]>([]);
-  const [hasMoreChangelogEntries, setHasMoreChangelogEntries] = useState(false);
-  const [changelogLoading, setChangelogLoading] = useState(false);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [loadedCycleIds, setLoadedCycleIds] = useState<Set<string>>(new Set());
   const [cycleDetailsLoadingById, setCycleDetailsLoadingById] = useState<Record<string, boolean>>({});
@@ -461,11 +407,17 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const loadedScopeRef = useRef<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [messId, setMessId] = useState<string | null>(null);
-  const [pendingSyncIds, setPendingSyncIds] = useState<Set<string>>(new Set());
-  const [failedSyncOps, setFailedSyncOps] = useState<OfflineOp[]>([]);
-  const isSyncingRef = useRef(false);
   const profilesMapRef = useRef<Map<string, ChangelogActor>>(new Map());
   const [dataError, setDataError] = useState<string | null>(null);
+  const {
+    entries: allChangelogEntries,
+    setEntries: setAllChangelogEntries,
+    hasMore: hasMoreChangelogEntries,
+    setHasMore: setHasMoreChangelogEntries,
+    loading: changelogLoading,
+    recordChangelog,
+    loadMore: loadMoreChangelogEntries,
+  } = useChangelog(userId, messId, profilesMapRef);
 
   // ─── Offline-aware identity resolution ─────────────────────────────────────
   useEffect(() => {
@@ -511,17 +463,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     };
 
     void resolveIdentity();
-  }, []);
-
-  // Hydrate pendingSyncIds from IDB on mount so badges survive a page refresh
-  useEffect(() => {
-    dequeueAll().then((ops) => {
-      setPendingSyncIds(new Set(ops.filter((op) => op.status !== 'failed' && op.status !== 'conflict').map((op) => {
-        if ((op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string') return op.payload.id;
-        return op.id;
-      })));
-      setFailedSyncOps(ops.filter((op) => op.status === 'failed' || op.status === 'conflict'));
-    }).catch(() => { /* non-fatal */ });
   }, []);
 
   useEffect(() => {
@@ -591,68 +532,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const scopedMembers = cycleId ? getCycleMembers(cycleId) : memberRoster;
     return scopedMembers.find((member) => member.id === memberId)?.name ?? 'Unknown member';
   }, [getCycleMembers, memberRoster]);
-
-  const recordChangelog = useCallback(async ({
-    cycleId,
-    entityType,
-    entityId,
-    action,
-    title,
-    changes,
-  }: {
-    cycleId: string | null;
-    entityType: ChangelogEntityType;
-    entityId: string;
-    action: ChangelogAction;
-    title: string;
-    changes: ChangelogChange[];
-  }) => {
-    if (!userId || !messId || !cycleId) return;
-
-    const { data, error } = await supabase
-      .from('changelog_entries')
-      .insert([{
-        user_id: userId,
-        profile_id: userId,
-        mess_id: messId,
-        cycle_id: cycleId,
-        entity_type: entityType,
-        entity_id: entityId,
-        action,
-        title,
-        changes,
-      }])
-      .select('*, profiles(id, full_name, picture_url, role)')
-      .single();
-
-    if (error) {
-      console.error('Error recording changelog entry:', error);
-      return;
-    }
-
-    const profileData = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles;
-    const currentActor =
-      (profileData
-        ? {
-          id: profileData.id,
-          name: profileData.full_name,
-          pictureUrl: profileData.picture_url ?? null,
-          role: profileData.role as ChangelogActor['role'],
-        }
-        : null) || profilesMapRef.current.get(userId) || null;
-
-    setAllChangelogEntries((prev) => [{
-      id: data.id,
-      cycleId: data.cycle_id,
-      entityType: data.entity_type,
-      entityId: data.entity_id,
-      action: data.action,
-      title: data.title,
-      changes: (data.changes as ChangelogChange[] | null) ?? [],
-      createdAt: data.created_at,
-      actor: currentActor,
-    }, ...prev]);
-  }, [userId, messId]);
 
   const fetchCycleRows = useCallback(async (cycleId: string) => {
     if (!userId || !messId) {
@@ -1068,38 +947,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
       void loadData();
     }
   }, [userId, messId, loadData]);
-
-  const loadMoreChangelogEntries = useCallback(async () => {
-    if (!userId || changelogLoading || !hasMoreChangelogEntries) return;
-
-    setChangelogLoading(true);
-    try {
-      const from = allChangelogEntries.length;
-      const to = from + CHANGELOG_PAGE_SIZE - 1;
-      const { data, error } = await supabase
-        .from('changelog_entries')
-        .select('*, profiles(id, full_name, picture_url, role)')
-        .eq('mess_id', messId)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-
-      const nextEntries = mapChangelogRows(
-        (data || []) as ChangelogRow[],
-        profilesMapRef.current,
-      );
-      setAllChangelogEntries((prev) => {
-        const seen = new Set(prev.map((entry) => entry.id));
-        return [...prev, ...nextEntries.filter((entry) => !seen.has(entry.id))];
-      });
-      setHasMoreChangelogEntries(nextEntries.length === CHANGELOG_PAGE_SIZE);
-    } catch (error) {
-      console.error('Error loading changelog entries:', error);
-    } finally {
-      setChangelogLoading(false);
-    }
-  }, [userId, messId, changelogLoading, hasMoreChangelogEntries, allChangelogEntries.length]);
 
   const getRequiredCycleId = useCallback((requestedCycleId?: string) => {
     return requestedCycleId ?? activeCycle?.id ?? null;
@@ -1927,71 +1774,30 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, messId, recordChangelog, getMemberName, saveMealLogs]);
 
-  const triggerSync = useCallback(async () => {
-    if (isSyncingRef.current) return;
-    isSyncingRef.current = true;
+  const pendingItemId = useCallback((operation: OfflineOp) => (
+    (operation.type === 'UPDATE_EXPENSE' || operation.type === 'DELETE_EXPENSE') &&
+    typeof operation.payload.id === 'string'
+      ? operation.payload.id
+      : operation.id
+  ), []);
 
-    try {
-      const ops = (await dequeueAll()).filter((op) => op.status !== 'failed' && op.status !== 'conflict');
-      if (ops.length === 0) return;
-
-      for (const op of ops) {
-        try {
-          await replayOp(op);
-          await removeFromQueue(op.id);
-          setPendingSyncIds((prev) => {
-            const next = new Set(prev);
-            next.delete(op.id);
-            return next;
-          });
-        } catch (err) {
-          console.error(`[offline-sync] Failed to replay op ${op.id}:`, err);
-          const error = err as Error & { code?: string };
-          const attempts = (op.attempts ?? 0) + 1;
-          const failedOp: OfflineOp = {
-            ...op,
-            attempts,
-            status: error.code === 'OFFLINE_CONFLICT' ? 'conflict' : attempts >= 5 ? 'failed' : 'pending',
-            lastError: error.message || 'Unable to sync this change.',
-          };
-          await updateQueuedOp(failedOp);
-          if (failedOp.status === 'failed' || failedOp.status === 'conflict') {
-            setFailedSyncOps((prev) => [...prev.filter((item) => item.id !== op.id), failedOp]);
-            const itemId = (op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string' ? op.payload.id : op.id;
-            setPendingSyncIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
-          }
-        }
-      }
-
-      void broadcastSharedUpdate();
-      void loadData();
-    } finally {
-      isSyncingRef.current = false;
-    }
-  }, [replayOp, loadData]);
-
-  const retryFailedSync = useCallback(async () => {
-    const failed = await dequeueAll();
-    const targets = failed.filter((op) => op.status === 'failed');
-    for (const op of targets) {
-      const retry = { ...op, attempts: 0, status: 'pending' as const, lastError: undefined };
-      await updateQueuedOp(retry);
-      const itemId = (op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string' ? op.payload.id : op.id;
-      setPendingSyncIds((prev) => new Set(prev).add(itemId));
-    }
-    setFailedSyncOps((prev) => prev.filter((op) => op.status === 'conflict'));
-    await triggerSync();
-  }, [triggerSync]);
-
-  const discardFailedSync = useCallback(async (id: string) => {
-    const op = (await dequeueAll()).find((item) => item.id === id);
-    if (!op) return;
-    await removeFromQueue(id);
-    const itemId = (op.type === 'UPDATE_EXPENSE' || op.type === 'DELETE_EXPENSE') && typeof op.payload.id === 'string' ? op.payload.id : op.id;
-    setPendingSyncIds((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
-    setFailedSyncOps((prev) => prev.filter((item) => item.id !== id));
+  const afterOfflineSync = useCallback(() => {
+    void broadcastSharedUpdate();
     void loadData();
   }, [loadData]);
+
+  const {
+    pendingSyncIds,
+    setPendingSyncIds,
+    failedSyncOps,
+    triggerSync,
+    retryFailedSync,
+    discardFailedSync,
+  } = useOfflineSync({
+    replay: replayOp,
+    afterSync: afterOfflineSync,
+    pendingItemId,
+  });
 
   const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !activeCycle) return;
