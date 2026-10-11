@@ -1,0 +1,68 @@
+import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+
+import { supabase } from '@/lib/supabase';
+import { enqueue } from '@/lib/offline-queue';
+import type { ChangelogChange, CycleDeposit } from '@/lib/meal-types';
+
+type Options = {
+  userId: string | null;
+  messId: string | null;
+  deposits: CycleDeposit[];
+  setDeposits: Dispatch<SetStateAction<CycleDeposit[]>>;
+  setPendingSyncIds: Dispatch<SetStateAction<Set<string>>>;
+  getCycleId: (cycleId?: string) => string | null;
+  getMemberName: (memberId: string, cycleId: string) => string;
+  recordChange: (input: { cycleId: string; entityType: 'deposit'; entityId: string; action: 'update'; title: string; changes: ChangelogChange[] }) => Promise<void>;
+  broadcast: () => void;
+};
+
+export function useDeposits({ userId, messId, deposits, setDeposits, setPendingSyncIds, getCycleId, getMemberName, recordChange, broadcast }: Options) {
+  const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string) => {
+    if (!userId || !messId || amount === 0) return;
+    const targetCycleId = getCycleId(cycleId);
+    if (!targetCycleId) return;
+    const memberName = getMemberName(memberId, targetCycleId);
+    const previousBalance = deposits
+      .filter((deposit) => deposit.cycleId === targetCycleId && deposit.memberId === memberId)
+      .reduce((total, deposit) => total + deposit.amount, 0);
+
+    if (!navigator.onLine) {
+      const id = `offline-${uuidv4()}`;
+      setDeposits((previous) => [...previous, {
+        id, cycleId: targetCycleId, memberId, amount, note: note ?? undefined, createdAt: new Date().toISOString(),
+      }]);
+      setPendingSyncIds((previous) => new Set(previous).add(id));
+      await enqueue({
+        id,
+        type: 'ADD_DEPOSIT',
+        payload: { memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId },
+        createdAt: Date.now(),
+      });
+      return;
+    }
+
+    const { data, error } = await supabase.from('cycle_deposits').insert([{
+      member_id: memberId, cycle_id: targetCycleId, amount, note: note ?? null, user_id: userId, mess_id: messId,
+    }]).select().single();
+    if (error) throw new Error('Unable to add deposit. Please try again.');
+
+    setDeposits((previous) => [...previous, {
+      id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount),
+      note: data.note ?? undefined, createdAt: data.created_at,
+    }]);
+    await recordChange({
+      cycleId: targetCycleId, entityType: 'deposit', entityId: data.id, action: 'update',
+      title: `Updated deposit for ${memberName}`,
+      changes: [
+        { field: 'member', label: 'Member', value: memberName },
+        { field: 'deposit_balance', label: 'Deposit Balance', from: previousBalance, to: previousBalance + amount },
+        { field: 'transaction_amount', label: 'Transaction', value: Number(data.amount) },
+        ...(data.note ? [{ field: 'note', label: 'Note', value: data.note }] : []),
+      ],
+    });
+    broadcast();
+  }, [broadcast, deposits, getCycleId, getMemberName, messId, recordChange, setDeposits, setPendingSyncIds, userId]);
+
+  return { addDeposit };
+}

@@ -21,6 +21,7 @@ import {
 } from '@/hooks/use-changelog';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useMembers } from '@/hooks/use-members';
+import { useDeposits } from '@/hooks/use-deposits';
 
 export interface Member {
   id: string;
@@ -1595,6 +1596,18 @@ export function MealProvider({ children }: { children: ReactNode }) {
     pendingItemId,
   });
 
+  const depositActions = useDeposits({
+    userId,
+    messId,
+    deposits: allDeposits,
+    setDeposits: setAllDeposits,
+    setPendingSyncIds,
+    getCycleId: getRequiredCycleId,
+    getMemberName: (memberId, cycleId) => getMemberName(memberId, cycleId),
+    recordChange: recordChangelog,
+    broadcast: () => void broadcastSharedUpdate(),
+  });
+
   const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !activeCycle) return;
 
@@ -1993,7 +2006,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     updateExpense,
     deleteExpense,
     restoreExpense,
-    addDeposit,
+    addDeposit: depositActions.addDeposit,
     saveMealLogs,
     logMeal,
     renameActiveCycle,
@@ -2019,7 +2032,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     updateExpense,
     deleteExpense,
     restoreExpense,
-    addDeposit,
+    depositActions.addDeposit,
     saveMealLogs,
     logMeal,
     renameActiveCycle,
