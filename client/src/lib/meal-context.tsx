@@ -24,6 +24,7 @@ import { useMembers } from '@/hooks/use-members';
 import { useDeposits } from '@/hooks/use-deposits';
 import { useExpenses } from '@/hooks/use-expenses';
 import { useMealLogs } from '@/hooks/use-meal-logs';
+import { useCycles } from '@/hooks/use-cycles';
 
 export interface Member {
   id: string;
@@ -1558,6 +1559,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
     broadcast: () => void broadcastSharedUpdate(),
   });
 
+  const cycleActions = useCycles({
+    userId,
+    messId,
+    cycles,
+    activeCycle,
+    pendingCycle,
+    getCycleMembers,
+    setCycles,
+    setLoadedCycleIds,
+    setDeposits: setAllDeposits,
+    setExpenses: setAllExpenses,
+    setMealLogs: setAllMealLogs,
+    setChangelogEntries: setAllChangelogEntries,
+    addDeposit: depositActions.addDeposit,
+    reload: () => void loadData(),
+    broadcast: () => void broadcastSharedUpdate(),
+  });
+
   const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !activeCycle) return;
 
@@ -1959,13 +1978,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
     addDeposit: depositActions.addDeposit,
     saveMealLogs: mealLogActions.saveMealLogs,
     logMeal: mealLogActions.logMeal,
-    renameActiveCycle,
-    closeActiveCycle,
-    startNewCycle,
-    suggestCycleName,
-    markCycleClosed,
-    deleteCycle,
-    restoreCycle,
+    renameActiveCycle: cycleActions.renameActiveCycle,
+    closeActiveCycle: cycleActions.closeActiveCycle,
+    startNewCycle: cycleActions.startNewCycle,
+    suggestCycleName: cycleActions.suggestCycleName,
+    markCycleClosed: cycleActions.markCycleClosed,
+    deleteCycle: cycleActions.deleteCycle,
+    restoreCycle: cycleActions.restoreCycle,
     loadCycleDetails,
     loadMoreChangelogEntries,
     triggerSync,
@@ -1985,13 +2004,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
     depositActions.addDeposit,
     mealLogActions.saveMealLogs,
     mealLogActions.logMeal,
-    renameActiveCycle,
-    closeActiveCycle,
-    startNewCycle,
-    suggestCycleName,
-    markCycleClosed,
-    deleteCycle,
-    restoreCycle,
+    cycleActions.renameActiveCycle,
+    cycleActions.closeActiveCycle,
+    cycleActions.startNewCycle,
+    cycleActions.suggestCycleName,
+    cycleActions.markCycleClosed,
+    cycleActions.deleteCycle,
+    cycleActions.restoreCycle,
     loadCycleDetails,
     loadMoreChangelogEntries,
     triggerSync,
