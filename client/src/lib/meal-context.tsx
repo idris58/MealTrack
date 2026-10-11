@@ -25,6 +25,7 @@ import { useDeposits } from '@/hooks/use-deposits';
 import { useExpenses } from '@/hooks/use-expenses';
 import { useMealLogs } from '@/hooks/use-meal-logs';
 import { useCycles } from '@/hooks/use-cycles';
+import { useCycleDetails } from '@/hooks/use-cycle-details';
 
 export interface Member {
   id: string;
@@ -514,6 +515,15 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const scopedMembers = cycleId ? getCycleMembers(cycleId) : memberRoster;
     return scopedMembers.find((member) => member.id === memberId)?.name ?? 'Unknown member';
   }, [getCycleMembers, memberRoster]);
+
+  const computedCycleDetails = useCycleDetails({
+    cycles,
+    loadedCycleIds,
+    membersForCycle: getCycleMembers,
+    deposits: allDeposits,
+    expenses: allExpenses,
+    mealLogs: allMealLogs,
+  });
 
   const fetchCycleRows = useCallback(async (cycleId: string) => {
     if (!userId || !messId) {
@@ -1865,8 +1875,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
   }, [userId, messId, loadData]);
 
   const activeDetails = useMemo(
-    () => (activeCycle ? cycleDetailsById[activeCycle.id] ?? null : null),
-    [activeCycle, cycleDetailsById],
+    () => (activeCycle ? computedCycleDetails.getCycleDetails(activeCycle.id) : null),
+    [activeCycle, computedCycleDetails],
   );
 
   // Archived members remain in cycle details so historical meals/deposits still
@@ -1898,7 +1908,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       return { mealCost: 0, fixedCost: 0, totalCost: 0, balance: 0, mealsEaten: 0 };
     }
 
-    const details = cycleDetailsById[targetCycleId];
+    const details = computedCycleDetails.getCycleDetails(targetCycleId);
     const member = details?.members.find((entry) => entry.id === memberId);
 
     if (!member) {
@@ -1912,7 +1922,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       balance: member.balance,
       mealsEaten: member.mealsEaten,
     };
-  }, [getRequiredCycleId, cycleDetailsById]);
+  }, [getRequiredCycleId, computedCycleDetails]);
 
   const dataValue = useMemo<MealDataContextType>(() => ({
     members,
@@ -1936,7 +1946,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     archivedMembers: archivedMemberRoster.filter((member) => member.archived),
     dataError,
     getMemberStats,
-    getCycleDetails,
+    getCycleDetails: computedCycleDetails.getCycleDetails,
     isCycleDetailsLoading,
     getCycleDetailsError,
   }), [
@@ -1960,7 +1970,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     archivedMemberRoster,
     dataError,
     getMemberStats,
-    getCycleDetails,
+    computedCycleDetails.getCycleDetails,
     isCycleDetailsLoading,
     getCycleDetailsError,
   ]);
