@@ -26,6 +26,8 @@ import { useExpenses } from '@/hooks/use-expenses';
 import { useMealLogs } from '@/hooks/use-meal-logs';
 import { useCycles } from '@/hooks/use-cycles';
 import { useCycleDetails } from '@/hooks/use-cycle-details';
+import { useCycleLoader } from '@/hooks/use-cycle-loader';
+import { useMealIdentity } from '@/hooks/use-meal-identity';
 
 export interface Member {
   id: string;
@@ -388,9 +390,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedDataRef = useRef(false);
   const loadedScopeRef = useRef<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [messId, setMessId] = useState<string | null>(null);
   const profilesMapRef = useRef<Map<string, ChangelogActor>>(new Map());
+  const { userId, messId } = useMealIdentity(profilesMapRef);
   const [dataError, setDataError] = useState<string | null>(null);
   const {
     entries: allChangelogEntries,
@@ -403,6 +404,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   } = useChangelog(userId, messId, profilesMapRef);
 
   // ─── Offline-aware identity resolution ─────────────────────────────────────
+  /* Identity resolution moved to useMealIdentity.
   useEffect(() => {
     const resolveIdentity = async () => {
       const { data } = await supabase.auth.getSession();
@@ -446,7 +448,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     };
 
     void resolveIdentity();
-  }, []);
+  }, []); */
 
   useEffect(() => {
     if (userId && messId) {
@@ -689,6 +691,16 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const isCycleDetailsLoading = useCallback((cycleId: string) => Boolean(cycleDetailsLoadingById[cycleId]), [cycleDetailsLoadingById]);
 
   const getCycleDetailsError = useCallback((cycleId: string) => cycleDetailsErrorById[cycleId] ?? null, [cycleDetailsErrorById]);
+
+  const cycleLoader = useCycleLoader({
+    enabled: Boolean(userId && messId),
+    isLoaded: (cycleId) => Boolean(cycleDetailsById[cycleId]),
+    fetchRows: fetchCycleRows,
+    setDeposits: setAllDeposits,
+    setExpenses: setAllExpenses,
+    setMealLogs: setAllMealLogs,
+    setLoadedCycleIds,
+  });
 
   const loadCycleDetails = useCallback(async (cycleId: string, options: { force?: boolean } = {}) => {
     if (!userId || !messId) return;
@@ -1947,8 +1959,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     dataError,
     getMemberStats,
     getCycleDetails: computedCycleDetails.getCycleDetails,
-    isCycleDetailsLoading,
-    getCycleDetailsError,
+    isCycleDetailsLoading: cycleLoader.isLoading,
+    getCycleDetailsError: cycleLoader.getError,
   }), [
     members,
     expenses,
@@ -1971,8 +1983,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     dataError,
     getMemberStats,
     computedCycleDetails.getCycleDetails,
-    isCycleDetailsLoading,
-    getCycleDetailsError,
+    cycleLoader.isLoading,
+    cycleLoader.getError,
   ]);
 
   const actionsValue = useMemo<MealActionsContextType>(() => ({
@@ -1995,7 +2007,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     markCycleClosed: cycleActions.markCycleClosed,
     deleteCycle: cycleActions.deleteCycle,
     restoreCycle: cycleActions.restoreCycle,
-    loadCycleDetails,
+    loadCycleDetails: cycleLoader.loadCycleDetails,
     loadMoreChangelogEntries,
     triggerSync,
     retryFailedSync,
@@ -2021,7 +2033,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     cycleActions.markCycleClosed,
     cycleActions.deleteCycle,
     cycleActions.restoreCycle,
-    loadCycleDetails,
+    cycleLoader.loadCycleDetails,
     loadMoreChangelogEntries,
     triggerSync,
     retryFailedSync,
