@@ -22,6 +22,8 @@ import {
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useMembers } from '@/hooks/use-members';
 import { useDeposits } from '@/hooks/use-deposits';
+import { useExpenses } from '@/hooks/use-expenses';
+import { useMealLogs } from '@/hooks/use-meal-logs';
 
 export interface Member {
   id: string;
@@ -1250,83 +1252,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     void broadcastSharedUpdate();
   }, [userId, messId]);
 
-  const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string) => {
-    if (!userId || amount === 0) return;
-
-    const targetCycleId = getRequiredCycleId(cycleId);
-    if (!targetCycleId) return;
-    const memberName = getMemberName(memberId, targetCycleId);
-    const previousDepositBalance = allDeposits
-      .filter((deposit) => deposit.cycleId === targetCycleId && deposit.memberId === memberId)
-      .reduce((sum, deposit) => sum + deposit.amount, 0);
-    const nextDepositBalance = previousDepositBalance + amount;
-
     // ── Offline path ──────────────────────────────────────────────────────────
-    if (!navigator.onLine) {
-      const tempId = `offline-${uuidv4()}`;
-      const optimisticDeposit: CycleDeposit = {
-        id: tempId,
-        cycleId: targetCycleId,
-        memberId,
-        amount,
-        note: note ?? undefined,
-        createdAt: new Date().toISOString(),
-      };
-      setAllDeposits((prev) => [...prev, optimisticDeposit]);
-      setPendingSyncIds((prev) => new Set(prev).add(tempId));
-      await enqueue({
-        id: tempId,
-        type: 'ADD_DEPOSIT',
-        payload: { memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId },
-        createdAt: Date.now(),
-      });
-      return;
-    }
-
     // ── Online path ───────────────────────────────────────────────────────────
-    const { data, error } = await supabase
-      .from('cycle_deposits')
-      .insert([{
-        member_id: memberId,
-        cycle_id: targetCycleId,
-        amount,
-        note: note ?? null,
-        user_id: userId,
-        mess_id: messId,
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error adding deposit:', error);
-      throw new Error('Unable to add deposit. Please try again.');
-    }
-
-    setAllDeposits((prev) => [...prev, {
-      id: data.id,
-      cycleId: data.cycle_id,
-      memberId: data.member_id,
-      amount: Number(data.amount),
-      note: data.note ?? undefined,
-      createdAt: data.created_at,
-    }]);
-
-    await recordChangelog({
-      cycleId: targetCycleId,
-      entityType: 'deposit',
-      entityId: data.id,
-      action: 'update',
-      title: `Updated deposit for ${memberName}`,
-      changes: [
-        buildSnapshotChange('member', 'Member', memberName),
-        buildUpdateChange('deposit_balance', 'Deposit Balance', previousDepositBalance, nextDepositBalance)!,
-        buildSnapshotChange('transaction_amount', 'Transaction', Number(data.amount)),
-        ...(data.note ? [buildSnapshotChange('note', 'Note', data.note)] : []),
-      ],
-    });
-    void broadcastSharedUpdate();
-  }, [userId, messId, getRequiredCycleId, getMemberName, allDeposits, recordChangelog]);
-
   const saveMealLogs = useCallback(async (
     entries: Array<{ memberId: string; count: number }>,
     dateStr: string,
@@ -1608,6 +1535,29 @@ export function MealProvider({ children }: { children: ReactNode }) {
     broadcast: () => void broadcastSharedUpdate(),
   });
 
+  const expenseActions = useExpenses({
+    userId,
+    messId,
+    expenses: allExpenses,
+    setExpenses: setAllExpenses,
+    setPendingSyncIds,
+    getCycleId: getRequiredCycleId,
+    allowsNegativeAmount: allowsNegativeExpenseAmount,
+    recordChange: recordChangelog,
+    broadcast: () => void broadcastSharedUpdate(),
+  });
+
+  const mealLogActions = useMealLogs({
+    userId,
+    messId,
+    setMealLogs: setAllMealLogs,
+    setPendingSyncIds,
+    getCycleId: getRequiredCycleId,
+    getMemberName,
+    recordChange: recordChangelog,
+    broadcast: () => void broadcastSharedUpdate(),
+  });
+
   const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !activeCycle) return;
 
@@ -1696,20 +1646,20 @@ export function MealProvider({ children }: { children: ReactNode }) {
     for (const { memberId, amount } of entries) {
       if (amount <= 0) continue;
       const rounded = Math.round(amount * 100) / 100;
-      await addDeposit(
+      await depositActions.addDeposit(
         memberId,
         -rounded,
         sourceCycleId,
         `Carry-forward correction — balance moved to next cycle`,
       );
-      await addDeposit(
+      await depositActions.addDeposit(
         memberId,
         rounded,
         newCycleId,
         `Carry-forward from ${sourceCycleName}`,
       );
     }
-  }, [addDeposit]);
+  }, [depositActions.addDeposit]);
 
   const startNewCycle = useCallback(async (
     name: string,
@@ -2002,13 +1952,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
     removeMember: memberActions.removeMember,
     restoreMember: memberActions.restoreMember,
     reorderMembers: memberActions.reorderMembers,
-    addExpense,
-    updateExpense,
-    deleteExpense,
-    restoreExpense,
+    addExpense: expenseActions.addExpense,
+    updateExpense: expenseActions.updateExpense,
+    deleteExpense: expenseActions.deleteExpense,
+    restoreExpense: expenseActions.restoreExpense,
     addDeposit: depositActions.addDeposit,
-    saveMealLogs,
-    logMeal,
+    saveMealLogs: mealLogActions.saveMealLogs,
+    logMeal: mealLogActions.logMeal,
     renameActiveCycle,
     closeActiveCycle,
     startNewCycle,
@@ -2028,13 +1978,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
     memberActions.removeMember,
     memberActions.restoreMember,
     memberActions.reorderMembers,
-    addExpense,
-    updateExpense,
-    deleteExpense,
-    restoreExpense,
+    expenseActions.addExpense,
+    expenseActions.updateExpense,
+    expenseActions.deleteExpense,
+    expenseActions.restoreExpense,
     depositActions.addDeposit,
-    saveMealLogs,
-    logMeal,
+    mealLogActions.saveMealLogs,
+    mealLogActions.logMeal,
     renameActiveCycle,
     closeActiveCycle,
     startNewCycle,
