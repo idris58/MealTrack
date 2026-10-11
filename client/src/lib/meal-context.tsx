@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { supabase } from './supabase';
-import { allocateIntegerBalances } from './settlement-math';
 import {
   enqueue,
   dequeueAll,
@@ -28,6 +27,7 @@ import { useCycles } from '@/hooks/use-cycles';
 import { useCycleDetails } from '@/hooks/use-cycle-details';
 import { useCycleLoader } from '@/hooks/use-cycle-loader';
 import { useMealIdentity } from '@/hooks/use-meal-identity';
+import { useMealScopeLoader } from '@/hooks/use-meal-scope-loader';
 
 export interface Member {
   id: string;
@@ -384,8 +384,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [allDeposits, setAllDeposits] = useState<CycleDeposit[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [loadedCycleIds, setLoadedCycleIds] = useState<Set<string>>(new Set());
-  const [cycleDetailsLoadingById, setCycleDetailsLoadingById] = useState<Record<string, boolean>>({});
-  const [cycleDetailsErrorById, setCycleDetailsErrorById] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedDataRef = useRef(false);
@@ -404,65 +402,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
   } = useChangelog(userId, messId, profilesMapRef);
 
   // ─── Offline-aware identity resolution ─────────────────────────────────────
-  /* Identity resolution moved to useMealIdentity.
-  useEffect(() => {
-    const resolveIdentity = async () => {
-      const { data } = await supabase.auth.getSession();
-      const sessionUser = data.session?.user;
-      if (!sessionUser) return;
-
-      setUserId(sessionUser.id);
-
-      // Try to get mess_id from network; fall back to cached value if offline
-      const MESS_CACHE_KEY = `mealtrack-mess-id-${sessionUser.id}`;
-      if (!navigator.onLine) {
-        const cached = localStorage.getItem(MESS_CACHE_KEY);
-        setMessId(cached || null);
-        return;
-      }
-
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('mess_id, full_name, picture_url, role')
-        .eq('id', sessionUser.id)
-        .maybeSingle();
-
-      if (error) console.error('Error loading current mess:', error);
-
-      if (profile) {
-        profilesMapRef.current.set(sessionUser.id, {
-          id: sessionUser.id,
-          name: profile.full_name,
-          pictureUrl: profile.picture_url ?? null,
-          role: profile.role ?? null,
-        });
-      }
-
-      const nextMessId = profile?.mess_id ?? null;
-      setMessId(nextMessId);
-
-      // Persist so future offline loads can resolve the mess
-      if (nextMessId) {
-        localStorage.setItem(MESS_CACHE_KEY, nextMessId);
-      }
-    };
-
-    void resolveIdentity();
-  }, []); */
-
-  useEffect(() => {
-    if (userId && messId) {
-      const scopeKey = `${userId}:${messId}`;
-      if (loadedScopeRef.current !== scopeKey) {
-        loadedScopeRef.current = scopeKey;
-        hasLoadedDataRef.current = false;
-        setLoading(true);
-        setDataError(null);
-      }
-      void loadData();
-    }
-  }, [userId, messId]);
-
   const activeCycle = useMemo(
     () => cycles.find((cycle) => cycle.status === 'active') ?? null,
     [cycles],
@@ -565,169 +504,15 @@ export function MealProvider({ children }: { children: ReactNode }) {
     };
   }, [userId, messId]);
 
-  const buildCycleDetails = useCallback((
-    cycleId: string,
-    source: {
-      deposits?: CycleDeposit[];
-      expenses?: Expense[];
-      mealLogs?: MealLog[];
-    } = {},
-  ): CycleDetails | null => {
-    const cycle = cycles.find((entry) => entry.id === cycleId);
-    if (!cycle) {
-      return null;
-    }
-
-    const cycleMembers = getCycleMembers(cycleId);
-    const cycleMemberIds = new Set(cycleMembers.map((member) => member.id));
-    const sourceExpenses = source.expenses ?? allExpenses;
-    const sourceMealLogs = source.mealLogs ?? allMealLogs;
-    const sourceDeposits = source.deposits ?? allDeposits;
-    const cycleExpenses = sourceExpenses.filter((expense) => expense.cycleId === cycleId);
-    const cycleMealLogs = sourceMealLogs.filter((log) => log.cycleId === cycleId && cycleMemberIds.has(log.memberId));
-    const cycleDeposits = sourceDeposits.filter((deposit) => deposit.cycleId === cycleId && cycleMemberIds.has(deposit.memberId));
-
-    const depositByMember = new Map<string, number>();
-    for (const deposit of cycleDeposits) {
-      depositByMember.set(
-        deposit.memberId,
-        (depositByMember.get(deposit.memberId) ?? 0) + deposit.amount,
-      );
-    }
-
-    const baseMembers = cycleMembers.map((member) => ({
-      ...member,
-      deposit: depositByMember.get(member.id) ?? 0,
-      mealsEaten: cycleMealLogs
-        .filter((log) => log.memberId === member.id)
-        .reduce((sum, log) => sum + log.count, 0),
-      hasPendingDeposit: cycleDeposits.some((d) => d.memberId === member.id && d.id.startsWith('offline-')),
-    }));
-
-    const totalDeposits = baseMembers.reduce((sum, member) => sum + member.deposit, 0);
-    const totalMealExpenses = cycleExpenses
-      .filter((expense) => expense.type === 'meal')
-      .reduce((sum, expense) => sum + expense.amount, 0);
-    const totalFixedExpenses = cycleExpenses
-      .filter((expense) => expense.type === 'fixed')
-      .reduce((sum, expense) => sum + expense.amount, 0);
-    const totalMealsConsumed = cycleMealLogs.reduce((sum, log) => sum + log.count, 0);
-    const memberCount = baseMembers.length;
-    const currentMealRate = totalMealsConsumed > 0 ? totalMealExpenses / totalMealsConsumed : 0;
-    const fixedCostPerMember = memberCount > 0 ? totalFixedExpenses / memberCount : 0;
-    const remainingCash = totalDeposits - (totalMealExpenses + totalFixedExpenses);
-
-    const rawMembers = baseMembers.map((member) => {
-      const mealCost = member.mealsEaten * currentMealRate;
-      const fixedCost = fixedCostPerMember;
-      const totalCost = mealCost + fixedCost;
-      const balance = member.deposit - totalCost;
-
-      return {
-        ...member,
-        mealCost,
-        fixedCost,
-        totalCost,
-        balance,
-      };
-    });
-
-    // When cycle is finalized (pending settlement or closed), apportion whole-Taka balances
-    // using the Largest-Remainder Method so member bills, dues, and refunds match settlement math.
-    const isFinalizedCycle = cycle.status === 'pending' || cycle.status === 'closed';
-    let computedMembers = rawMembers;
-
-    if (isFinalizedCycle && rawMembers.length > 0) {
-      const roundedRemainingCash = Math.round(remainingCash);
-      const allocatedMap = allocateIntegerBalances(rawMembers, roundedRemainingCash);
-      computedMembers = rawMembers.map((member) => {
-        const allocatedBalance = allocatedMap.get(member.id);
-        if (allocatedBalance === undefined) return member;
-        return {
-          ...member,
-          balance: allocatedBalance,
-        };
-      });
-    }
-
-    return {
-      cycle,
-      stats: {
-        totalDeposits,
-        totalMealExpenses,
-        totalFixedExpenses,
-        totalMealsConsumed,
-        currentMealRate,
-        fixedCostPerMember,
-        remainingCash,
-      },
-      members: computedMembers,
-      expenses: cycleExpenses,
-      mealLogs: cycleMealLogs,
-      deposits: cycleDeposits,
-    };
-  }, [cycles, getCycleMembers, allExpenses, allMealLogs, allDeposits]);
-
-  // Derived synchronously via useMemo — eliminates extra render pass and stale first paint
-  const cycleDetailsById = useMemo(() => {
-    if (loadedCycleIds.size === 0) {
-      return {};
-    }
-
-    const nextDetails: Record<string, CycleDetails> = {};
-    for (const cycleId of Array.from(loadedCycleIds)) {
-      const details = buildCycleDetails(cycleId);
-      if (details) {
-        nextDetails[cycleId] = details;
-      }
-    }
-    return nextDetails;
-  }, [loadedCycleIds, buildCycleDetails]);
-
-  const getCycleDetails = useCallback((cycleId: string): CycleDetails | null => {
-    return cycleDetailsById[cycleId] ?? null;
-  }, [cycleDetailsById]);
-
-  const isCycleDetailsLoading = useCallback((cycleId: string) => Boolean(cycleDetailsLoadingById[cycleId]), [cycleDetailsLoadingById]);
-
-  const getCycleDetailsError = useCallback((cycleId: string) => cycleDetailsErrorById[cycleId] ?? null, [cycleDetailsErrorById]);
-
   const cycleLoader = useCycleLoader({
     enabled: Boolean(userId && messId),
-    isLoaded: (cycleId) => Boolean(cycleDetailsById[cycleId]),
+    isLoaded: (cycleId) => computedCycleDetails.getCycleDetails(cycleId) !== null,
     fetchRows: fetchCycleRows,
     setDeposits: setAllDeposits,
     setExpenses: setAllExpenses,
     setMealLogs: setAllMealLogs,
     setLoadedCycleIds,
   });
-
-  const loadCycleDetails = useCallback(async (cycleId: string, options: { force?: boolean } = {}) => {
-    if (!userId || !messId) return;
-    if (!options.force && cycleDetailsById[cycleId]) return;
-    if (cycleDetailsLoadingById[cycleId]) return;
-
-    setCycleDetailsLoadingById((prev) => ({ ...prev, [cycleId]: true }));
-    setCycleDetailsErrorById((prev) => ({ ...prev, [cycleId]: null }));
-
-    try {
-      const rows = await fetchCycleRows(cycleId);
-      if (!rows) return;
-
-      setAllDeposits((prev) => [...prev.filter((deposit) => deposit.cycleId !== cycleId), ...rows.deposits]);
-      setAllExpenses((prev) => [...prev.filter((expense) => expense.cycleId !== cycleId), ...rows.expenses]);
-      setAllMealLogs((prev) => [...prev.filter((log) => log.cycleId !== cycleId), ...rows.mealLogs]);
-      setLoadedCycleIds((prev) => new Set(prev).add(cycleId));
-    } catch (error) {
-      console.error('Error loading cycle details:', error);
-      setCycleDetailsErrorById((prev) => ({
-        ...prev,
-        [cycleId]: error instanceof Error ? error.message : 'Unable to load cycle details.',
-      }));
-    } finally {
-      setCycleDetailsLoadingById((prev) => ({ ...prev, [cycleId]: false }));
-    }
-  }, [userId, messId, cycleDetailsById, cycleDetailsLoadingById, fetchCycleRows]);
 
   const loadData = useCallback(async () => {
     if (!userId || !messId) return;
@@ -876,8 +661,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setAllExpenses(nextExpenses);
       setAllMealLogs(nextMealLogs);
       setLoadedCycleIds(new Set(initialCycleIds));
-      setCycleDetailsErrorById({});
-      setCycleDetailsLoadingById({});
       setAllChangelogEntries(nextChangelogEntries);
       setHasMoreChangelogEntries(nextChangelogEntries.length === CHANGELOG_PAGE_SIZE);
       setDataError(null);
@@ -945,6 +728,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, messId, fetchCycleRows]);
 
+  const clearDataError = useCallback(() => {
+    setDataError(null);
+  }, []);
+
+  const requestDataLoad = useCallback(() => {
+    void loadData();
+  }, [loadData]);
+
+  useMealScopeLoader({
+    userId,
+    messId,
+    loadedScopeRef,
+    hasLoadedDataRef,
+    setLoading,
+    clearError: clearDataError,
+    load: requestDataLoad,
+  });
+
   const retryLoadData = useCallback(() => {
     if (userId && messId) {
       setDataError(null);
@@ -971,13 +772,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     reload: () => void loadData(),
     broadcast: () => void broadcastSharedUpdate(),
   });
-
-  /* Removed inline member actions during extraction.
-    if (mealHistory.error || depositHistory.error) {
-      console.error('Error checking member history before removal:', mealHistory.error ?? depositHistory.error);
-      throw new Error('Unable to verify this member’s history. Please try again.');
-    }
-  */
 
   const addExpense = useCallback(async (
     amount: number,
