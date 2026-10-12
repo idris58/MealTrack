@@ -444,10 +444,10 @@ export function MemberDepositsView() {
   ];
 
   return (
-    <div className="space-y-5 pb-28 sm:space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-5 overflow-x-clip pb-28 sm:space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <PageHeader cycleName={activeCycle.name} />
-        <div className="flex flex-wrap gap-2">
+        <div className="flex min-w-0 flex-wrap gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void copyText(statementText(), 'Statement copied')}>
             <Copy className="h-3.5 w-3.5" />Copy
           </Button>
@@ -460,13 +460,13 @@ export function MemberDepositsView() {
         </div>
       </div>
 
-      <div className="grid gap-5 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid w-full min-w-0 grid-cols-1 gap-5 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ── Wallet card ─────────────────────────────────────────────── */}
         <section
-          className="overflow-hidden rounded-3xl border border-white/10 bg-[#0d2620] text-white shadow-lg lg:col-start-1 lg:row-start-1"
+          className="w-full min-w-0 max-w-full overflow-hidden rounded-3xl border border-white/10 bg-[#0d2620] text-white shadow-lg lg:col-start-1 lg:row-start-1"
           aria-labelledby="wallet-balance"
         >
-          <div className="p-5 sm:p-7">
+          <div className="min-w-0 p-4 sm:p-7">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="wallet-balance" className="flex items-center gap-2 text-sm font-medium text-white/70">
                 <Wallet className="h-4 w-4" />
@@ -478,10 +478,10 @@ export function MemberDepositsView() {
               </span>
             </div>
 
-            <p className="mt-3 font-heading text-5xl font-bold tabular-nums tracking-tight sm:text-6xl">
+            <p className="mt-3 break-words font-heading text-4xl font-bold tabular-nums tracking-tight sm:text-6xl">
               {signed(shown)}
             </p>
-            <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/70">
+            <p className="mt-2 max-w-lg break-words text-sm leading-relaxed text-white/70">
               {!positive
                 ? `You've used ${money(v.cost, 0)} against ${money(v.net, 0)} deposited. Pay ${money(clearDue, 0)} to clear your due.`
                 : v.runway === null
@@ -492,24 +492,24 @@ export function MemberDepositsView() {
             <div className="mt-6"><FundsBar deposited={v.net} mealCost={v.mealCost} fixedCost={v.fixedCost} /></div>
           </div>
 
-          <dl className="grid grid-cols-2 divide-x divide-y divide-white/10 border-t border-white/10 sm:grid-cols-4 sm:divide-y-0">
+          <dl className="grid min-w-0 grid-cols-2 divide-x divide-y divide-white/10 border-t border-white/10 sm:grid-cols-4 sm:divide-y-0">
             {[
               { label: 'Total deposited', value: money(v.paidIn, 0), sub: `${v.payments} payment${v.payments === 1 ? '' : 's'}` },
               { label: 'Previous balance', value: money(v.carriedIn, 0), sub: 'From last cycle' },
               { label: 'Refunded or deducted', value: money(v.takenOut, 0), sub: 'Taken out' },
               { label: 'Last payment', value: v.lastPayment ? format(safeParse(v.lastPayment.createdAt), 'd MMM') : 'None', sub: v.lastPayment ? money(v.lastPayment.amount, 0) : 'No payments yet' },
             ].map((s) => (
-              <div key={s.label} className="px-4 py-3.5 sm:px-5">
+              <div key={s.label} className="min-w-0 px-3 py-3.5 sm:px-5">
                 <dt className="text-xs text-white/55">{s.label}</dt>
-                <dd className="mt-0.5 font-heading text-lg font-semibold tabular-nums">{s.value}</dd>
-                <p className="text-[11px] text-white/45">{s.sub}</p>
+                <dd className="mt-0.5 break-words font-heading text-lg font-semibold tabular-nums">{s.value}</dd>
+                <p className="break-words text-[11px] text-white/45">{s.sub}</p>
               </div>
             ))}
           </dl>
         </section>
 
         {/* ── Rail: planner + charges ─────────────────────────────────── */}
-        <div className="space-y-5 sm:space-y-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-20 lg:self-start">
+        <div className="min-w-0 space-y-5 sm:space-y-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-20 lg:self-start">
           <Card title="Recommended payment" hint="How much to pay to stay covered" icon={CalendarClock}>
             <div role="radiogroup" aria-label="Cover me for" className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
               {([7, 14, 30] as const).map((d) => (
