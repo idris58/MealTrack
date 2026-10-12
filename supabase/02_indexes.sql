@@ -100,7 +100,11 @@ create index if not exists notices_profile_id_idx on public.notices(profile_id);
 create index if not exists share_links_mess_id_idx on public.share_links(mess_id);
 create index if not exists share_links_profile_id_idx on public.share_links(profile_id);
 alter table if exists public.share_links drop constraint if exists share_links_pkey;
-create unique index if not exists share_links_mess_id_unique_idx on public.share_links(mess_id) where mess_id is not null;
+-- PostgREST upserts specify ON CONFLICT (mess_id) without a predicate, so a
+-- partial unique index cannot be inferred. A normal unique index still permits
+-- multiple NULL mess_id values under PostgreSQL's default NULLS DISTINCT rule.
+drop index if exists public.share_links_mess_id_unique_idx;
+create unique index share_links_mess_id_unique_idx on public.share_links(mess_id);
 create index if not exists push_subscriptions_mess_id_idx on public.push_subscriptions(mess_id);
 create index if not exists push_subscriptions_profile_id_idx on public.push_subscriptions(profile_id);
 create index if not exists notification_deliveries_mess_id_idx on public.notification_deliveries(mess_id);
