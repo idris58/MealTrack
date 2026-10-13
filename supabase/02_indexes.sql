@@ -87,6 +87,8 @@ create index if not exists expenses_mess_cycle_date_idx on public.expenses(mess_
 create index if not exists meal_logs_mess_id_idx on public.meal_logs(mess_id);
 create index if not exists meal_logs_profile_id_idx on public.meal_logs(profile_id);
 create index if not exists meal_logs_mess_cycle_date_idx on public.meal_logs(mess_id, cycle_id, date);
+create index if not exists meal_off_requests_mess_status_start_idx on public.meal_off_requests(mess_id, status, start_date);
+create index if not exists meal_off_requests_member_cycle_start_idx on public.meal_off_requests(member_id, cycle_id, start_date desc);
 alter table if exists public.meal_logs drop constraint if exists meal_logs_member_id_date_key;
 alter table if exists public.meal_logs drop constraint if exists meal_logs_member_id_date_cycle_key;
 alter table if exists public.meal_logs add constraint meal_logs_member_id_date_cycle_key unique (member_id, date, cycle_id);

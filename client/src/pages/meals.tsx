@@ -10,6 +10,7 @@ import { Link } from 'wouter';
 import { SyncBadge } from '@/components/sync-badge';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { MealLogTable } from '@/components/meal-log-table';
+import { MealOffRequests } from '@/components/meal-off-requests';
 
 function formatMealCount(value: number) {
   const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
@@ -107,6 +108,15 @@ export default function Meals() {
           ) : null}
         </div>
       </header>
+
+      {activeCycle && profile ? (
+        <MealOffRequests
+          activeCycleId={activeCycle.id}
+          members={members}
+          profile={profile}
+          canOperateMeals={canOperateMeals}
+        />
+      ) : null}
 
       {activeCycle && members.length > 0 && mealLogs.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4">

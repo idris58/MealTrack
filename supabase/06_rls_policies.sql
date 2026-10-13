@@ -1,6 +1,6 @@
 -- Final RLS posture. Direct push/delivery access remains service-role only.
 do $$ declare table_name text; begin
-  foreach table_name in array array['profiles','messes','members','expenses','meal_logs','cycles','cycle_deposits','changelog_entries','notices','share_links','push_subscriptions','notification_deliveries','member_invites'] loop
+  foreach table_name in array array['profiles','messes','members','expenses','meal_logs','meal_off_requests','cycles','cycle_deposits','changelog_entries','notices','share_links','push_subscriptions','notification_deliveries','member_invites'] loop
     execute format('alter table public.%I enable row level security', table_name);
   end loop;
 end $$;
@@ -40,6 +40,48 @@ drop policy if exists meal_logs_read on public.meal_logs;
 drop policy if exists meal_logs_operate on public.meal_logs;
 create policy meal_logs_read on public.meal_logs for select to authenticated using (mess_id = public.current_mess_id());
 create policy meal_logs_operate on public.meal_logs for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator']));
+
+drop policy if exists meal_off_requests_read on public.meal_off_requests;
+drop policy if exists meal_off_requests_create on public.meal_off_requests;
+drop policy if exists meal_off_requests_cancel on public.meal_off_requests;
+drop policy if exists meal_off_requests_review on public.meal_off_requests;
+create policy meal_off_requests_read on public.meal_off_requests for select to authenticated using (
+  mess_id = public.current_mess_id()
+  and (
+    requested_by_profile_id = auth.uid()
+    or member_id in (select id from public.members where profile_id = auth.uid())
+    or public.has_mess_role(array['manager','coordinator'])
+  )
+);
+create policy meal_off_requests_create on public.meal_off_requests for insert to authenticated with check (
+  mess_id = public.current_mess_id()
+  and requested_by_profile_id = auth.uid()
+  and status = 'pending'
+  and reviewed_by_profile_id is null
+  and reviewed_at is null
+  and member_id in (
+    select id from public.members
+    where mess_id = public.current_mess_id() and profile_id = auth.uid() and deleted_at is null
+  )
+);
+create policy meal_off_requests_cancel on public.meal_off_requests for update to authenticated using (
+  mess_id = public.current_mess_id() and requested_by_profile_id = auth.uid() and status = 'pending'
+) with check (
+  mess_id = public.current_mess_id() and requested_by_profile_id = auth.uid() and status = 'cancelled'
+);
+create policy meal_off_requests_review on public.meal_off_requests for update to authenticated using (
+  mess_id = public.current_mess_id()
+  and status = 'pending'
+  and public.has_mess_role(array['manager','coordinator'])
+) with check (
+  mess_id = public.current_mess_id()
+  and status in ('approved', 'declined')
+  and reviewed_by_profile_id = auth.uid()
+  and reviewed_at is not null
+  and public.has_mess_role(array['manager','coordinator'])
+);
+grant select, insert, update on public.meal_off_requests to authenticated;
+revoke delete on public.meal_off_requests from authenticated;
 
 drop policy if exists own_cycles on public.cycles;
 drop policy if exists mess_cycles on public.cycles;

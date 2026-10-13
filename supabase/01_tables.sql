@@ -95,6 +95,31 @@ create table if not exists public.meal_logs (
   constraint meal_logs_member_id_date_cycle_key unique (member_id, date, cycle_id)
 );
 
+-- Requests describe future meal absences only. They never alter the actual
+-- meal_logs ledger, so an already-recorded lunch remains intact when a member
+-- requests dinner off later that day.
+create table if not exists public.meal_off_requests (
+  id uuid primary key default gen_random_uuid(),
+  mess_id uuid not null references public.messes(id) on delete cascade,
+  cycle_id uuid not null references public.cycles(id) on delete cascade,
+  member_id uuid not null references public.members(id) on delete cascade,
+  requested_by_profile_id uuid not null references public.profiles(id) on delete cascade,
+  start_date date not null,
+  end_date date not null,
+  meal_period text not null default 'all_day' check (meal_period in ('all_day', 'lunch', 'dinner')),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'declined', 'cancelled')),
+  note text,
+  reviewed_by_profile_id uuid references public.profiles(id) on delete set null,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint meal_off_requests_date_range_check check (end_date >= start_date),
+  constraint meal_off_requests_review_check check (
+    (status in ('approved', 'declined') and reviewed_by_profile_id is not null and reviewed_at is not null)
+    or status not in ('approved', 'declined')
+  )
+);
+
 create table if not exists public.cycle_deposits (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
