@@ -61,7 +61,6 @@ create table if not exists public.cycles (
   members_snapshot jsonb,
   created_at timestamptz not null default now(),
   mess_id uuid references public.messes(id) on delete set null,
-  profile_id uuid references public.profiles(id) on delete set null,
   deleted_at timestamptz,
   delete_expires_at timestamptz
 );

@@ -5,7 +5,6 @@ from auth.users where email is not null
 on conflict (id) do update set full_name = excluded.full_name, email = excluded.email, updated_at = now();
 
 update public.members set profile_id = user_id where profile_id is null and user_id is not null;
-update public.cycles set profile_id = user_id where profile_id is null and user_id is not null;
 update public.expenses set profile_id = user_id where profile_id is null and user_id is not null;
 update public.meal_logs set profile_id = user_id where profile_id is null and user_id is not null;
 update public.cycle_deposits set profile_id = user_id where profile_id is null and user_id is not null;

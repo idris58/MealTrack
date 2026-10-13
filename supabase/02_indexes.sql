@@ -77,7 +77,6 @@ create index if not exists members_mess_id_idx on public.members(mess_id);
 create index if not exists members_profile_id_idx on public.members(profile_id);
 create unique index if not exists members_mess_profile_unique_idx on public.members(mess_id, profile_id) where profile_id is not null;
 create index if not exists cycles_mess_id_idx on public.cycles(mess_id);
-create index if not exists cycles_profile_id_idx on public.cycles(profile_id);
 create unique index if not exists cycles_one_active_per_mess_idx on public.cycles(mess_id) where status = 'active';
 create unique index if not exists cycles_one_pending_per_mess_idx on public.cycles(mess_id) where status = 'pending';
 create unique index if not exists cycles_mess_name_unique_idx on public.cycles(mess_id, lower(name)) where mess_id is not null;

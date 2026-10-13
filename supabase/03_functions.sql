@@ -75,7 +75,7 @@ begin
   if not public.has_legacy_data() then raise exception 'No legacy data is available to migrate'; end if;
   select * into created_mess from public.create_mess(mess_name);
   update public.members set mess_id = created_mess.id, profile_id = null where user_id = auth.uid() and mess_id is null;
-  update public.cycles set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
+  update public.cycles set mess_id = created_mess.id where user_id = auth.uid() and mess_id is null;
   update public.expenses set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
   update public.meal_logs set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
   update public.cycle_deposits set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
