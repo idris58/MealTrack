@@ -55,8 +55,8 @@ export default function Meals() {
   return (
     <div className="space-y-6 h-full flex flex-col">
       <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 sm:p-7 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
             <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
               <Utensils className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
             </div>
@@ -80,7 +80,7 @@ export default function Meals() {
               <DialogTrigger asChild>
                 <Button
                   size="sm"
-                  className="gap-1.5 shrink-0 shadow-sm sm:h-9"
+                  className="ml-auto gap-1.5 shrink-0 shadow-sm sm:h-9"
                   onClick={() => setSelectedDate(undefined)}
                   disabled={members.length === 0 || !activeCycle}
                 >
@@ -106,17 +106,16 @@ export default function Meals() {
               </DialogContent>
             </Dialog>
           ) : null}
+          {activeCycle && profile ? (
+            <MealOffRequests
+              activeCycleId={activeCycle.id}
+              members={members}
+              profile={profile}
+              canOperateMeals={canOperateMeals}
+            />
+          ) : null}
         </div>
       </header>
-
-      {activeCycle && profile ? (
-        <MealOffRequests
-          activeCycleId={activeCycle.id}
-          members={members}
-          profile={profile}
-          canOperateMeals={canOperateMeals}
-        />
-      ) : null}
 
       {activeCycle && members.length > 0 && mealLogs.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4">

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO, startOfDay } from 'date-fns';
-import { CalendarDays, Check, Clock3, Loader2, MessageSquareText, Plus, UtensilsCrossed, X } from 'lucide-react';
+import { CalendarDays, Check, ClipboardList, Loader2, MessageSquareText, Plus, UtensilsCrossed, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Member } from '@/lib/meal-context';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -126,7 +125,8 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const earliestDate = format(startOfDay(new Date()), 'yyyy-MM-dd');
+  const [todayKey, setTodayKey] = useState(() => format(startOfDay(new Date()), 'yyyy-MM-dd'));
+  const earliestDate = todayKey;
   const [startDate, setStartDate] = useState(earliestDate);
   const [endDate, setEndDate] = useState(earliestDate);
   const [mealPeriod, setMealPeriod] = useState<MealPeriod>('all_day');
@@ -158,6 +158,15 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  useEffect(() => {
+    const nextDay = startOfDay(new Date());
+    nextDay.setDate(nextDay.getDate() + 1);
+    const timeout = window.setTimeout(() => {
+      setTodayKey(format(startOfDay(new Date()), 'yyyy-MM-dd'));
+    }, Math.max(1, nextDay.getTime() - Date.now() + 50));
+    return () => window.clearTimeout(timeout);
+  }, [todayKey]);
 
   const resetForm = () => {
     setStartDate(earliestDate);
@@ -243,75 +252,100 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
   };
 
   const visibleRequests = canOperateMeals ? requests : requests.filter((request) => request.requested_by_profile_id === profile.id);
-  const pendingRequests = visibleRequests.filter((request) => request.status === 'pending');
-  const scheduledRequests = visibleRequests.filter((request) => request.status !== 'pending');
+  const currentRequests = visibleRequests.filter(
+    (request) => ['pending', 'approved'].includes(request.status) && request.end_date >= todayKey,
+  );
+  const pendingRequests = visibleRequests.filter((request) => request.status === 'pending' && request.end_date >= todayKey);
 
   if (!canOperateMeals && !linkedMember) {
     return null;
   }
 
   return (
-    <Card className="overflow-hidden border-primary/15 bg-gradient-to-br from-primary/[0.07] via-card to-card shadow-sm">
-      <CardContent className="p-4 sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
-              <Clock3 className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <h2 className="font-heading text-base font-bold sm:text-lg">{canOperateMeals ? 'Meal-off requests' : 'Plan a meal off'}</h2>
-              <p className="mt-0.5 max-w-2xl text-sm leading-5 text-muted-foreground">
-                {canOperateMeals
-                  ? 'Review upcoming absences before planning meals. Approval never changes a meal that was already logged.'
-                  : 'Let the mess team know before an upcoming meal. This is a request only—actual meal counts stay with your manager.'}
-              </p>
-            </div>
-          </div>
-          {!canOperateMeals ? (
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="gap-1.5 self-start shadow-sm"><Plus className="h-4 w-4" />Request meal off</Button>
-              </DialogTrigger>
-              <DialogContent size="md">
-                <DialogHeader>
-                  <DialogTitle>Request a meal off</DialogTitle>
-                  <p className="text-sm leading-5 text-muted-foreground">Choose today or a future date for an upcoming meal. Your request will not change any meal that has already been logged.</p>
-                </DialogHeader>
-                <div className="grid gap-5 py-1">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2"><Label htmlFor="meal-off-start">From</Label><Input id="meal-off-start" type="date" min={earliestDate} value={startDate} onChange={(event) => { setStartDate(event.target.value); if (endDate < event.target.value) setEndDate(event.target.value); }} /></div>
-                    <div className="grid gap-2"><Label htmlFor="meal-off-end">Until</Label><Input id="meal-off-end" type="date" min={startDate || earliestDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Which meal?</Label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {periodOptions.map((option) => (
-                        <button key={option.value} type="button" onClick={() => setMealPeriod(option.value)} className={cn('rounded-xl border px-2 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', mealPeriod === option.value ? 'border-primary bg-primary/10 shadow-sm' : 'bg-card hover:bg-accent/50')}>
-                          <span className="block text-sm font-semibold">{option.label}</span>
-                          <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{option.helper}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="grid gap-2"><Label htmlFor="meal-off-note">Note <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="meal-off-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={240} placeholder="Travelling, family plans, or anything helpful for the team" className="min-h-[82px] resize-none" /></div>
+    <div className="contents">
+      {canOperateMeals ? (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="ml-auto gap-1.5 shrink-0" aria-label={`Review meal-off requests${pendingRequests.length ? `, ${pendingRequests.length} pending` : ''}`}>
+              <ClipboardList className="h-4 w-4" />
+              <span className="hidden sm:inline">Review</span>
+              {pendingRequests.length ? <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-[10px]">{pendingRequests.length}</Badge> : null}
+            </Button>
+          </DialogTrigger>
+          <DialogContent size="md">
+            <DialogHeader>
+              <DialogTitle>Meal-off requests</DialogTitle>
+              <p className="text-sm text-muted-foreground">Review upcoming absences before planning meals.</p>
+            </DialogHeader>
+            <div className="max-h-[min(60vh,520px)] space-y-3 overflow-y-auto pr-1">
+              {loading ? <div className="flex h-24 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading requests</div> : pendingRequests.length ? pendingRequests.map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />) : <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No meal-off requests need review.</div>}
+              {!loading && currentRequests.some((request) => request.status === 'approved') ? (
+                <div className="space-y-2 pt-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Already approved</p>
+                  {currentRequests.filter((request) => request.status === 'approved').map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />)}
                 </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                  <Button className="gap-1.5" disabled={busyId === 'new'} onClick={() => void submitRequest()}>{busyId === 'new' ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}Send request</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          ) : null}
-        </div>
+              ) : null}
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="ml-auto gap-1.5 shrink-0 shadow-sm"><Plus className="h-4 w-4" /><span className="hidden sm:inline">Request meal off</span><span className="sm:hidden">Request off</span></Button>
+          </DialogTrigger>
+          <DialogContent size="md">
+            <DialogHeader>
+              <DialogTitle>Request a meal off</DialogTitle>
+              <p className="text-sm leading-5 text-muted-foreground">Choose today or a future date for an upcoming meal. Your request will not change any meal that has already been logged.</p>
+            </DialogHeader>
+            <div className="grid gap-5 py-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2"><Label htmlFor="meal-off-start">From</Label><Input id="meal-off-start" type="date" min={earliestDate} value={startDate} onChange={(event) => { setStartDate(event.target.value); if (endDate < event.target.value) setEndDate(event.target.value); }} /></div>
+                <div className="grid gap-2"><Label htmlFor="meal-off-end">Until</Label><Input id="meal-off-end" type="date" min={startDate || earliestDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Which meal?</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {periodOptions.map((option) => (
+                    <button key={option.value} type="button" onClick={() => setMealPeriod(option.value)} className={cn('rounded-xl border px-2 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', mealPeriod === option.value ? 'border-primary bg-primary/10 shadow-sm' : 'bg-card hover:bg-accent/50')}>
+                      <span className="block text-sm font-semibold">{option.label}</span>
+                      <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{option.helper}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-2"><Label htmlFor="meal-off-note">Note <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="meal-off-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={240} placeholder="Travelling, family plans, or anything helpful for the team" className="min-h-[82px] resize-none" /></div>
+              {pendingRequests.length ? <div className="space-y-2 border-t pt-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your active requests</p>{currentRequests.map((request) => <RequestRow key={request.id} request={request} isStaff={false} busyId={busyId} onApprove={() => undefined} onDecline={() => undefined} onCancel={(item) => void cancelRequest(item)} />)}</div> : null}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button className="gap-1.5" disabled={busyId === 'new'} onClick={() => void submitRequest()}>{busyId === 'new' ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}Send request</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
-        <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          <section className={cn('space-y-3', !canOperateMeals && 'lg:col-span-2')}>
-            <div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{canOperateMeals ? 'Needs review' : 'Awaiting review'}</p>{pendingRequests.length ? <Badge variant="secondary">{pendingRequests.length}</Badge> : null}</div>
-            {loading ? <div className="flex h-24 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading requests</div> : pendingRequests.length ? pendingRequests.map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff={canOperateMeals} busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />) : <div className="rounded-xl border border-dashed bg-background/50 px-4 py-5 text-sm text-muted-foreground">{canOperateMeals ? 'No requests need review. Your upcoming meal plan is clear.' : 'No pending requests. Use “Request meal off” when you need one.'}</div>}
-          </section>
-          {canOperateMeals ? <section className="space-y-3"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Scheduled & resolved</p>{loading ? <div className="h-24 rounded-xl border border-dashed" /> : scheduledRequests.length ? scheduledRequests.slice(0, 5).map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff={canOperateMeals} busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />) : <div className="rounded-xl border border-dashed bg-background/50 px-4 py-5 text-sm text-muted-foreground">Approved requests will appear here for the meal-planning team.</div>}</section> : null}
+      {!loading && currentRequests.length ? (
+        <div className="basis-full rounded-xl border border-primary/15 bg-primary/[0.045] px-3.5 py-2.5 sm:px-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><UtensilsCrossed className="h-3.5 w-3.5" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-foreground">{canOperateMeals ? 'Upcoming meal-off schedule' : 'Your meal-off requests'}</p>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                {currentRequests.slice(0, 3).map((request) => (
+                  <span key={request.id} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {canOperateMeals ? <span className="font-medium text-foreground">{memberNames.get(request.member_id) ?? 'Member'}:</span> : null}
+                    {periodLabel(request.meal_period)} · {requestDates(request)}
+                    <Badge variant="outline" className={cn('h-4 px-1.5 py-0 text-[9px] capitalize', statusStyle[request.status])}>{request.status}</Badge>
+                  </span>
+                ))}
+                {currentRequests.length > 3 ? <span className="text-xs text-muted-foreground">+{currentRequests.length - 3} more</span> : null}
+              </div>
+            </div>
+            {canOperateMeals ? <Button variant="ghost" size="sm" className="hidden h-7 px-2 text-xs sm:inline-flex" onClick={() => setDialogOpen(true)}>Review</Button> : null}
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      ) : null}
+    </div>
   );
 }
