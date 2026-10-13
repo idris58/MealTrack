@@ -236,7 +236,7 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
 
       {/* ── Days view ──────────────────────────────────────────── */}
       {view === 'days' && (
-        <div ref={scrollRef} className={cn(maxHeight, 'overflow-y-auto overscroll-contain')}>
+        <div ref={scrollRef} className={cn(maxHeight, 'overflow-y-auto overscroll-auto')}>
           <ul className="divide-y">
             {visibleDays.map((day) => {
               const total = dayTotal(day);
@@ -317,7 +317,7 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
 
       {/* ── Grid (heatmap) view ────────────────────────────────── */}
       {view === 'grid' && (
-        <div ref={scrollRef} className={cn(maxHeight, 'overflow-auto overscroll-contain [scrollbar-gutter:stable]')}>
+        <div ref={scrollRef} className={cn(maxHeight, 'overflow-auto overscroll-auto [scrollbar-gutter:stable]')}>
           <table className="w-full min-w-max border-separate border-spacing-0 text-sm" onMouseLeave={() => setHoverCol(null)}>
             <thead>
               <tr>
