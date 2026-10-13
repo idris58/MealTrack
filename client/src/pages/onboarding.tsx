@@ -1,19 +1,25 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, ChefHat, Link2, LoaderCircle, ShieldCheck, UsersRound } from "lucide-react";
+import { useLocation } from "wouter";
+import { ArrowRight, ChefHat, CircleHelp, Link2, LoaderCircle, LogOut, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 
 type Action = "create" | "migrate" | null;
 
 export default function OnboardingPage() {
+  const [, setLocation] = useLocation();
+  const { user, profile, signOut } = useAuth();
   const [messName, setMessName] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
   const [hasLegacyData, setHasLegacyData] = useState(false);
   const [checkingLegacy, setCheckingLegacy] = useState(true);
   const [action, setAction] = useState<Action>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,23 +37,151 @@ export default function OnboardingPage() {
     if (action) return;
     const name = messName.trim();
     if (!name) { setError("Enter a name for your mess."); return; }
-    setAction(nextAction); setError(null);
-    const result = await supabase.rpc(nextAction === "migrate" ? "migrate_legacy_data" : "create_mess", { mess_name: name });
-    if (result.error) { setError(result.error.message); setAction(null); return; }
-    window.location.assign("/app");
+    setAction(nextAction);
+    setError(null);
+    try {
+      const { error: createError } = await supabase.rpc(nextAction === "migrate" ? "migrate_legacy_data" : "create_mess", { mess_name: name });
+      if (createError) throw createError;
+      window.location.assign("/app");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "We couldn’t finish setting up your mess. Please try again.");
+      setAction(null);
+    }
   };
 
-  return <main className="min-h-screen bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.12),transparent_36rem)] px-4 py-8 sm:px-6 sm:py-12"><div className="mx-auto max-w-4xl space-y-6 sm:space-y-8">
-    <header className="mx-auto max-w-2xl text-center"><div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25"><ChefHat className="h-7 w-7" /></div><h1 className="font-heading text-3xl font-bold tracking-tight sm:text-4xl">Welcome to MealTrack</h1><p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">Create a shared mess for your household, or join one securely with an invitation from its manager.</p></header>
+  const openInvite = () => {
+    const value = inviteLink.trim();
+    if (!value) { setError("Paste the invite link your manager sent you."); return; }
+    try {
+      const url = new URL(value, window.location.origin);
+      const token = url.pathname.match(/^\/invite\/([^/]+)\/?$/)?.[1];
+      const directToken = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null;
+      if (url.origin !== window.location.origin && !directToken) throw new Error("That doesn’t look like a MealTrack invite link.");
+      if (!token && !directToken) throw new Error("That doesn’t look like a MealTrack invite link. Paste the full link from your manager.");
+      setError(null);
+      setLocation(`/invite/${encodeURIComponent(token ?? directToken!)}`);
+    } catch (inviteError) {
+      setError(inviteError instanceof Error ? inviteError.message : "Check the invite link and try again.");
+    }
+  };
 
-    {hasLegacyData ? <Card className="border-primary/35 bg-primary/5 shadow-sm"><CardHeader><CardTitle className="text-lg">Bring your existing MealTrack data</CardTitle><CardDescription>Your previous members, cycles, meals, expenses, deposits, and history will move into a new mess.</CardDescription></CardHeader><CardContent className="space-y-4"><div className="space-y-2"><Label htmlFor="migration-mess-name">New mess name</Label><Input id="migration-mess-name" placeholder="e.g. Green House Mess" value={messName} onChange={(event) => setMessName(event.target.value)} disabled={Boolean(action)} /></div><Button className="w-full sm:w-auto" disabled={Boolean(action)} onClick={() => void createMess("migrate")}>{action === "migrate" ? <><LoaderCircle className="h-4 w-4 animate-spin" />Migrating...</> : "Migrate existing data"}</Button><p className="text-xs text-muted-foreground">Only migrate data you own. To enter someone else’s mess, use their invite link.</p></CardContent></Card> : null}
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    setError(null);
+    try {
+      await signOut();
+      setLocation("/auth");
+    } catch {
+      setError("We couldn’t sign you out. Please try again.");
+      setIsSigningOut(false);
+    }
+  };
 
-    <div className="grid gap-4 md:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] md:gap-6"><Card className="border-primary/35 shadow-lg shadow-primary/5"><CardHeader><div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><ChefHat className="h-5 w-5" /></div><CardTitle>Create a mess</CardTitle><CardDescription>Start a shared space for meals, expenses, and member balances. You’ll become its manager.</CardDescription></CardHeader><CardContent className="space-y-4"><div className="space-y-2"><Label htmlFor="mess-name">Mess name</Label><Input id="mess-name" placeholder="e.g. Green House Mess" value={messName} onChange={(event) => setMessName(event.target.value)} disabled={Boolean(action)} onKeyDown={(event) => { if (event.key === "Enter") void createMess("create"); }} /></div><Button className="w-full sm:w-auto" disabled={Boolean(action)} onClick={() => void createMess("create")}>{action === "create" ? <><LoaderCircle className="h-4 w-4 animate-spin" />Creating...</> : <><span>Create mess</span><ArrowRight className="h-4 w-4" /></>}</Button></CardContent></Card>
+  return (
+    <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(ellipse_at_top,_hsl(var(--primary)/0.13),transparent_42rem)] px-4 py-6 sm:px-6 sm:py-10">
+      <div aria-hidden="true" className="pointer-events-none absolute -left-28 top-64 h-72 w-72 rounded-full bg-primary/[0.04] blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -right-24 top-16 h-80 w-80 rounded-full bg-emerald-400/[0.05] blur-3xl" />
 
-      <Card className="bg-card/80"><CardHeader><div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-foreground"><UsersRound className="h-5 w-5" /></div><CardTitle>Have an invite link?</CardTitle><CardDescription>Your manager controls access with secure, one-time invite links.</CardDescription></CardHeader><CardContent className="space-y-4"><div className="rounded-xl border bg-muted/35 p-4 text-sm text-muted-foreground"><div className="flex gap-2"><Link2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><p>Open the link your manager sent you. You can sign in or create an account directly from the invitation.</p></div></div><div className="flex gap-2 text-sm"><ShieldCheck className="h-4 w-4 shrink-0 text-primary" /><p className="text-muted-foreground">Don’t have a link? Ask your manager to send you a new invite link.</p></div></CardContent></Card>
-    </div>
+      <div className="relative mx-auto max-w-5xl">
+        <nav className="mb-10 flex items-center justify-between sm:mb-14">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20"><ChefHat className="h-5 w-5" /></span>
+            <span className="font-heading text-lg font-bold tracking-tight">MealTrack</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="hidden max-w-48 truncate text-sm text-muted-foreground sm:inline">{profile?.full_name ?? user?.email}</span>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => void handleSignOut()} disabled={isSigningOut}>
+              {isSigningOut ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+              <span>{isSigningOut ? "Signing out…" : "Sign out"}</span>
+            </Button>
+          </div>
+        </nav>
 
-    {checkingLegacy ? <p className="text-center text-sm text-muted-foreground">Checking for existing MealTrack data...</p> : null}
-    {error ? <p className="mx-auto max-w-2xl rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
-  </div></main>;
+        <header className="mx-auto mb-9 max-w-2xl text-center sm:mb-11">
+          <div className="mx-auto mb-4 inline-flex items-center gap-1.5 rounded-full border bg-card/70 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
+            <Sparkles className="h-3.5 w-3.5 text-primary" /> One quick step to get started
+          </div>
+          <h1 className="font-heading text-3xl font-bold tracking-tight sm:text-4xl">Welcome to MealTrack</h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
+            Create a shared mess, or join your household using an invitation from its manager.
+          </p>
+        </header>
+
+        {hasLegacyData ? (
+          <Card className="mb-6 overflow-hidden border-primary/25 bg-primary/[0.035] shadow-sm">
+            <div className="grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6">
+              <div>
+                <div className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary"><ShieldCheck className="h-3.5 w-3.5" /> Existing data found</div>
+                <h2 className="font-heading text-lg font-semibold">Bring your MealTrack history with you</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">Move your previous members, cycles, meals, expenses, deposits, and history into a new mess.</p>
+              </div>
+              <div className="flex w-full gap-2 sm:w-auto">
+                <Input aria-label="New mess name for migration" placeholder="New mess name" value={messName} onChange={(event) => setMessName(event.target.value)} disabled={Boolean(action)} />
+                <Button className="shrink-0" disabled={Boolean(action) || checkingLegacy} onClick={() => void createMess("migrate")}>
+                  {action === "migrate" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : "Migrate data"}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        <div className="grid items-stretch gap-4 md:grid-cols-2 md:gap-6">
+          <Card className="relative flex flex-col overflow-hidden border-primary/25 shadow-lg shadow-primary/[0.06]">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-emerald-400 to-primary/30" />
+            <CardHeader className="pb-4 pt-6 sm:px-6 sm:pt-7">
+              <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><ChefHat className="h-5 w-5" /></div>
+              <CardTitle className="text-xl">Create a mess</CardTitle>
+              <CardDescription className="leading-relaxed">Start a shared home for meals, expenses, and member balances. You’ll be the manager.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-1 flex-col gap-4 sm:px-6">
+              <div className="space-y-2">
+                <Label htmlFor="mess-name">What should your mess be called?</Label>
+                <Input id="mess-name" placeholder="e.g. Green House Mess" value={messName} onChange={(event) => setMessName(event.target.value)} disabled={Boolean(action)} onKeyDown={(event) => { if (event.key === "Enter") void createMess("create"); }} />
+              </div>
+              <div className="mt-auto pt-1">
+                <Button className="w-full gap-2" disabled={Boolean(action) || checkingLegacy} onClick={() => void createMess("create")}>
+                  {action === "create" ? <><LoaderCircle className="h-4 w-4 animate-spin" />Creating your mess…</> : <>Create a mess<ArrowRight className="h-4 w-4" /></>}
+                </Button>
+                <p className="mt-2 text-center text-xs text-muted-foreground">You can invite your household after setup.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="flex flex-col bg-card/85 shadow-sm backdrop-blur-sm">
+            <CardHeader className="pb-4 pt-6 sm:px-6 sm:pt-7">
+              <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-secondary text-foreground"><UsersRound className="h-5 w-5" /></div>
+              <CardTitle className="text-xl">Join a mess</CardTitle>
+              <CardDescription className="leading-relaxed">Joining is private and invite-only. Your manager can send you a secure link.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-1 flex-col gap-4 sm:px-6">
+              <div className="space-y-2">
+                <Label htmlFor="invite-link">Paste your invite link</Label>
+                <div className="flex gap-2">
+                  <Input id="invite-link" placeholder="https://…/invite/…" value={inviteLink} onChange={(event) => setInviteLink(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") openInvite(); }} />
+                  <Button variant="secondary" className="shrink-0 gap-2" onClick={openInvite}><Link2 className="h-4 w-4" /><span className="hidden sm:inline">Continue</span><ArrowRight className="h-4 w-4 sm:hidden" /></Button>
+                </div>
+              </div>
+              <div className="mt-auto rounded-xl border bg-muted/30 p-3.5">
+                <div className="flex gap-2.5">
+                  <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="text-sm">
+                    <p className="font-medium">Don’t have an invite yet?</p>
+                    <p className="mt-0.5 leading-relaxed text-muted-foreground">Ask your manager to create one for you. You can sign out and come back when it arrives.</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {checkingLegacy ? <p className="mt-5 text-center text-xs text-muted-foreground">Checking for existing MealTrack data…</p> : null}
+        {error ? <p role="alert" className="mx-auto mt-5 max-w-2xl rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
+
+        <footer className="mx-auto mt-8 flex max-w-2xl items-center justify-center gap-2 text-center text-xs leading-relaxed text-muted-foreground sm:mt-10">
+          <ShieldCheck className="h-4 w-4 shrink-0" /> Your data stays private to the mess you create or join.
+        </footer>
+      </div>
+    </main>
+  );
 }
