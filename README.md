@@ -82,13 +82,12 @@ supabase/01_tables.sql
 supabase/02_indexes.sql
 supabase/03_functions.sql
 supabase/04_triggers.sql
-supabase/05_backfill.sql
-supabase/06_rls_policies.sql
+supabase/05_rls_policies.sql
 ```
 
-The sequence contains the complete consolidated schema, indexes, RPCs and
-triggers, legacy-data backfill, and final RLS/RBAC policies. It is safe to run
-against a fresh database and is designed to be repeatable.
+The sequence contains the complete consolidated schema, indexes, RPCs,
+triggers, and final RLS/RBAC policies. It is safe to run against a fresh
+database and is designed to be repeatable.
 
 
 ## Auth Configuration
