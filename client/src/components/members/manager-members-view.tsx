@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Check, ChevronDown, Clipboard, Clock3, Copy, GripVertical, Link2, Link2Off,
-  Plus, RotateCcw, Send, ShieldCheck, Trash2, Wallet, Users,
+  Plus, RotateCcw, Send, ShieldCheck, Trash2, Wallet, Users, UserPlus,
 } from 'lucide-react';
 import {
   DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter,
@@ -456,16 +456,118 @@ export function ManagerMembersView() {
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}><DialogContent><DialogHeader><DialogTitle>Add New Member</DialogTitle></DialogHeader><AddMemberForm onClose={() => setIsAddOpen(false)} /></DialogContent></Dialog>
 
         <Dialog open={inviteOpen} onOpenChange={(open) => { setInviteOpen(open); if (!open) { setInviteError(null); setInviteTargetMemberId('new'); } }}>
-          <DialogContent><DialogHeader><DialogTitle>Invite a member</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">The link works once and expires in 7 days. The recipient can create an account or sign in to join.</p>
-              <div className="grid gap-2">
-                <Button type="button" variant={inviteTargetMemberId === 'new' ? 'default' : 'outline'} className="h-auto justify-start p-4 text-left" onClick={() => setInviteTargetMemberId('new')}><div><p>Invite a new member</p><p className="mt-1 text-xs font-normal opacity-80">Their account name will be added to your roster.</p></div></Button>
-                <Button type="button" variant={inviteTargetMemberId !== 'new' ? 'default' : 'outline'} className="h-auto justify-start p-4 text-left" onClick={() => { if (members.some((member) => !member.profileId)) setInviteTargetMemberId(members.find((member) => !member.profileId)?.id ?? 'new'); }} disabled={!members.some((member) => !member.profileId)}><div><p>Link an offline member</p><p className="mt-1 text-xs font-normal opacity-80">Keep their existing meals and deposits attached to their account.</p></div></Button>
+          <DialogContent className="max-w-md w-[calc(100%-2rem)] p-5 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-semibold">Invite a member</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-1 min-w-0">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                The link works once and expires in 7 days. The recipient can create an account or sign in to join.
+              </p>
+              <div className="grid gap-2.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setInviteTargetMemberId('new')}
+                  className={cn(
+                    "group relative flex w-full min-w-0 items-start gap-3 rounded-xl border p-3.5 text-left transition-all",
+                    inviteTargetMemberId === 'new'
+                      ? "border-primary bg-primary/8 text-foreground ring-1 ring-primary/25 dark:bg-primary/15"
+                      : "border-border/70 bg-card hover:border-border hover:bg-muted/40 text-foreground"
+                  )}
+                >
+                  <div className={cn(
+                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                    inviteTargetMemberId === 'new'
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground group-hover:text-foreground"
+                  )}>
+                    <UserPlus className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold leading-tight text-foreground">Invite a new member</p>
+                      <span className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all",
+                        inviteTargetMemberId === 'new'
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-muted-foreground/30"
+                      )}>
+                        {inviteTargetMemberId === 'new' && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground leading-normal whitespace-normal break-words">
+                      Their account name will be added to your roster.
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!members.some((member) => !member.profileId)}
+                  onClick={() => {
+                    const firstOffline = members.find((member) => !member.profileId);
+                    if (firstOffline) setInviteTargetMemberId(firstOffline.id);
+                  }}
+                  className={cn(
+                    "group relative flex w-full min-w-0 items-start gap-3 rounded-xl border p-3.5 text-left transition-all",
+                    inviteTargetMemberId !== 'new'
+                      ? "border-primary bg-primary/8 text-foreground ring-1 ring-primary/25 dark:bg-primary/15"
+                      : "border-border/70 bg-card hover:border-border hover:bg-muted/40 text-foreground",
+                    !members.some((member) => !member.profileId) && "opacity-50 cursor-not-allowed hover:bg-card hover:border-border/70"
+                  )}
+                >
+                  <div className={cn(
+                    "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                    inviteTargetMemberId !== 'new'
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground group-hover:text-foreground"
+                  )}>
+                    <Link2 className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold leading-tight text-foreground">Link an offline member</p>
+                      <span className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all",
+                        inviteTargetMemberId !== 'new'
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-muted-foreground/30"
+                      )}>
+                        {inviteTargetMemberId !== 'new' && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground leading-normal whitespace-normal break-words">
+                      Keep their existing meals and deposits attached to their account.
+                    </p>
+                  </div>
+                </button>
               </div>
-              {inviteTargetMemberId !== 'new' ? <Select value={inviteTargetMemberId} onValueChange={setInviteTargetMemberId}><SelectTrigger><SelectValue placeholder="Choose an offline member" /></SelectTrigger><SelectContent>{members.filter((member) => !member.profileId).map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select> : null}
+
+              {inviteTargetMemberId !== 'new' ? (
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-xs font-medium text-muted-foreground">Select member to link</label>
+                  <Select value={inviteTargetMemberId} onValueChange={setInviteTargetMemberId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose an offline member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.filter((member) => !member.profileId).map((member) => (
+                        <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+
               {inviteError ? <p className="text-sm text-destructive">{inviteError}</p> : null}
-              <Button className="w-full" disabled={creatingInvite} onClick={() => void createInvite()}>{creatingInvite ? 'Creating link...' : 'Create invite link'}</Button>
+
+              <Button
+                className="w-full h-10 font-semibold shadow-xs"
+                disabled={creatingInvite}
+                onClick={() => void createInvite()}
+              >
+                {creatingInvite ? 'Creating link...' : 'Create invite link'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
