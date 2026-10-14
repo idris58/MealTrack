@@ -102,7 +102,7 @@ export function DashboardFab({ onOpenExpense, onOpenMeal }: DashboardFabProps) {
       )}
 
       {/* Floating Speed Dial Container */}
-      <div className="fixed bottom-20 right-4 sm:bottom-8 sm:right-8 z-40 flex flex-col items-end gap-3">
+      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px))] right-4 sm:bottom-8 sm:right-8 z-40 flex flex-col items-end gap-3">
         {/* Expanded Speed-Dial Action Items */}
         {isOpen && (
           <div className="flex flex-col items-end gap-2.5 mb-1 animate-in slide-in-from-bottom-3 fade-in duration-200">

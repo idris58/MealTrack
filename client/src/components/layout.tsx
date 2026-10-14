@@ -309,7 +309,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Main Content */}
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="container mx-auto max-w-5xl p-4 pb-20 md:p-8">
+          <div className="container mx-auto max-w-5xl p-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:p-8 md:pb-8">
             {children}
           </div>
         </main>
@@ -318,6 +318,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Mobile Bottom Navigation Bar */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 w-full border-t bg-card md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         aria-label="Primary mobile navigation"
       >
         <div className="grid h-[54px] w-full grid-cols-6 items-center">
