@@ -52,41 +52,9 @@ begin
   return new_mess;
 end;
 $$;
-
-create or replace function public.has_legacy_data()
-returns boolean language sql stable security definer set search_path = public
-as $$
-  select exists (select 1 from public.members where user_id = auth.uid() and mess_id is null)
-      or exists (select 1 from public.cycles where user_id = auth.uid() and mess_id is null)
-      or exists (select 1 from public.expenses where user_id = auth.uid() and mess_id is null)
-      or exists (select 1 from public.meal_logs where user_id = auth.uid() and mess_id is null)
-      or exists (select 1 from public.cycle_deposits where user_id = auth.uid() and mess_id is null)
-      or exists (select 1 from public.changelog_entries where user_id = auth.uid() and mess_id is null)
-      or exists (select 1 from public.notices where user_id = auth.uid() and mess_id is null)
-      or exists (select 1 from public.share_links where user_id = auth.uid() and mess_id is null)
-$$;
-
-create or replace function public.migrate_legacy_data(mess_name text)
-returns public.messes language plpgsql security definer set search_path = public
-as $$
-declare created_mess public.messes;
-begin
-  if auth.uid() is null then raise exception 'Authentication is required'; end if;
-  if not public.has_legacy_data() then raise exception 'No legacy data is available to migrate'; end if;
-  select * into created_mess from public.create_mess(mess_name);
-  update public.members set mess_id = created_mess.id, profile_id = null where user_id = auth.uid() and mess_id is null;
-  update public.cycles set mess_id = created_mess.id where user_id = auth.uid() and mess_id is null;
-  update public.expenses set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  update public.meal_logs set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  update public.cycle_deposits set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  update public.changelog_entries set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  update public.notices set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  update public.share_links set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  update public.push_subscriptions set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  update public.notification_deliveries set mess_id = created_mess.id, profile_id = auth.uid() where user_id = auth.uid() and mess_id is null;
-  return created_mess;
-end;
-$$;
+-- Retired legacy data migration functions
+drop function if exists public.has_legacy_data();
+drop function if exists public.migrate_legacy_data(text);
 
 create or replace function public.guard_member_profile_link()
 returns trigger language plpgsql security definer set search_path = public
@@ -284,8 +252,8 @@ drop function if exists public.join_mess(text);
 
 revoke all on function public.create_mess(text), public.set_mess_role(uuid, text), public.update_mess_settings(text), public.delete_current_mess(), public.update_user_profile(text, text) from public;
 grant execute on function public.create_mess(text), public.set_mess_role(uuid, text), public.update_mess_settings(text), public.delete_current_mess(), public.update_user_profile(text, text) to authenticated;
-revoke all on function public.migrate_legacy_data(text), public.link_member_profile(uuid, uuid), public.create_member_invite(uuid), public.list_member_invites(), public.revoke_member_invite(uuid), public.accept_member_invite(uuid) from public;
-grant execute on function public.migrate_legacy_data(text), public.link_member_profile(uuid, uuid), public.create_member_invite(uuid), public.list_member_invites(), public.revoke_member_invite(uuid), public.accept_member_invite(uuid) to authenticated;
+revoke all on function public.link_member_profile(uuid, uuid), public.create_member_invite(uuid), public.list_member_invites(), public.revoke_member_invite(uuid), public.accept_member_invite(uuid) from public;
+grant execute on function public.link_member_profile(uuid, uuid), public.create_member_invite(uuid), public.list_member_invites(), public.revoke_member_invite(uuid), public.accept_member_invite(uuid) to authenticated;
 revoke all on function public.get_member_invite_preview(text) from public;
 grant execute on function public.get_member_invite_preview(text) to anon, authenticated;
 grant execute on function public.get_notification_preferences() to authenticated;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { ArrowRight, ChefHat, CircleHelp, Link2, LoaderCircle, LogOut, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 
@@ -9,43 +9,28 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 
-type Action = "create" | "migrate" | null;
-
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const { user, profile, signOut } = useAuth();
   const [messName, setMessName] = useState("");
   const [inviteLink, setInviteLink] = useState("");
-  const [hasLegacyData, setHasLegacyData] = useState(false);
-  const [checkingLegacy, setCheckingLegacy] = useState(true);
-  const [action, setAction] = useState<Action>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void supabase.rpc("has_legacy_data").then(({ data, error: rpcError }) => {
-      if (!active) return;
-      if (rpcError) console.error("Could not check legacy data:", rpcError);
-      setHasLegacyData(Boolean(data));
-      setCheckingLegacy(false);
-    });
-    return () => { active = false; };
-  }, []);
-
-  const createMess = async (nextAction: Exclude<Action, null>) => {
-    if (action) return;
+  const createMess = async () => {
+    if (isCreating) return;
     const name = messName.trim();
     if (!name) { setError("Enter a name for your mess."); return; }
-    setAction(nextAction);
+    setIsCreating(true);
     setError(null);
     try {
-      const { error: createError } = await supabase.rpc(nextAction === "migrate" ? "migrate_legacy_data" : "create_mess", { mess_name: name });
+      const { error: createError } = await supabase.rpc("create_mess", { mess_name: name });
       if (createError) throw createError;
       window.location.assign("/app");
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "We couldn’t finish setting up your mess. Please try again.");
-      setAction(null);
+      setIsCreating(false);
     }
   };
 
@@ -108,24 +93,6 @@ export default function OnboardingPage() {
           </p>
         </header>
 
-        {hasLegacyData ? (
-          <Card className="mb-6 overflow-hidden border-primary/25 bg-primary/[0.035] shadow-sm">
-            <div className="grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6">
-              <div>
-                <div className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary"><ShieldCheck className="h-3.5 w-3.5" /> Existing data found</div>
-                <h2 className="font-heading text-lg font-semibold">Bring your MealTrack history with you</h2>
-                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">Move your previous members, cycles, meals, expenses, deposits, and history into a new mess.</p>
-              </div>
-              <div className="flex w-full gap-2 sm:w-auto">
-                <Input aria-label="New mess name for migration" placeholder="New mess name" value={messName} onChange={(event) => setMessName(event.target.value)} disabled={Boolean(action)} />
-                <Button className="shrink-0" disabled={Boolean(action) || checkingLegacy} onClick={() => void createMess("migrate")}>
-                  {action === "migrate" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : "Migrate data"}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        ) : null}
-
         <div className="grid items-stretch gap-4 md:grid-cols-2 md:gap-6">
           <Card className="relative flex flex-col overflow-hidden border-primary/25 shadow-lg shadow-primary/[0.06]">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-emerald-400 to-primary/30" />
@@ -137,11 +104,11 @@ export default function OnboardingPage() {
             <CardContent className="flex flex-1 flex-col gap-4 sm:px-6">
               <div className="space-y-2">
                 <Label htmlFor="mess-name">What should your mess be called?</Label>
-                <Input id="mess-name" placeholder="e.g. Green House Mess" value={messName} onChange={(event) => setMessName(event.target.value)} disabled={Boolean(action)} onKeyDown={(event) => { if (event.key === "Enter") void createMess("create"); }} />
+                <Input id="mess-name" placeholder="e.g. Green House Mess" value={messName} onChange={(event) => setMessName(event.target.value)} disabled={isCreating} onKeyDown={(event) => { if (event.key === "Enter") void createMess(); }} />
               </div>
               <div className="mt-auto pt-1">
-                <Button className="w-full gap-2" disabled={Boolean(action) || checkingLegacy} onClick={() => void createMess("create")}>
-                  {action === "create" ? <><LoaderCircle className="h-4 w-4 animate-spin" />Creating your mess…</> : <>Create a mess<ArrowRight className="h-4 w-4" /></>}
+                <Button className="w-full gap-2" disabled={isCreating} onClick={() => void createMess()}>
+                  {isCreating ? <><LoaderCircle className="h-4 w-4 animate-spin" />Creating your mess…</> : <>Create a mess<ArrowRight className="h-4 w-4" /></>}
                 </Button>
                 <p className="mt-2 text-center text-xs text-muted-foreground">You can invite your household after setup.</p>
               </div>
@@ -175,7 +142,6 @@ export default function OnboardingPage() {
           </Card>
         </div>
 
-        {checkingLegacy ? <p className="mt-5 text-center text-xs text-muted-foreground">Checking for existing MealTrack data…</p> : null}
         {error ? <p role="alert" className="mx-auto mt-5 max-w-2xl rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
 
         <footer className="mx-auto mt-8 flex max-w-2xl items-center justify-center gap-2 text-center text-xs leading-relaxed text-muted-foreground sm:mt-10">
