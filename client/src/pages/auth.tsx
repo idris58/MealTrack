@@ -408,6 +408,42 @@ export default function AuthPage() {
           </CardHeader>
 
           <CardContent className="space-y-5 pt-2">
+
+            {/* Google OAuth — fast path, shown first */}
+            {(mode === "login" || mode === "signup") && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-3 border-border bg-background/60 hover:bg-muted/60 text-foreground transition-colors"
+                  onClick={handleGoogleAuth}
+                  disabled={googleLoading}
+                >
+                  {googleLoading ? (
+                    <>
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      Redirecting…
+                    </>
+                  ) : (
+                    <>
+                      <GoogleLogo className="h-4 w-4" />
+                      Continue with Google
+                    </>
+                  )}
+                </Button>
+
+                {/* Divider */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-card px-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">or use email</span>
+                  </div>
+                </div>
+              </>
+            )}
+
             <form className="space-y-4" onSubmit={handleEmailAuth}>
 
               {/* Email */}
@@ -529,8 +565,8 @@ export default function AuthPage() {
 
               {/* Contextual hint */}
               <p className="text-xs leading-5 text-muted-foreground">
-                {mode === "login" && "Sign in with your email and password, or continue with Google below."}
-                {mode === "signup" && "Create your account with email and password. Google sign-in is also available."}
+                {mode === "login" && "Sign in with your email and password."}
+                {mode === "signup" && "Create your account with email and password."}
                 {mode === "forgot-password" && "Enter your email address and we'll send you a password reset link."}
                 {mode === "reset-password" && "Choose a strong new password, then use it the next time you sign in."}
               </p>
@@ -562,39 +598,6 @@ export default function AuthPage() {
               </Button>
             </form>
 
-            {/* Google OAuth */}
-            {(mode === "login" || mode === "signup") && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="bg-card px-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">or continue with</span>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full gap-3 border-border bg-background/60 hover:bg-muted/60 text-foreground transition-colors"
-                  onClick={handleGoogleAuth}
-                  disabled={googleLoading}
-                >
-                  {googleLoading ? (
-                    <>
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                      Redirecting…
-                    </>
-                  ) : (
-                    <>
-                      <GoogleLogo className="h-4 w-4" />
-                      Google
-                    </>
-                  )}
-                </Button>
-              </>
-            )}
           </CardContent>
         </Card>
       </div>
