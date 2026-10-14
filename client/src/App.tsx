@@ -234,6 +234,8 @@ function NotificationOnboardingToast() {
 
 const legacyMainRouteMap: Record<string, string> = {
   "/": "/app",
+  "/auth": "/app/auth",
+  "/onboarding": "/app/onboarding",
   "/members": "/app/members",
   "/expenses": "/app/expenses",
   "/meals": "/app/meals",
@@ -317,7 +319,9 @@ function AppShell() {
 
   const hasRecoveryContext =
     recoveryLinkVerified || recoveryTokenInUrl || lastAuthEvent === "PASSWORD_RECOVERY";
-  const isRecoveryFlow = routePath === "/auth" && hasRecoveryContext;
+  const isAuthRoute = routePath === "/auth" || routePath === "/app/auth";
+  const isOnboardingRoute = routePath === "/onboarding" || routePath === "/app/onboarding";
+  const isRecoveryFlow = isAuthRoute && hasRecoveryContext;
 
   useEffect(() => {
     const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
@@ -365,6 +369,9 @@ function AppShell() {
       "/settings": "Settings - MealTrack",
       "/app/settings": "Settings - MealTrack",
       "/auth": `${isRecoveryFlow ? "Reset Password" : "Authentication"} - MealTrack`,
+      "/app/auth": `${isRecoveryFlow ? "Reset Password" : "Authentication"} - MealTrack`,
+      "/onboarding": "Setup Mess - MealTrack",
+      "/app/onboarding": "Setup Mess - MealTrack",
     };
 
     document.title = pageTitleMap[routePath] ?? "MealTrack";
@@ -373,29 +380,33 @@ function AppShell() {
   useEffect(() => {
     if (isSharedLandingRoute || isSharedRoute || isInviteRoute || !authLinkResolved) return;
 
-    if (hasRecoveryContext && routePath !== "/auth") {
-      window.history.replaceState(null, document.title, `/auth${window.location.search}${window.location.hash}`);
-      setLocation("/auth");
+    if (hasRecoveryContext && !isAuthRoute) {
+      window.history.replaceState(null, document.title, `/app/auth${window.location.search}${window.location.hash}`);
+      setLocation("/app/auth");
       return;
     }
 
     if (loading) return;
-    if (!session && routePath !== "/auth") {
-      setLocation("/auth");
+    if (!session && !isAuthRoute) {
+      setLocation("/app/auth");
+      return;
+    }
+    if (!session && routePath === "/auth") {
+      setLocation("/app/auth");
       return;
     }
     if (!session || isRecoveryFlow || profileLoading || !profile) return;
 
-    if (!profile.mess_id && pendingInviteToken && routePath === "/auth") {
+    if (!profile.mess_id && pendingInviteToken && isAuthRoute) {
       setLocation(`/invite/${encodeURIComponent(pendingInviteToken)}`);
       return;
     }
 
-    if (!profile.mess_id && routePath !== "/onboarding") {
-      setLocation("/onboarding");
+    if (!profile.mess_id && !isOnboardingRoute) {
+      setLocation("/app/onboarding");
       return;
     }
-    if (profile.mess_id && (routePath === "/auth" || routePath === "/onboarding")) {
+    if (profile.mess_id && (isAuthRoute || isOnboardingRoute)) {
       setLocation("/app");
       return;
     }

@@ -56,7 +56,7 @@ export default function OnboardingPage() {
     setError(null);
     try {
       await signOut();
-      setLocation("/auth");
+      setLocation("/app/auth");
     } catch {
       setError("We couldn’t sign you out. Please try again.");
       setIsSigningOut(false);

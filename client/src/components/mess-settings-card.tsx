@@ -31,7 +31,7 @@ export function MessSettingsCard() {
     setWorking(true); setError(null);
     const { error: rpcError } = await supabase.rpc("delete_current_mess");
     if (rpcError) { setError(rpcError.message); setWorking(false); return; }
-    setLocation("/onboarding");
+    setLocation("/app/onboarding");
     window.location.reload();
   };
 
