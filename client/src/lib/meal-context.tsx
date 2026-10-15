@@ -8,6 +8,7 @@ import {
 } from './offline-queue';
 import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
 import { broadcastSharedUpdate } from './shared-update';
+import { triggerDepositPush } from './push-triggers';
 import {
   CHANGELOG_PAGE_SIZE,
   mapChangelogRows,
@@ -965,6 +966,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         ...prev.filter((d) => d.id !== op.id),
         { id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount), note: data.note ?? undefined, createdAt: data.created_at },
       ]);
+      void triggerDepositPush({ depositId: data.id, memberId: p.memberId, amount: p.amount, note: p.note });
       await recordChangelog({
         cycleId: p.cycleId, entityType: 'deposit', entityId: data.id, action: 'update',
         title: `Updated deposit for ${getMemberName(p.memberId, p.cycleId)}`,
@@ -1051,6 +1053,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     activeCycle,
     pendingCycle,
     getCycleMembers,
+    getCycleDetails: computedCycleDetails.getCycleDetails,
     setCycles,
     setLoadedCycleIds,
     setDeposits: setAllDeposits,

@@ -4,7 +4,13 @@ import webpush, { type PushSubscription } from "web-push";
 import { assertSupabaseAdmin, supabaseAdmin } from "./supabase-admin";
 
 type PushAudience = "main" | "shared";
-type NotificationType = "meal_log_reminder" | "notice_posted";
+type NotificationType =
+  | "meal_log_reminder"
+  | "notice_posted"
+  | "deposit_recorded"
+  | "settlement_pending"
+  | "meal_off_request_submitted"
+  | "meal_off_request_decided";
 
 type PushSubscriptionBody = {
   endpoint?: unknown;
@@ -38,7 +44,13 @@ type ReminderProfileRow = {
 
 type NotificationPreferences = {
   global?: boolean;
-  categories?: { notices?: boolean; mealReminders?: boolean };
+  categories?: {
+    notices?: boolean;
+    mealReminders?: boolean;
+    deposits?: boolean;
+    settlements?: boolean;
+    mealOff?: boolean;
+  };
 };
 
 function parseNotificationPreferences(value: unknown): NotificationPreferences {
@@ -46,7 +58,10 @@ function parseNotificationPreferences(value: unknown): NotificationPreferences {
   return value as NotificationPreferences;
 }
 
-function allowsNotification(value: unknown, category: "notices" | "mealReminders") {
+function allowsNotification(
+  value: unknown,
+  category: "notices" | "mealReminders" | "deposits" | "settlements" | "mealOff",
+) {
   const preferences = parseNotificationPreferences(value);
   if (preferences.global === false) return false;
   return preferences.categories?.[category] !== false;
@@ -482,7 +497,267 @@ export async function sendNoticePushToMessMembers(
     url: `/app`,
     tag: `mess-notice-${notice.id}`,
   });
-  await Promise.all(Array.from(failedUserIds, (failedUserId) => removeDelivery(failedUserId, "notice_posted", dedupeKey)));
+}
+
+async function sendPushToUser(
+  userId: string,
+  type: NotificationType,
+  dedupeKey: string,
+  payload: { title: string; body: string; url: string; tag: string },
+) {
+  const deliveryRecorded = await recordDelivery(userId, type, dedupeKey);
+  if (!deliveryRecorded) return false;
+
+  const supabase = assertSupabaseAdmin();
+  const { data: subs, error } = await supabase
+    .from("push_subscriptions")
+    .select("id, user_id, endpoint, p256dh, auth")
+    .eq("user_id", userId)
+    .eq("audience", "main");
+
+  if (error || !subs || subs.length === 0) {
+    return false;
+  }
+
+  const failedUserIds = await sendPushToRows(subs as PushSubscriptionRow[], payload);
+  if (failedUserIds.has(userId)) {
+    await removeDelivery(userId, type, dedupeKey);
+    return false;
+  }
+  return true;
+}
+
+export async function sendDepositPush({
+  actorUserId,
+  depositId,
+  memberId,
+  amount,
+  note,
+}: {
+  actorUserId: string;
+  depositId: string;
+  memberId: string;
+  amount: number;
+  note?: string | null;
+}) {
+  // Skip carry-forward automated deposits to avoid spam
+  if (note && note.trim().toLowerCase().startsWith("carry-forward")) {
+    return;
+  }
+
+  const supabase = assertSupabaseAdmin();
+  const { data: member, error: memberError } = await supabase
+    .from("members")
+    .select("id, name, profile_id")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  // Unlinked members have no profile_id: skip silently
+  if (memberError || !member || !member.profile_id) {
+    return;
+  }
+
+  // Skip push if actor and member are the same person
+  if (member.profile_id === actorUserId) {
+    return;
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("notification_preferences")
+    .eq("id", member.profile_id)
+    .maybeSingle();
+
+  if (!allowsNotification(profile?.notification_preferences, "deposits")) {
+    return;
+  }
+
+  const formattedAmount = Math.abs(amount).toFixed(amount % 1 === 0 ? 0 : 2);
+  const noteSuffix = note?.trim() ? ` (${note.trim()})` : "";
+  const isPositive = amount > 0;
+  const title = isPositive ? "Deposit Recorded" : "Deposit Adjusted";
+  const body = isPositive
+    ? `৳${formattedAmount} has been deposited to your account${noteSuffix}.`
+    : `৳${formattedAmount} was deducted from your account${noteSuffix}.`;
+
+  await sendPushToUser(
+    member.profile_id,
+    "deposit_recorded",
+    `deposit:${depositId}`,
+    {
+      title: `💰 ${title}`,
+      body: truncateNotificationBody(body),
+      url: "/app/members",
+      tag: `deposit-${depositId}`,
+    },
+  );
+}
+
+export async function sendSettlementPendingPush({
+  actorUserId,
+  cycleId,
+  cycleName,
+  dueMembers,
+}: {
+  actorUserId: string;
+  cycleId: string;
+  cycleName: string;
+  dueMembers: Array<{ memberId: string; dueAmount: number }>;
+}) {
+  const validDueMembers = dueMembers.filter((m) => m.dueAmount > 0);
+  if (validDueMembers.length === 0) return;
+
+  const supabase = assertSupabaseAdmin();
+  const memberIds = validDueMembers.map((m) => m.memberId);
+  const { data: members, error: membersError } = await supabase
+    .from("members")
+    .select("id, name, profile_id")
+    .in("id", memberIds);
+
+  if (membersError || !members) return;
+
+  const memberMap = new Map(members.map((m) => [m.id, m]));
+
+  for (const item of validDueMembers) {
+    const member = memberMap.get(item.memberId);
+    // Unlinked members have no profile_id: skip silently
+    if (!member || !member.profile_id) continue;
+    // Skip if actor and member are the same person
+    if (member.profile_id === actorUserId) continue;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("notification_preferences")
+      .eq("id", member.profile_id)
+      .maybeSingle();
+
+    if (!allowsNotification(profile?.notification_preferences, "settlements")) {
+      continue;
+    }
+
+    const roundedDue = Math.round(item.dueAmount);
+    await sendPushToUser(
+      member.profile_id,
+      "settlement_pending",
+      `settlement:${cycleId}:${member.id}`,
+      {
+        title: "Settlement Pending",
+        body: truncateNotificationBody(
+          `Cycle "${cycleName}" has ended. You have a due balance of ৳${roundedDue}.`,
+        ),
+        url: "/app/history",
+        tag: `settlement-${cycleId}-${member.id}`,
+      },
+    );
+  }
+}
+
+export async function sendMealOffRequestSubmittedPush({
+  messId,
+  actorUserId,
+  requestId,
+  memberName,
+  startDate,
+  endDate,
+  mealPeriod,
+}: {
+  messId: string | null;
+  actorUserId: string;
+  requestId: string;
+  memberName: string;
+  startDate: string;
+  endDate: string;
+  mealPeriod: string;
+}) {
+  if (!messId) return;
+
+  const supabase = assertSupabaseAdmin();
+  // Find mess staff (manager and coordinators) excluding the submitting actor
+  const { data: staffProfiles, error: staffError } = await supabase
+    .from("profiles")
+    .select("id, notification_preferences")
+    .eq("mess_id", messId)
+    .in("role", ["manager", "coordinator"])
+    .neq("id", actorUserId);
+
+  if (staffError || !staffProfiles || staffProfiles.length === 0) return;
+
+  const eligibleStaff = staffProfiles.filter((p) =>
+    allowsNotification(p.notification_preferences, "mealOff"),
+  );
+
+  const periodText =
+    startDate === endDate
+      ? `${startDate} (${mealPeriod})`
+      : `${startDate} to ${endDate} (${mealPeriod})`;
+
+  for (const staff of eligibleStaff) {
+    await sendPushToUser(
+      staff.id,
+      "meal_off_request_submitted",
+      `meal-off-sub:${requestId}:${staff.id}`,
+      {
+        title: "New Meal-Off Request",
+        body: truncateNotificationBody(`${memberName} requested meal-off for ${periodText}.`),
+        url: "/app/meals",
+        tag: `meal-off-request-${requestId}`,
+      },
+    );
+  }
+}
+
+export async function sendMealOffRequestDecidedPush({
+  actorUserId,
+  requestId,
+  status,
+  requestedByProfileId,
+  startDate,
+  endDate,
+  mealPeriod,
+}: {
+  actorUserId: string;
+  requestId: string;
+  status: "approved" | "declined";
+  requestedByProfileId: string;
+  startDate: string;
+  endDate: string;
+  mealPeriod: string;
+}) {
+  // Skip if actor and member are the same person
+  if (!requestedByProfileId || requestedByProfileId === actorUserId) return;
+
+  const supabase = assertSupabaseAdmin();
+  const { data: targetProfile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, notification_preferences")
+    .eq("id", requestedByProfileId)
+    .maybeSingle();
+
+  if (profileError || !targetProfile) return;
+  if (!allowsNotification(targetProfile.notification_preferences, "mealOff")) return;
+
+  const periodText =
+    startDate === endDate
+      ? `${startDate} (${mealPeriod})`
+      : `${startDate} to ${endDate} (${mealPeriod})`;
+
+  const isApproved = status === "approved";
+  const title = isApproved ? "Meal-Off Approved" : "Meal-Off Declined";
+  const body = isApproved
+    ? `Your meal-off request for ${periodText} was approved.`
+    : `Your meal-off request for ${periodText} was declined.`;
+
+  await sendPushToUser(
+    targetProfile.id,
+    "meal_off_request_decided",
+    `meal-off-dec:${requestId}:${status}`,
+    {
+      title,
+      body: truncateNotificationBody(body),
+      url: "/app/meals",
+      tag: `meal-off-decision-${requestId}`,
+    },
+  );
 }
 
 function getLocalDateTime(timeZone: string, now = new Date()) {

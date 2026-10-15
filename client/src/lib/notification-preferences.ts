@@ -3,6 +3,9 @@ import { supabase } from '@/lib/supabase';
 export type NotificationCategoryPreferences = {
   notices?: boolean;
   mealReminders?: boolean;
+  deposits?: boolean;
+  settlements?: boolean;
+  mealOff?: boolean;
 };
 
 export type NotificationPreferences = {

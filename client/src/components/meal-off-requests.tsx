@@ -4,6 +4,7 @@ import { CalendarDays, Check, ClipboardList, Loader2, MessageSquareText, Plus, U
 import { toast } from 'sonner';
 import type { Member } from '@/lib/meal-context';
 import { supabase } from '@/lib/supabase';
+import { triggerMealOffSubmitPush, triggerMealOffDecisionPush } from '@/lib/push-triggers';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -196,7 +197,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
     }
 
     setBusyId('new');
-    const { error } = await supabase.from('meal_off_requests').insert({
+    const { data: inserted, error } = await supabase.from('meal_off_requests').insert({
       mess_id: profile.mess_id,
       cycle_id: activeCycleId,
       member_id: linkedMember.id,
@@ -205,7 +206,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
       end_date: endDate,
       meal_period: mealPeriod,
       note: note.trim() || null,
-    });
+    }).select().single();
     setBusyId(null);
 
     if (error) {
@@ -214,6 +215,15 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
     }
 
     toast.success('Request sent', { description: 'Your manager or coordinator can now review it.' });
+    if (inserted?.id) {
+      void triggerMealOffSubmitPush({
+        requestId: inserted.id,
+        memberName: linkedMember.name,
+        startDate,
+        endDate,
+        mealPeriod,
+      });
+    }
     setDialogOpen(false);
     resetForm();
     void loadRequests();
@@ -232,6 +242,14 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
       return;
     }
     toast.success(status === 'approved' ? 'Meal-off request approved' : 'Meal-off request declined');
+    void triggerMealOffDecisionPush({
+      requestId: request.id,
+      status,
+      requestedByProfileId: request.requested_by_profile_id,
+      startDate: request.start_date,
+      endDate: request.end_date,
+      mealPeriod: request.meal_period,
+    });
     void loadRequests();
   };
 

@@ -1,7 +1,8 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 
 import { supabase } from '@/lib/supabase';
-import type { ChangelogEntry, Cycle, CycleDeposit, Expense, MealLog, Member, SnapshotMember } from '@/lib/meal-types';
+import { triggerSettlementPendingPush } from '@/lib/push-triggers';
+import type { ChangelogEntry, Cycle, CycleDeposit, CycleDetails, Expense, MealLog, Member, SnapshotMember } from '@/lib/meal-types';
 
 const DELETE_GRACE_MS = 10_000;
 
@@ -12,6 +13,7 @@ type Options = {
   activeCycle: Cycle | null;
   pendingCycle: Cycle | null;
   getCycleMembers: (cycleId: string) => Member[];
+  getCycleDetails?: (cycleId: string) => CycleDetails | null;
   setCycles: Dispatch<SetStateAction<Cycle[]>>;
   setLoadedCycleIds: Dispatch<SetStateAction<Set<string>>>;
   setDeposits: Dispatch<SetStateAction<CycleDeposit[]>>;
@@ -30,7 +32,7 @@ function defaultCycleName(date: string | Date) {
   return `Meal ${season}-${String(value.getFullYear()).slice(-2)}`;
 }
 
-export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, getCycleMembers, setCycles, setLoadedCycleIds, setDeposits, setExpenses, setMealLogs, setChangelogEntries, addDeposit, reload, broadcast }: Options) {
+export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, getCycleMembers, getCycleDetails, setCycles, setLoadedCycleIds, setDeposits, setExpenses, setMealLogs, setChangelogEntries, addDeposit, reload, broadcast }: Options) {
   const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !messId || !activeCycle) return;
     const trimmed = name.trim();
@@ -51,8 +53,24 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
     const { error } = await supabase.from('cycles').update({ status: 'pending', closed_at: closedAt, members_snapshot: snapshot }).eq('id', activeCycle.id).eq('mess_id', messId);
     if (error) throw new Error('Unable to close the cycle. Please try again.');
     setCycles((previous) => previous.map((cycle) => cycle.id === activeCycle.id ? { ...cycle, status: 'pending', closedAt, membersSnapshot: snapshot } : cycle));
+
+    if (getCycleDetails) {
+      const details = getCycleDetails(activeCycle.id);
+      const dueMembers = (details?.members ?? [])
+        .filter((member) => member.balance < 0)
+        .map((member) => ({ memberId: member.id, dueAmount: Math.abs(member.balance) }));
+
+      if (dueMembers.length > 0) {
+        void triggerSettlementPendingPush({
+          cycleId: activeCycle.id,
+          cycleName: activeCycle.name,
+          dueMembers,
+        });
+      }
+    }
+
     broadcast();
-  }, [activeCycle, broadcast, getCycleMembers, messId, pendingCycle, setCycles, userId]);
+  }, [activeCycle, broadcast, getCycleDetails, getCycleMembers, messId, pendingCycle, setCycles, userId]);
 
   const startNewCycle = useCallback(async (name: string, startedAt?: string, carryForwards?: Array<{ memberId: string; amount: number }>) => {
     if (!userId || !messId) return;

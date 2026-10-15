@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { supabase } from '@/lib/supabase';
 import { enqueue } from '@/lib/offline-queue';
+import { triggerDepositPush } from '@/lib/push-triggers';
 import type { ChangelogChange, CycleDeposit } from '@/lib/meal-types';
 
 type Options = {
@@ -51,6 +52,7 @@ export function useDeposits({ userId, messId, deposits, setDeposits, setPendingS
       id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount),
       note: data.note ?? undefined, createdAt: data.created_at,
     }]);
+    void triggerDepositPush({ depositId: data.id, memberId, amount, note });
     await recordChange({
       cycleId: targetCycleId, entityType: 'deposit', entityId: data.id, action: 'update',
       title: `Updated deposit for ${memberName}`,

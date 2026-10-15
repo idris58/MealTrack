@@ -39,6 +39,10 @@ import {
   removePushSubscription,
   sendNoticePushToSharedSubscribers,
   sendNoticePushToMessMembers,
+  sendDepositPush,
+  sendSettlementPendingPush,
+  sendMealOffRequestSubmittedPush,
+  sendMealOffRequestDecidedPush,
   upsertPushSubscription,
 } from "./push";
 
@@ -646,7 +650,7 @@ export async function registerRoutes(
     const hasCategories = req.body?.categories && typeof req.body.categories === "object" && !Array.isArray(req.body.categories);
     const categoryInput = hasCategories ? req.body.categories as Record<string, unknown> : {};
     if (req.body?.global !== undefined && !hasGlobal) return res.status(400).json({ message: "Global notification preference must be a boolean." });
-    for (const key of ["notices", "mealReminders"]) {
+    for (const key of ["notices", "mealReminders", "deposits", "settlements", "mealOff"]) {
       if (categoryInput[key] !== undefined && typeof categoryInput[key] !== "boolean") return res.status(400).json({ message: "Notification category preferences must be boolean values." });
     }
     const supabaseAdmin = assertSupabaseAdmin();
@@ -664,6 +668,100 @@ export async function registerRoutes(
     const { data, error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId).select("reminder_time, notification_preferences").single();
     if (error) throw error;
     return res.json({ reminderTime: String(data.reminder_time || "22:00").slice(0, 5), ...(data.notification_preferences ?? {}) });
+  }));
+
+  app.post("/api/push/deposit", asyncHandler(async (req, res) => {
+    const userId = await getAuthenticatedUserId(req.get("authorization"));
+    if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
+    await requireMessOperator(userId);
+
+    const { depositId, memberId, amount, note } = req.body ?? {};
+    if (!depositId || !memberId || typeof amount !== "number") {
+      return res.status(400).json({ message: "Missing required deposit details." });
+    }
+
+    void sendDepositPush({
+      actorUserId: userId,
+      depositId: String(depositId),
+      memberId: String(memberId),
+      amount: Number(amount),
+      note: note ? String(note) : null,
+    });
+
+    return res.json({ success: true });
+  }));
+
+  app.post("/api/push/settlement-pending", asyncHandler(async (req, res) => {
+    const userId = await getAuthenticatedUserId(req.get("authorization"));
+    if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
+    await requireMessOperator(userId);
+
+    const { cycleId, cycleName, dueMembers } = req.body ?? {};
+    if (!cycleId || !cycleName || !Array.isArray(dueMembers)) {
+      return res.status(400).json({ message: "Missing required settlement details." });
+    }
+
+    void sendSettlementPendingPush({
+      actorUserId: userId,
+      cycleId: String(cycleId),
+      cycleName: String(cycleName),
+      dueMembers: dueMembers.map((m: any) => ({
+        memberId: String(m.memberId),
+        dueAmount: Number(m.dueAmount || 0),
+      })),
+    });
+
+    return res.json({ success: true });
+  }));
+
+  app.post("/api/push/meal-off/submit", asyncHandler(async (req, res) => {
+    const userId = await getAuthenticatedUserId(req.get("authorization"));
+    if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
+    const messId = await requireMessMember(userId);
+
+    const { requestId, memberName, startDate, endDate, mealPeriod } = req.body ?? {};
+    if (!requestId || !memberName || !startDate || !endDate || !mealPeriod) {
+      return res.status(400).json({ message: "Missing required meal-off request details." });
+    }
+
+    void sendMealOffRequestSubmittedPush({
+      messId,
+      actorUserId: userId,
+      requestId: String(requestId),
+      memberName: String(memberName),
+      startDate: String(startDate),
+      endDate: String(endDate),
+      mealPeriod: String(mealPeriod),
+    });
+
+    return res.json({ success: true });
+  }));
+
+  app.post("/api/push/meal-off/decision", asyncHandler(async (req, res) => {
+    const userId = await getAuthenticatedUserId(req.get("authorization"));
+    if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
+    await requireMessOperator(userId);
+
+    const { requestId, status, requestedByProfileId, startDate, endDate, mealPeriod } = req.body ?? {};
+    if (!requestId || !status || !requestedByProfileId || !startDate || !endDate || !mealPeriod) {
+      return res.status(400).json({ message: "Missing required decision details." });
+    }
+
+    if (status !== "approved" && status !== "declined") {
+      return res.status(400).json({ message: "Invalid decision status." });
+    }
+
+    void sendMealOffRequestDecidedPush({
+      actorUserId: userId,
+      requestId: String(requestId),
+      status,
+      requestedByProfileId: String(requestedByProfileId),
+      startDate: String(startDate),
+      endDate: String(endDate),
+      mealPeriod: String(mealPeriod),
+    });
+
+    return res.json({ success: true });
   }));
 
   app.post("/api/push/shared/:token/subscribe", sharedTokenRateLimit, asyncHandler(async (req, res) => {

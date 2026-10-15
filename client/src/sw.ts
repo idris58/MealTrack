@@ -71,6 +71,12 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
 
+      for (const client of clients) {
+        if ("focus" in client && "navigate" in client) {
+          return client.navigate(targetUrl).then((c) => c?.focus());
+        }
+      }
+
       return self.clients.openWindow(targetUrl);
     }),
   );

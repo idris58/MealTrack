@@ -185,7 +185,7 @@ create table if not exists public.push_subscriptions (
 create table if not exists public.notification_deliveries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
-  type text not null check (type in ('meal_log_reminder', 'notice_posted')),
+  type text not null check (type in ('meal_log_reminder', 'notice_posted', 'deposit_recorded', 'settlement_pending', 'meal_off_request_submitted', 'meal_off_request_decided')),
   dedupe_key text not null,
   sent_at timestamptz not null default now(),
   mess_id uuid references public.messes(id) on delete set null,
