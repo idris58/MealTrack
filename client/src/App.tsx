@@ -165,7 +165,7 @@ function NotificationOnboardingToast() {
       };
       toastId.current = toast.custom(
         (id) => (
-          <div className="pointer-events-auto w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
+          <div className="pointer-events-auto w-full max-w-[calc(100vw-2rem)] sm:w-[360px] mx-auto overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
             {/* gradient accent bar */}
             <div className="h-[3px] w-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500" />
             <div className="p-4">
@@ -214,7 +214,7 @@ function NotificationOnboardingToast() {
           id: "notification-onboarding",
           duration: Infinity,
           unstyled: true,
-          className: "!bg-transparent !border-0 !shadow-none !p-0 !rounded-none !w-auto",
+          className: "!bg-transparent !border-0 !shadow-none !p-0 !rounded-none !w-full sm:!w-auto",
         },
       );
     } else if (!shouldShow && toastId.current !== null) {
@@ -519,7 +519,7 @@ function PwaUpdateNotifier() {
 
       toast.custom(
         () => (
-          <div className="pointer-events-auto w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
+          <div className="pointer-events-auto w-full max-w-[calc(100vw-2rem)] sm:w-[360px] mx-auto overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
             {/* gradient accent bar – emerald/teal to distinguish from bell toast */}
             <div className="h-[3px] w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
             <div className="p-4">
@@ -568,7 +568,7 @@ function PwaUpdateNotifier() {
           id: UPDATE_TOAST_ID,
           duration: Infinity,
           unstyled: true,
-          className: "!bg-transparent !border-0 !shadow-none !p-0 !rounded-none !w-auto",
+          className: "!bg-transparent !border-0 !shadow-none !p-0 !rounded-none !w-full sm:!w-auto",
         },
       );
     };
