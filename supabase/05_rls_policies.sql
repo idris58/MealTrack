@@ -6,79 +6,79 @@ do $$ declare table_name text; begin
 end $$;
 
 drop policy if exists "users can read their own profile" on public.profiles;
-create policy "users can read their own profile" on public.profiles for select to authenticated using (auth.uid() = id);
+create policy "users can read their own profile" on public.profiles for select to authenticated using ((select auth.uid()) = id);
 drop policy if exists "mess members can read profiles" on public.profiles;
-create policy "mess members can read profiles" on public.profiles for select to authenticated using (mess_id = public.current_mess_id());
+create policy "mess members can read profiles" on public.profiles for select to authenticated using (mess_id = (select public.current_mess_id()));
 drop policy if exists "users can insert their own profile" on public.profiles;
-create policy "users can insert their own profile" on public.profiles for insert to authenticated with check (auth.uid() = id);
+create policy "users can insert their own profile" on public.profiles for insert to authenticated with check ((select auth.uid()) = id);
 drop policy if exists "users can update their own profile" on public.profiles;
-create policy "users can update their own profile" on public.profiles for update to authenticated using (auth.uid() = id) with check (auth.uid() = id);
+create policy "users can update their own profile" on public.profiles for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 revoke update on public.profiles from authenticated;
 grant update (full_name, picture_url, reminder_time, notification_preferences)
   on public.profiles to authenticated;
 drop policy if exists "members can read their mess" on public.messes;
-create policy "members can read their mess" on public.messes for select to authenticated using (id = public.current_mess_id());
+create policy "members can read their mess" on public.messes for select to authenticated using (id = (select public.current_mess_id()));
 
 drop policy if exists own_members on public.members;
 drop policy if exists mess_members on public.members;
 drop policy if exists members_read on public.members;
 drop policy if exists members_manage on public.members;
-create policy members_read on public.members for select to authenticated using (mess_id = public.current_mess_id());
-create policy members_manage on public.members for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager']));
+create policy members_read on public.members for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy members_manage on public.members for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager'])));
 
 drop policy if exists own_expenses on public.expenses;
 drop policy if exists mess_expenses on public.expenses;
 drop policy if exists expenses_read on public.expenses;
 drop policy if exists expenses_operate on public.expenses;
-create policy expenses_read on public.expenses for select to authenticated using (mess_id = public.current_mess_id());
-create policy expenses_operate on public.expenses for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator']));
+create policy expenses_read on public.expenses for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy expenses_operate on public.expenses for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator'])));
 
 drop policy if exists own_meal_logs on public.meal_logs;
 drop policy if exists mess_meal_logs on public.meal_logs;
 drop policy if exists meal_logs_read on public.meal_logs;
 drop policy if exists meal_logs_operate on public.meal_logs;
-create policy meal_logs_read on public.meal_logs for select to authenticated using (mess_id = public.current_mess_id());
-create policy meal_logs_operate on public.meal_logs for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator']));
+create policy meal_logs_read on public.meal_logs for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy meal_logs_operate on public.meal_logs for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator'])));
 
 drop policy if exists meal_off_requests_read on public.meal_off_requests;
 drop policy if exists meal_off_requests_create on public.meal_off_requests;
 drop policy if exists meal_off_requests_cancel on public.meal_off_requests;
 drop policy if exists meal_off_requests_review on public.meal_off_requests;
 create policy meal_off_requests_read on public.meal_off_requests for select to authenticated using (
-  mess_id = public.current_mess_id()
+  mess_id = (select public.current_mess_id())
   and (
-    requested_by_profile_id = auth.uid()
-    or member_id in (select id from public.members where profile_id = auth.uid())
-    or public.has_mess_role(array['manager','coordinator'])
+    requested_by_profile_id = (select auth.uid())
+    or member_id in (select id from public.members where profile_id = (select auth.uid()))
+    or (select public.has_mess_role(array['manager','coordinator']))
   )
 );
 create policy meal_off_requests_create on public.meal_off_requests for insert to authenticated with check (
-  mess_id = public.current_mess_id()
-  and requested_by_profile_id = auth.uid()
+  mess_id = (select public.current_mess_id())
+  and requested_by_profile_id = (select auth.uid())
   and status = 'pending'
   and reviewed_by_profile_id is null
   and reviewed_at is null
   and member_id in (
     select id from public.members
-    where mess_id = public.current_mess_id() and profile_id = auth.uid() and deleted_at is null
+    where mess_id = (select public.current_mess_id()) and profile_id = (select auth.uid()) and deleted_at is null
   )
 );
 create policy meal_off_requests_cancel on public.meal_off_requests for update to authenticated using (
-  mess_id = public.current_mess_id() and requested_by_profile_id = auth.uid() and status = 'pending'
+  mess_id = (select public.current_mess_id()) and requested_by_profile_id = (select auth.uid()) and status = 'pending'
 ) with check (
-  mess_id = public.current_mess_id() and requested_by_profile_id = auth.uid() and status = 'cancelled'
+  mess_id = (select public.current_mess_id()) and requested_by_profile_id = (select auth.uid()) and status = 'cancelled'
 );
 create policy meal_off_requests_review on public.meal_off_requests for update to authenticated using (
-  mess_id = public.current_mess_id()
+  mess_id = (select public.current_mess_id())
   and status = 'pending'
-  and public.has_mess_role(array['manager','coordinator'])
+  and (select public.has_mess_role(array['manager','coordinator']))
 ) with check (
-  mess_id = public.current_mess_id()
+  mess_id = (select public.current_mess_id())
   and status in ('approved', 'declined')
-  and reviewed_by_profile_id = auth.uid()
+  and reviewed_by_profile_id = (select auth.uid())
   and reviewed_at is not null
-  and public.has_mess_role(array['manager','coordinator'])
+  and (select public.has_mess_role(array['manager','coordinator']))
 );
 grant select, insert, update on public.meal_off_requests to authenticated;
 revoke delete on public.meal_off_requests from authenticated;
@@ -87,37 +87,37 @@ drop policy if exists own_cycles on public.cycles;
 drop policy if exists mess_cycles on public.cycles;
 drop policy if exists cycles_read on public.cycles;
 drop policy if exists cycles_manage on public.cycles;
-create policy cycles_read on public.cycles for select to authenticated using (mess_id = public.current_mess_id());
-create policy cycles_manage on public.cycles for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager']));
+create policy cycles_read on public.cycles for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy cycles_manage on public.cycles for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager'])));
 
 drop policy if exists own_cycle_deposits on public.cycle_deposits;
 drop policy if exists mess_cycle_deposits on public.cycle_deposits;
 drop policy if exists deposits_read on public.cycle_deposits;
 drop policy if exists deposits_manage on public.cycle_deposits;
-create policy deposits_read on public.cycle_deposits for select to authenticated using (mess_id = public.current_mess_id());
-create policy deposits_manage on public.cycle_deposits for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator']));
+create policy deposits_read on public.cycle_deposits for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy deposits_manage on public.cycle_deposits for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator'])));
 
 drop policy if exists own_changelog_entries on public.changelog_entries;
 drop policy if exists mess_changelog_entries on public.changelog_entries;
 drop policy if exists changelog_read on public.changelog_entries;
 drop policy if exists changelog_operate on public.changelog_entries;
 drop policy if exists changelog_delete on public.changelog_entries;
-create policy changelog_read on public.changelog_entries for select to authenticated using (mess_id = public.current_mess_id());
-create policy changelog_operate on public.changelog_entries for insert to authenticated with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator']));
-create policy changelog_delete on public.changelog_entries for delete to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager']));
+create policy changelog_read on public.changelog_entries for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy changelog_operate on public.changelog_entries for insert to authenticated with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator'])));
+create policy changelog_delete on public.changelog_entries for delete to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager'])));
 
 drop policy if exists "owner can manage notices" on public.notices;
 drop policy if exists mess_notices on public.notices;
 drop policy if exists notices_read on public.notices;
 drop policy if exists notices_manage on public.notices;
-create policy notices_read on public.notices for select to authenticated using (mess_id = public.current_mess_id());
-create policy notices_manage on public.notices for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator'])) with check (mess_id = public.current_mess_id() and public.has_mess_role(array['manager','coordinator']));
+create policy notices_read on public.notices for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy notices_manage on public.notices for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator'])));
 
 drop policy if exists own_manage_share_links on public.share_links;
 drop policy if exists mess_share_links on public.share_links;
 drop policy if exists share_links_read on public.share_links;
 drop policy if exists share_links_manage on public.share_links;
-create policy share_links_read on public.share_links for select to authenticated using (mess_id = public.current_mess_id());
-create policy share_links_manage on public.share_links for all to authenticated using (mess_id = public.current_mess_id() and public.has_mess_role(array['manager'])) with check (mess_id = public.current_mess_id());
+create policy share_links_read on public.share_links for select to authenticated using (mess_id = (select public.current_mess_id()));
+create policy share_links_manage on public.share_links for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager']))) with check (mess_id = (select public.current_mess_id()));
 
 revoke all on table public.member_invites from anon, authenticated;
