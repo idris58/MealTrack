@@ -12,12 +12,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
@@ -134,156 +131,6 @@ function SettlementForm({
       <Button type="submit" className="w-full" disabled={isSubmitting || !amount}>
         {isSubmitting ? 'Saving...' : 'Save Installment'}
       </Button>
-    </form>
-  );
-}
-
-function PendingExpenseEditor({
-  cycleId,
-  expense,
-  onClose,
-  onDeleted,
-}: {
-  cycleId: string;
-  expense?: Expense | null;
-  onClose: () => void;
-  onDeleted?: (expense: Expense) => void;
-}) {
-  const { addExpense, updateExpense, deleteExpense } = useMeal();
-  const [description, setDescription] = useState(expense?.description ?? '');
-  const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
-  const [type, setType] = useState<'meal' | 'fixed'>(expense?.type ?? 'meal');
-  const [paidBy, setPaidBy] = useState(expense?.paidBy ?? '');
-  const [date, setDate] = useState<Date>(expense ? parseISO(expense.date) : new Date());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    setDescription(expense?.description ?? '');
-    setAmount(expense ? String(expense.amount) : '');
-    setType(expense?.type ?? 'meal');
-    setPaidBy(expense?.paidBy ?? '');
-    setDate(expense ? parseISO(expense.date) : new Date());
-  }, [expense]);
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (isSubmitting) return;
-
-    const parsedAmount = parseFloat(amount);
-    if (!description.trim() || !paidBy.trim() || isNaN(parsedAmount) || parsedAmount === 0) return;
-    setIsSubmitting(true);
-
-    try {
-      if (expense) {
-        await updateExpense(expense.id, {
-          description: description.trim(),
-          amount: parsedAmount,
-          type,
-          paidBy: paidBy.trim(),
-          date: format(date, 'yyyy-MM-dd'),
-        });
-      } else {
-        await addExpense(parsedAmount, description.trim(), type, paidBy.trim(), cycleId, format(date, 'yyyy-MM-dd'));
-      }
-
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!expense || isDeleting) return;
-    setIsDeleting(true);
-
-    try {
-      await deleteExpense(expense.id);
-      onDeleted?.(expense);
-      onClose();
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Expense Type</label>
-        <Select value={type} onValueChange={(value: 'meal' | 'fixed') => setType(value)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="meal">Meal (Grocery/Food)</SelectItem>
-            <SelectItem value="fixed">Fixed (Bills/Utilities)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Description</label>
-        <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="e.g. Rice, WiFi bill" />
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Date</label>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !date && 'text-muted-foreground')}>
-              <span className="mr-2 inline-block h-4 w-4" />
-              {date ? format(date, 'PPP') : <span>Pick a date</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[18rem] rounded-xl border bg-card p-0 shadow-2xl" align="center">
-            <Calendar mode="single" selected={date} onSelect={(nextDate) => nextDate && setDate(nextDate)} initialFocus />
-          </PopoverContent>
-        </Popover>
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Amount</label>
-        <Input
-          type="text"
-          inputMode="decimal"
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-          placeholder="100"
-        />
-        <p className="text-xs text-muted-foreground">
-          Negative amounts are allowed here for pending-cycle corrections.
-        </p>
-      </div>
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Who Shopped?</label>
-        <Input value={paidBy} onChange={(event) => setPaidBy(event.target.value)} placeholder="Shopper name" />
-      </div>
-
-      {expense ? (
-        <div className="flex gap-3">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button type="button" variant="destructive" className="flex-1" disabled={isSubmitting || isDeleting}>Delete</Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this expense?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will remove the expense from this pending cycle.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
-                  {isDeleting ? 'Deleting...' : 'Delete'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Button type="submit" className="flex-1" disabled={isSubmitting || isDeleting}>
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
-          </Button>
-        </div>
-      ) : (
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Adding...' : 'Add Expense'}
-        </Button>
-      )}
     </form>
   );
 }

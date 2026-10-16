@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   ArrowUpRight,
-  CalendarDays,
   CircleDollarSign,
   ShoppingBag,
   Users,
@@ -11,33 +10,14 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { OnboardingTour } from '@/components/onboarding-tour';
 import { DashboardFab } from '@/components/dashboard-fab';
-import { format } from 'date-fns';
 import { Link } from 'wouter';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { ExpenseForm } from '@/components/expense-form';
 import { DashboardAnalytics } from '@/components/dashboard-analytics';
-
-const expenseSchema = z.object({
-  amount: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.coerce.number({ invalid_type_error: 'Amount is required' }).positive('Amount must be greater than zero')
-  ),
-  description: z.string().min(2, 'Description is required'),
-  type: z.enum(['meal', 'fixed']),
-  paidBy: z.string().min(2, 'Shopper name is required'),
-});
 
 function formatMealCount(value: number) {
   const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
@@ -46,122 +26,6 @@ function formatMealCount(value: number) {
 
 function formatCurrency(amount: number) {
   return `৳${amount.toFixed(2)}`;
-}
-
-function QuickAddExpense({ onClose }: { onClose: () => void }) {
-  const { addExpense } = useMeal();
-  const [date, setDate] = useState<Date>(new Date());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const form = useForm<z.infer<typeof expenseSchema>>({
-    resolver: zodResolver(expenseSchema),
-    defaultValues: { amount: undefined, description: '', type: 'meal', paidBy: '' },
-  });
-
-  const onSubmit = async (data: z.infer<typeof expenseSchema>) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      await addExpense(data.amount, data.description, data.type, data.paidBy, undefined, format(date, 'yyyy-MM-dd'));
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-2">
-        <FormField
-          control={form.control}
-          name="type"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Expense Type</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="meal">Meal (Grocery / Food)</SelectItem>
-                  <SelectItem value="fixed">Fixed (Bills / Utilities)</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., Grocery Shopping, WiFi Bill" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Date</label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn('w-full justify-start py-2 text-left text-sm font-normal', !date && 'text-muted-foreground')}
-              >
-                <CalendarDays className="mr-2 h-4 w-4" />
-                {date ? format(date, 'PPP') : <span>Pick a date</span>}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[18rem] rounded-xl border bg-card p-0 shadow-2xl" align="center">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={(d) => {
-                  if (d) setDate(d);
-                }}
-                initialFocus
-                className="p-3"
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-        <FormField
-          control={form.control}
-          name="amount"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Amount (৳)</FormLabel>
-              <FormControl>
-                <Input type="number" step="0.01" placeholder="0.00" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="paidBy"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Who Shopped?</FormLabel>
-              <FormControl>
-                <Input placeholder="Shopper's Name" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button type="submit" className="w-full font-semibold" disabled={isSubmitting}>
-          {isSubmitting ? 'Recording Expense...' : 'Add Expense'}
-        </Button>
-      </form>
-    </Form>
-  );
 }
 
 export function ManagerDashboard() {
