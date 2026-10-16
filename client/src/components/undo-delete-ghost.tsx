@@ -47,7 +47,7 @@ export function UndoDeleteGhost({
       </div>
       <div
         className={cn(
-          'absolute inset-0 z-10 flex items-center justify-center border border-dashed border-amber-500/70 bg-amber-50/55 px-4 py-3 text-center shadow-[inset_0_-2px_0_rgba(180,83,9,0.22)]',
+          'absolute inset-0 z-10 flex items-center justify-center border border-dashed border-amber-500/70 bg-amber-50/55 px-4 py-3 text-center shadow-[inset_0_-2px_0_rgba(180,83,9,0.22)] dark:border-amber-400/70 dark:bg-amber-950/55 dark:shadow-[inset_0_-2px_0_rgba(251,191,36,0.18)]',
           overlayClassName,
         )}
       >

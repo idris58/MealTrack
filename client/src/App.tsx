@@ -368,6 +368,7 @@ function AppShell() {
       "/app/changelog": "Changelog - MealTrack",
       "/settings": "Settings - MealTrack",
       "/app/settings": "Settings - MealTrack",
+      "/app/profile": "Profile - MealTrack",
       "/auth": `${isRecoveryFlow ? "Reset Password" : "Authentication"} - MealTrack`,
       "/app/auth": `${isRecoveryFlow ? "Reset Password" : "Authentication"} - MealTrack`,
       "/onboarding": "Setup Mess - MealTrack",

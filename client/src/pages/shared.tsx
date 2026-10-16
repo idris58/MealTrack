@@ -126,10 +126,10 @@ function SectionEmptyState({
   return (
     <Card>
       <CardContent className="flex flex-col items-center justify-center px-4 py-10 text-center">
-        <div className="mb-3 rounded-full bg-emerald-50 p-3 text-emerald-600">
+        <div className="mb-3 rounded-full bg-emerald-50 p-3 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
           {icon}
         </div>
-        <p className="font-heading text-lg font-bold text-slate-900">{title}</p>
+        <p className="font-heading text-lg font-bold text-foreground">{title}</p>
         <p className="mt-1 max-w-md text-sm text-muted-foreground">{message}</p>
       </CardContent>
     </Card>
@@ -149,16 +149,16 @@ function NoticeTicker({ notice }: { notice: NonNullable<SharedPayload["activeNot
 
   return (
     <div
-      className="flex overflow-hidden border-y border-amber-200 bg-amber-50 text-amber-950"
+      className="flex overflow-hidden border-y border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100"
       aria-live="polite"
       aria-label={`Notice: ${notice.title}`}
     >
-      <div className="z-10 flex shrink-0 items-center gap-2 border-r border-amber-200 bg-amber-100 px-4 py-2.5 text-sm font-bold text-amber-900 shadow-[8px_0_18px_-16px_rgba(120,53,15,0.8)]">
+      <div className="z-10 flex shrink-0 items-center gap-2 border-r border-amber-200 bg-amber-100 px-4 py-2.5 text-sm font-bold text-amber-900 shadow-[8px_0_18px_-16px_rgba(120,53,15,0.8)] dark:border-amber-800/60 dark:bg-amber-900/60 dark:text-amber-100">
         <Megaphone className="h-4 w-4" />
         Notice
       </div>
       <div className="relative min-w-0 flex-1 overflow-hidden py-2.5">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-amber-50 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-amber-50 to-transparent dark:from-amber-950/40" />
         <div
           className="notice-ticker-track pl-10 text-sm font-medium"
           style={duration ? { animationDuration: `${duration}s` } : undefined}
@@ -325,21 +325,21 @@ export function SharedAccessPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_34%),linear-gradient(135deg,#f8fafc_0%,#eefcf6_100%)] px-4 py-8">
+    <div className="relative flex min-h-screen items-center justify-center bg-background px-4 py-8">
       <div className="absolute right-4 top-4">
         <PwaInstallButton
           appId="shared"
           appName="MealTrack Shared"
-          className="gap-1.5 bg-white/80 px-3 text-xs shadow-sm hover:bg-white"
+          className="gap-1.5 bg-card/80 px-3 text-xs shadow-sm hover:bg-card"
         />
       </div>
-      <Card className="w-full max-w-md overflow-hidden border-none shadow-2xl shadow-emerald-100/70">
+      <Card className="w-full max-w-md overflow-hidden border shadow-xl shadow-emerald-100/70 dark:shadow-black/20">
         <CardHeader className="space-y-5 pb-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
             <ChefHat className="h-6 w-6" />
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-emerald-700">
+            <p className="text-sm font-medium uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400">
               Shared View
             </p>
             <CardTitle className="font-heading text-3xl">Enter Access Code</CardTitle>
@@ -376,11 +376,11 @@ export function SharedAccessPage() {
             </div>
 
             {error ? (
-              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
                 {error}
               </p>
             ) : (
-              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
                 Enter an access code to view the latest shared meal-cycle data.
               </p>
             )}
@@ -612,7 +612,7 @@ export default function SharedPage({ token }: { token: string }) {
         <Card className="w-full max-w-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Share2 className="h-5 w-5 text-emerald-600" />
+              <Share2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               Shared Dashboard Unavailable
             </CardTitle>
           </CardHeader>
@@ -642,11 +642,11 @@ export default function SharedPage({ token }: { token: string }) {
               <ChefHat className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700 dark:text-emerald-400">
                 Shared View
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h1 className="font-heading text-lg font-bold leading-tight text-slate-900 sm:text-xl">
+                <h1 className="font-heading text-lg font-bold leading-tight text-foreground sm:text-xl">
                   {data.cycle.name}
                 </h1>
                 <p className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">
@@ -694,7 +694,7 @@ export default function SharedPage({ token }: { token: string }) {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm uppercase text-muted-foreground">
-                <UtensilsCrossed className="h-4 w-4 text-emerald-500" />
+                <UtensilsCrossed className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
                 Meal Rate
               </CardTitle>
             </CardHeader>
@@ -737,7 +737,7 @@ export default function SharedPage({ token }: { token: string }) {
 
         <section className="space-y-4">
           <div className="flex items-center gap-2">
-            <UtensilsCrossed className="h-5 w-5 text-emerald-500" />
+            <UtensilsCrossed className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
             <h2 className="text-xl font-heading font-bold">Meal Logs</h2>
           </div>
           {data.mealLogs.length === 0 ? (
@@ -763,7 +763,7 @@ export default function SharedPage({ token }: { token: string }) {
         <section className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-emerald-500" />
+              <Users className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
               <h2 className="text-xl font-heading font-bold">Members Summary</h2>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 md:w-[26rem]">
@@ -824,7 +824,7 @@ export default function SharedPage({ token }: { token: string }) {
                       <p
                         className={cn(
                           "font-medium",
-                          member.balance >= 0 ? "text-emerald-600" : "text-red-600",
+                          member.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
                         )}
                       >
                         {member.balance >= 0 ? "+" : "-"}
@@ -866,7 +866,7 @@ export default function SharedPage({ token }: { token: string }) {
                       <td
                         className={cn(
                           "p-4 text-right font-bold",
-                          member.balance >= 0 ? "text-emerald-600" : "text-red-600",
+                          member.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
                         )}
                       >
                         {member.balance >= 0 ? "+" : "-"}
@@ -881,7 +881,7 @@ export default function SharedPage({ token }: { token: string }) {
         </section>
         <section className="space-y-4">
           <div className="flex items-center gap-2">
-            <ShoppingBag className="h-5 w-5 text-emerald-500" />
+            <ShoppingBag className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
             <h2 className="text-xl font-heading font-bold">Expenses</h2>
           </div>
           <Tabs defaultValue="all" className="space-y-4">
@@ -928,8 +928,8 @@ export default function SharedPage({ token }: { token: string }) {
                                   className={cn(
                                     "rounded-full p-2",
                                     expense.type === "meal"
-                                      ? "bg-emerald-100 text-emerald-600"
-                                      : "bg-slate-100 text-slate-600",
+                                      ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400"
+                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
                                   )}
                                 >
                                   {expense.type === "meal" ? (
