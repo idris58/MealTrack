@@ -847,7 +847,7 @@ export default function SettingsPage() {
           </div>
         </header>
 
-        <section id="notifications" className="scroll-mt-6">
+        <section id="notifications" className="scroll-mt-20">
           <NotificationSettingsCard />
         </section>
       </div>
@@ -873,22 +873,22 @@ export default function SettingsPage() {
       <SettingsNavigation canManageCycles={canManageCycles} />
 
       {canManageCycles && (
-        <section id="cycle-operations" className="scroll-mt-6">
+        <section id="cycle-operations" className="scroll-mt-20">
           <CycleManagementCard />
         </section>
       )}
 
       <div className="grid gap-8 lg:grid-cols-2 lg:gap-6">
-        <section id="public-access" className="scroll-mt-6">
+        <section id="public-access" className="scroll-mt-20">
           <ShareSettingsCard />
         </section>
 
-        <section id="notifications" className="scroll-mt-6">
+        <section id="notifications" className="scroll-mt-20">
           <NotificationSettingsCard />
         </section>
       </div>
 
-      <section id="notice-board" className="scroll-mt-6">
+      <section id="notice-board" className="scroll-mt-20">
         <NoticeSettingsCard />
       </section>
     </div>
