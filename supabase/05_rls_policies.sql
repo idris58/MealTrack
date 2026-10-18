@@ -10,7 +10,7 @@ create policy "users can read their own profile" on public.profiles for select t
 drop policy if exists "mess members can read profiles" on public.profiles;
 create policy "mess members can read profiles" on public.profiles for select to authenticated using (mess_id = (select public.current_mess_id()));
 drop policy if exists "users can insert their own profile" on public.profiles;
-create policy "users can insert their own profile" on public.profiles for insert to authenticated with check ((select auth.uid()) = id);
+revoke insert on public.profiles from authenticated;
 drop policy if exists "users can update their own profile" on public.profiles;
 create policy "users can update their own profile" on public.profiles for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
@@ -118,6 +118,6 @@ drop policy if exists mess_share_links on public.share_links;
 drop policy if exists share_links_read on public.share_links;
 drop policy if exists share_links_manage on public.share_links;
 create policy share_links_read on public.share_links for select to authenticated using (mess_id = (select public.current_mess_id()));
-create policy share_links_manage on public.share_links for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager']))) with check (mess_id = (select public.current_mess_id()));
+create policy share_links_manage on public.share_links for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager'])));
 
 revoke all on table public.member_invites from anon, authenticated;

@@ -10,12 +10,7 @@ async function getAuthHeader(): Promise<Record<string, string> | null> {
   };
 }
 
-export async function triggerDepositPush(payload: {
-  depositId: string;
-  memberId: string;
-  amount: number;
-  note?: string | null;
-}) {
+export async function triggerDepositPush(payload: { depositId: string }) {
   try {
     const headers = await getAuthHeader();
     if (!headers) return;
@@ -29,11 +24,7 @@ export async function triggerDepositPush(payload: {
   }
 }
 
-export async function triggerSettlementPendingPush(payload: {
-  cycleId: string;
-  cycleName: string;
-  dueMembers: Array<{ memberId: string; dueAmount: number }>;
-}) {
+export async function triggerSettlementPendingPush(payload: { cycleId: string }) {
   try {
     const headers = await getAuthHeader();
     if (!headers) return;
@@ -67,14 +58,7 @@ export async function triggerMealOffSubmitPush(payload: {
   }
 }
 
-export async function triggerMealOffDecisionPush(payload: {
-  requestId: string;
-  status: 'approved' | 'declined';
-  requestedByProfileId: string;
-  startDate: string;
-  endDate: string;
-  mealPeriod: string;
-}) {
+export async function triggerMealOffDecisionPush(payload: { requestId: string }) {
   try {
     const headers = await getAuthHeader();
     if (!headers) return;

@@ -244,11 +244,6 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
     toast.success(status === 'approved' ? 'Meal-off request approved' : 'Meal-off request declined');
     void triggerMealOffDecisionPush({
       requestId: request.id,
-      status,
-      requestedByProfileId: request.requested_by_profile_id,
-      startDate: request.start_date,
-      endDate: request.end_date,
-      mealPeriod: request.meal_period,
     });
     void loadRequests();
   };

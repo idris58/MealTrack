@@ -514,6 +514,22 @@ async function requireMessMember(userId: string) {
   return data.mess_id as string;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function fetchAllPages<T>(
+  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const pageSize = 1000;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await fetchPage(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 /** Resolve the tenancy scope a share link points at. */
 function scopeFromShareLink(shareLink: { user_id: string; mess_id?: string | null }): Scope {
   return { userId: shareLink.user_id, messId: shareLink.mess_id ?? null };
@@ -680,20 +696,21 @@ export async function registerRoutes(
   app.post("/api/push/deposit", asyncHandler(async (req, res) => {
     const userId = await getAuthenticatedUserId(req.get("authorization"));
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
-    await requireMessOperator(userId);
+    const messId = await requireMessOperator(userId);
+    const depositId = typeof req.body?.depositId === "string" ? req.body.depositId : "";
+    if (!UUID_PATTERN.test(depositId)) return res.status(400).json({ message: "A valid deposit ID is required." });
 
-    const { depositId, memberId, amount, note } = req.body ?? {};
-    if (!depositId || !memberId || typeof amount !== "number") {
-      return res.status(400).json({ message: "Missing required deposit details." });
-    }
+    const supabaseAdmin = assertSupabaseAdmin();
+    const { data: deposit, error } = await supabaseAdmin
+      .from("cycle_deposits")
+      .select("id, member_id, amount, note")
+      .eq("id", depositId)
+      .eq("mess_id", messId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!deposit) return res.status(404).json({ message: "Deposit not found in your mess." });
 
-    void sendDepositPush({
-      actorUserId: userId,
-      depositId: String(depositId),
-      memberId: String(memberId),
-      amount: Number(amount),
-      note: note ? String(note) : null,
-    });
+    void sendDepositPush({ actorUserId: userId, messId, deposit });
 
     return res.json({ success: true });
   }));
@@ -701,22 +718,104 @@ export async function registerRoutes(
   app.post("/api/push/settlement-pending", asyncHandler(async (req, res) => {
     const userId = await getAuthenticatedUserId(req.get("authorization"));
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
-    await requireMessOperator(userId);
+    const messId = await requireMessOperator(userId);
+    const cycleId = typeof req.body?.cycleId === "string" ? req.body.cycleId : "";
+    if (!UUID_PATTERN.test(cycleId)) return res.status(400).json({ message: "A valid cycle ID is required." });
 
-    const { cycleId, cycleName, dueMembers } = req.body ?? {};
-    if (!cycleId || !cycleName || !Array.isArray(dueMembers)) {
-      return res.status(400).json({ message: "Missing required settlement details." });
+    const supabaseAdmin = assertSupabaseAdmin();
+    const { data: cycle, error: cycleError } = await supabaseAdmin
+      .from("cycles")
+      .select("id, name, status, members_snapshot")
+      .eq("id", cycleId)
+      .eq("mess_id", messId)
+      .eq("status", "pending")
+      .maybeSingle();
+    if (cycleError) throw cycleError;
+    if (!cycle) return res.status(404).json({ message: "Pending cycle not found in your mess." });
+
+    const roster = Array.isArray(cycle.members_snapshot)
+      ? cycle.members_snapshot as SnapshotMember[]
+      : null;
+    const members = roster ?? await fetchAllPages<{ id: string; name: string }>(async (from, to) =>
+      await supabaseAdmin
+        .from("members")
+        .select("id, name")
+        .eq("mess_id", messId)
+        .is("deleted_at", null)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    if (members.length === 0) return res.json({ success: true });
+
+    const depositsPromise = fetchAllPages<{ member_id: string; amount: number | string }>(async (from, to) =>
+      await supabaseAdmin
+        .from("cycle_deposits")
+        .select("member_id, amount")
+        .eq("mess_id", messId)
+        .eq("cycle_id", cycle.id)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const expensesPromise = fetchAllPages<{ amount: number | string; type: "meal" | "fixed" }>(async (from, to) =>
+      await supabaseAdmin
+        .from("expenses")
+        .select("amount, type")
+        .eq("mess_id", messId)
+        .eq("cycle_id", cycle.id)
+        .is("deleted_at", null)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const mealLogsPromise = fetchAllPages<{ member_id: string; count: number | string }>(async (from, to) =>
+      await supabaseAdmin
+        .from("meal_logs")
+        .select("member_id, count")
+        .eq("mess_id", messId)
+        .eq("cycle_id", cycle.id)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    const [deposits, expenses, mealLogs] = await Promise.all([depositsPromise, expensesPromise, mealLogsPromise]);
+
+    const memberIds = new Set(members.map((member) => member.id));
+    const depositByMember = new Map<string, number>();
+    for (const deposit of deposits) {
+      if (!memberIds.has(deposit.member_id)) continue;
+      depositByMember.set(deposit.member_id, (depositByMember.get(deposit.member_id) ?? 0) + Number(deposit.amount));
     }
+    const totalDeposits = Array.from(depositByMember.values()).reduce((sum, amount) => sum + amount, 0);
+    const mealExpenses = expenses.filter((expense) => expense.type === "meal").reduce((sum, expense) => sum + Number(expense.amount), 0);
+    const fixedExpenses = expenses.filter((expense) => expense.type === "fixed").reduce((sum, expense) => sum + Number(expense.amount), 0);
+    const mealCountByMember = new Map<string, number>();
+    let totalMeals = 0;
+    for (const log of mealLogs) {
+      if (!memberIds.has(log.member_id)) continue;
+      const count = Number(log.count);
+      mealCountByMember.set(log.member_id, (mealCountByMember.get(log.member_id) ?? 0) + count);
+      totalMeals += count;
+    }
+    const mealRate = totalMeals > 0 ? mealExpenses / totalMeals : 0;
+    const fixedShare = members.length > 0 ? fixedExpenses / members.length : 0;
+    const remainingCash = totalDeposits - mealExpenses - fixedExpenses;
+    const rawBalances = members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      balance: (depositByMember.get(member.id) ?? 0) - (mealCountByMember.get(member.id) ?? 0) * mealRate - fixedShare,
+    }));
+    const allocatedBalances = allocateIntegerBalances(rawBalances, Math.round(remainingCash));
+    const dueMembers = rawBalances
+      .map((member) => ({ memberId: member.id, dueAmount: Math.abs(allocatedBalances.get(member.id) ?? member.balance) }))
+      .filter((member) => (allocatedBalances.get(member.memberId) ?? 0) < 0);
 
-    void sendSettlementPendingPush({
-      actorUserId: userId,
-      cycleId: String(cycleId),
-      cycleName: String(cycleName),
-      dueMembers: dueMembers.map((m: any) => ({
-        memberId: String(m.memberId),
-        dueAmount: Number(m.dueAmount || 0),
-      })),
-    });
+    if (dueMembers.length > 0) {
+      void sendSettlementPendingPush({
+        actorUserId: userId,
+        messId,
+        cycleId: cycle.id,
+        cycleName: cycle.name,
+        dueMembers,
+      });
+    }
 
     return res.json({ success: true });
   }));
@@ -747,25 +846,30 @@ export async function registerRoutes(
   app.post("/api/push/meal-off/decision", asyncHandler(async (req, res) => {
     const userId = await getAuthenticatedUserId(req.get("authorization"));
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
-    await requireMessOperator(userId);
+    const messId = await requireMessOperator(userId);
+    const requestId = typeof req.body?.requestId === "string" ? req.body.requestId : "";
+    if (!UUID_PATTERN.test(requestId)) return res.status(400).json({ message: "A valid request ID is required." });
 
-    const { requestId, status, requestedByProfileId, startDate, endDate, mealPeriod } = req.body ?? {};
-    if (!requestId || !status || !requestedByProfileId || !startDate || !endDate || !mealPeriod) {
-      return res.status(400).json({ message: "Missing required decision details." });
-    }
-
-    if (status !== "approved" && status !== "declined") {
-      return res.status(400).json({ message: "Invalid decision status." });
-    }
+    const supabaseAdmin = assertSupabaseAdmin();
+    const { data: request, error } = await supabaseAdmin
+      .from("meal_off_requests")
+      .select("id, status, requested_by_profile_id, start_date, end_date, meal_period")
+      .eq("id", requestId)
+      .eq("mess_id", messId)
+      .in("status", ["approved", "declined"])
+      .maybeSingle();
+    if (error) throw error;
+    if (!request) return res.status(404).json({ message: "Reviewed request not found in your mess." });
 
     void sendMealOffRequestDecidedPush({
       actorUserId: userId,
-      requestId: String(requestId),
-      status,
-      requestedByProfileId: String(requestedByProfileId),
-      startDate: String(startDate),
-      endDate: String(endDate),
-      mealPeriod: String(mealPeriod),
+      messId,
+      requestId: request.id,
+      status: request.status as "approved" | "declined",
+      requestedByProfileId: request.requested_by_profile_id,
+      startDate: request.start_date,
+      endDate: request.end_date,
+      mealPeriod: request.meal_period,
     });
 
     return res.json({ success: true });

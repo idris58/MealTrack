@@ -56,15 +56,11 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
 
     if (getCycleDetails) {
       const details = getCycleDetails(activeCycle.id);
-      const dueMembers = (details?.members ?? [])
-        .filter((member) => member.balance < 0)
-        .map((member) => ({ memberId: member.id, dueAmount: Math.abs(member.balance) }));
+      const hasDueMembers = (details?.members ?? []).some((member) => member.balance < 0);
 
-      if (dueMembers.length > 0) {
+      if (hasDueMembers) {
         void triggerSettlementPendingPush({
           cycleId: activeCycle.id,
-          cycleName: activeCycle.name,
-          dueMembers,
         });
       }
     }

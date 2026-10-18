@@ -11,9 +11,39 @@ import { initServerErrorTracking, captureServerError } from "./error-tracking";
 const app = express();
 const httpServer = createServer(app);
 
-// Keep Helmet's security headers while leaving the app's existing Supabase,
-// WebSocket, and PWA connection policy intact.
-app.use(helmet({ contentSecurityPolicy: false }));
+const supabaseUrl = process.env.VITE_SUPABASE_URL
+  ? new URL(process.env.VITE_SUPABASE_URL)
+  : null;
+const connectSources = ["'self'"];
+const scriptSources = ["'self'"];
+if (supabaseUrl) {
+  connectSources.push(supabaseUrl.origin);
+  connectSources.push(`${supabaseUrl.protocol === "https:" ? "wss:" : "ws:"}//${supabaseUrl.host}`);
+}
+if (process.env.NODE_ENV !== "production") {
+  connectSources.push("ws:");
+  scriptSources.push("'unsafe-eval'");
+}
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      connectSrc: connectSources,
+      fontSrc: ["'self'", "https:", "data:"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      objectSrc: ["'none'"],
+      scriptSrc: scriptSources,
+      scriptSrcAttr: ["'none'"],
+      styleSrc: ["'self'", "https:", "'unsafe-inline'"],
+      workerSrc: ["'self'", "blob:"],
+    },
+  },
+}));
 
 declare module "http" {
   interface IncomingMessage {

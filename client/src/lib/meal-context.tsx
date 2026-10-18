@@ -997,7 +997,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         ...prev.filter((d) => d.id !== op.id),
         { id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount), note: data.note ?? undefined, createdAt: data.created_at },
       ]);
-      void triggerDepositPush({ depositId: data.id, memberId: p.memberId, amount: p.amount, note: p.note });
+      void triggerDepositPush({ depositId: data.id });
       await recordChangelog({
         cycleId: p.cycleId, entityType: 'deposit', entityId: data.id, action: 'update',
         title: `Updated deposit for ${getMemberName(p.memberId, p.cycleId)}`,

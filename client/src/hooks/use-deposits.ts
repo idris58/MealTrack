@@ -64,7 +64,7 @@ export function useDeposits({ userId, messId, deposits, setDeposits, setPendingS
       id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount),
       note: data.note ?? undefined, createdAt: data.created_at,
     }]);
-    void triggerDepositPush({ depositId: data.id, memberId, amount, note });
+    void triggerDepositPush({ depositId: data.id });
     await recordChange({
       cycleId: targetCycleId, entityType: 'deposit', entityId: data.id, action: 'update',
       title: `Updated deposit for ${memberName}`,

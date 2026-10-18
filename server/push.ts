@@ -529,17 +529,15 @@ async function sendPushToUser(
 
 export async function sendDepositPush({
   actorUserId,
-  depositId,
-  memberId,
-  amount,
-  note,
+  messId,
+  deposit,
 }: {
   actorUserId: string;
-  depositId: string;
-  memberId: string;
-  amount: number;
-  note?: string | null;
+  messId: string;
+  deposit: { id: string; member_id: string; amount: number | string; note: string | null };
 }) {
+  const { id: depositId, member_id: memberId, amount: rawAmount, note } = deposit;
+  const amount = Number(rawAmount);
   // Skip carry-forward automated deposits to avoid spam
   if (note && note.trim().toLowerCase().startsWith("carry-forward")) {
     return;
@@ -550,6 +548,7 @@ export async function sendDepositPush({
     .from("members")
     .select("id, name, profile_id")
     .eq("id", memberId)
+    .eq("mess_id", messId)
     .maybeSingle();
 
   // Unlinked members have no profile_id: skip silently
@@ -566,6 +565,7 @@ export async function sendDepositPush({
     .from("profiles")
     .select("notification_preferences")
     .eq("id", member.profile_id)
+    .eq("mess_id", messId)
     .maybeSingle();
 
   if (!allowsNotification(profile?.notification_preferences, "deposits")) {
@@ -595,11 +595,13 @@ export async function sendDepositPush({
 
 export async function sendSettlementPendingPush({
   actorUserId,
+  messId,
   cycleId,
   cycleName,
   dueMembers,
 }: {
   actorUserId: string;
+  messId: string;
   cycleId: string;
   cycleName: string;
   dueMembers: Array<{ memberId: string; dueAmount: number }>;
@@ -612,6 +614,7 @@ export async function sendSettlementPendingPush({
   const { data: members, error: membersError } = await supabase
     .from("members")
     .select("id, name, profile_id")
+    .eq("mess_id", messId)
     .in("id", memberIds);
 
   if (membersError || !members) return;
@@ -629,6 +632,7 @@ export async function sendSettlementPendingPush({
       .from("profiles")
       .select("notification_preferences")
       .eq("id", member.profile_id)
+      .eq("mess_id", messId)
       .maybeSingle();
 
     if (!allowsNotification(profile?.notification_preferences, "settlements")) {
@@ -708,6 +712,7 @@ export async function sendMealOffRequestSubmittedPush({
 
 export async function sendMealOffRequestDecidedPush({
   actorUserId,
+  messId,
   requestId,
   status,
   requestedByProfileId,
@@ -716,6 +721,7 @@ export async function sendMealOffRequestDecidedPush({
   mealPeriod,
 }: {
   actorUserId: string;
+  messId: string;
   requestId: string;
   status: "approved" | "declined";
   requestedByProfileId: string;
@@ -731,6 +737,7 @@ export async function sendMealOffRequestDecidedPush({
     .from("profiles")
     .select("id, notification_preferences")
     .eq("id", requestedByProfileId)
+    .eq("mess_id", messId)
     .maybeSingle();
 
   if (profileError || !targetProfile) return;
