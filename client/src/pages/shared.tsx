@@ -29,6 +29,8 @@ import { useMarqueeDuration } from "@/hooks/use-marquee-duration";
 import { cn } from "@/lib/utils";
 import { MealLogTable } from "@/components/meal-log-table";
 
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 const LAST_SHARED_MEAL_CODE_KEY = "mealtrack:last-shared-meal-code";
 const SWITCH_SHARED_MEAL_CODE_KEY = "mealtrack:switch-shared-meal-code";
 
@@ -527,32 +529,29 @@ export default function SharedPage({ token }: { token: string }) {
       return;
     }
 
-    const delay = parseISO(data.activeNotice.expiresAt).getTime() - Date.now();
+    const expiresAt = parseISO(data.activeNotice.expiresAt).getTime();
+    if (!Number.isFinite(expiresAt)) return;
 
-    if (delay <= 0) {
+    const checkExpiry = () => {
+      const delay = expiresAt - Date.now();
+      if (delay > 0) {
+        timeoutId = window.setTimeout(checkExpiry, Math.min(delay, MAX_TIMEOUT_MS));
+        return;
+      }
+
       setData((currentData) =>
-        currentData
+        currentData?.activeNotice?.id === activeNoticeId
           ? {
               ...currentData,
               activeNotice: null,
             }
           : currentData,
       );
-      return;
-    }
+    };
 
-    const timeoutId = window.setTimeout(() => {
-      setData((currentData) => {
-        if (!currentData || currentData.activeNotice?.id !== data.activeNotice?.id) {
-          return currentData;
-        }
-
-        return {
-          ...currentData,
-          activeNotice: null,
-        };
-      });
-    }, delay);
+    const activeNoticeId = data.activeNotice.id;
+    let timeoutId: number;
+    checkExpiry();
 
     return () => window.clearTimeout(timeoutId);
   }, [data?.activeNotice]);

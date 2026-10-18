@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Utensils, UtensilsCrossed, Calendar as CalendarIcon, Users, Play, Settings2 } from 'lucide-react';
-import { format, eachDayOfInterval, parseISO, min, max, startOfDay } from 'date-fns';
+import { format, eachDayOfInterval, parseISO, max, startOfDay } from 'date-fns';
 import { Link } from 'wouter';
 import { SyncBadge } from '@/components/sync-badge';
 import { MealCountEditor } from '@/components/meal-count-editor';
@@ -25,19 +25,22 @@ export default function Meals() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   const today = startOfDay(new Date());
-
-  let days: Date[] = [];
-
-  if (mealLogs.length > 0) {
-    const logDates = mealLogs.map(l => startOfDay(parseISO(l.date)));
-    const startDate = min(logDates);
-    const endDate = max([...logDates, today]);
-    days = eachDayOfInterval({ start: startDate, end: endDate }).reverse();
-  } else {
-    days = [today];
-  }
-
   const todayKey = format(today, 'yyyy-MM-dd');
+  const logDateBounds = mealLogs.reduce(
+    (bounds, log) => ({
+      start: bounds.start === null || log.date < bounds.start ? log.date : bounds.start,
+      end: bounds.end === null || log.date > bounds.end ? log.date : bounds.end,
+    }),
+    { start: null as string | null, end: null as string | null },
+  );
+  const days = useMemo(() => {
+    if (logDateBounds.start === null || logDateBounds.end === null) return [today];
+
+    const startDate = startOfDay(parseISO(logDateBounds.start));
+    const endDate = max([startOfDay(parseISO(logDateBounds.end)), today]);
+    return eachDayOfInterval({ start: startDate, end: endDate }).reverse();
+  }, [logDateBounds.start, logDateBounds.end, todayKey]);
+
   const todayTotalMeals = useMemo(
     () => mealLogs.filter((log) => log.date === todayKey).reduce((sum, log) => sum + log.count, 0),
     [mealLogs, todayKey],

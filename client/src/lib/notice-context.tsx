@@ -22,6 +22,8 @@ import { supabase } from './supabase';
 import { useAuth } from './auth-context';
 import { addHours, isPast, parseISO } from 'date-fns';
 
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Notice {
@@ -140,11 +142,21 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
   /** Schedule automatic removal of an expired notice from local state. */
   function scheduleExpiry(n: Notice) {
     if (expireTimerRef.current) clearTimeout(expireTimerRef.current);
-    const delay = parseISO(n.expiresAt).getTime() - Date.now();
-    if (delay <= 0) { setNotice(null); return; }
-    expireTimerRef.current = setTimeout(() => {
-      setNotice((prev) => (prev?.id === n.id ? null : prev));
-    }, delay);
+    const expiresAt = parseISO(n.expiresAt).getTime();
+    if (!Number.isFinite(expiresAt)) return;
+
+    const checkExpiry = () => {
+      const delay = expiresAt - Date.now();
+      if (delay <= 0) {
+        setNotice((prev) => (prev?.id === n.id ? null : prev));
+        expireTimerRef.current = null;
+        return;
+      }
+
+      expireTimerRef.current = setTimeout(checkExpiry, Math.min(delay, MAX_TIMEOUT_MS));
+    };
+
+    checkExpiry();
   }
 
   /** Server-broadcast helper — calls the API endpoint to push to all subscribers. */
