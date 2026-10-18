@@ -248,7 +248,7 @@ function SplitDonut({ meal, fixed }: { meal: number; fixed: number }) {
 
 export function MemberDashboard() {
   const { profile } = useAuth();
-  const { members, mealLogs, deposits, expenses, stats, activeCycle } = useMeal();
+  const { members, mealLogs, deposits, expenses, stats, activeCycle, getMemberStats } = useMeal();
   const { notice } = useNotice();
 
   const displayName = profile?.full_name?.trim() || 'Member';
@@ -274,10 +274,11 @@ export function MemberDashboard() {
     // Money
     const mine = deposits.filter((d) => d.memberId === me.id);
     const deposited = mine.reduce((s, d) => s + d.amount, 0);
-    const mealCost = stats.currentMealRate * me.mealsEaten;
-    const fixedCost = stats.fixedCostPerMember;
-    const cost = mealCost + fixedCost;
-    const balance = deposited - cost;
+    const cycleMemberStats = getMemberStats(me.id);
+    const mealCost = cycleMemberStats.mealCost;
+    const fixedCost = cycleMemberStats.fixedCost;
+    const cost = cycleMemberStats.totalCost;
+    const balance = cycleMemberStats.balance;
     const usedPct = deposited > 0 ? (cost / deposited) * 100 : cost > 0 ? 100 : 0;
 
     // Meals by date
@@ -325,7 +326,7 @@ export function MemberDashboard() {
       todayMeals: countOn(today), dailyMealCost, runwayDays, week, weekTotal, cells, streak,
       avgMeals, share, rank,
     };
-  }, [me, activeCycle, deposits, mealLogs, members, stats]);
+  }, [me, activeCycle, deposits, mealLogs, members, stats, getMemberStats]);
 
   const balanceShown = useCountUp(view?.balance ?? 0);
 

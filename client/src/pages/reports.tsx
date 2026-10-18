@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useMeal } from '@/lib/meal-context';
+import { computeCycleMath } from '@shared/cycle-math';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { Link, useLocation } from 'wouter';
@@ -179,19 +180,17 @@ export default function ReportsPage() {
     const expenses = (details?.expenses ?? []).filter((item) => isDateInFilterRange(item.date, from, to, fromKey, toKey));
     const logs = (details?.mealLogs ?? []).filter((item) => isDateInFilterRange(item.date, from, to, fromKey, toKey));
     const deposits = (details?.deposits ?? []).filter((item) => isDateInFilterRange(item.createdAt, from, to, fromKey, toKey));
-    const totalMealExpenses = expenses.filter((item) => item.type === 'meal').reduce((sum, item) => sum + item.amount, 0);
-    const totalFixedExpenses = expenses.filter((item) => item.type === 'fixed').reduce((sum, item) => sum + item.amount, 0);
+    const math = computeCycleMath({ members, deposits, expenses, mealLogs: logs });
+    const { totalMealExpenses, totalFixedExpenses, totalMealsConsumed: totalMeals, currentMealRate: rate, totalDeposits } = math.stats;
     const totalExpenses = totalMealExpenses + totalFixedExpenses;
-    const totalMeals = logs.reduce((sum, item) => sum + item.count, 0);
-    const rate = totalMeals > 0 ? totalMealExpenses / totalMeals : 0;
-    const fixedShare = members.length > 0 ? totalFixedExpenses / members.length : 0;
-    const rows: ReportMember[] = members.map((member) => {
-      const meals = logs.filter((item) => item.memberId === member.id).reduce((sum, item) => sum + item.count, 0);
-      const deposit = deposits.filter((item) => item.memberId === member.id).reduce((sum, item) => sum + item.amount, 0);
-      const bill = meals * rate + fixedShare;
-      return { id: member.id, name: member.name, meals, deposit, bill, balance: deposit - bill };
-    });
-    const totalDeposits = rows.reduce((sum, row) => sum + row.deposit, 0);
+    const rows: ReportMember[] = math.members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      meals: member.mealsEaten,
+      deposit: member.deposit,
+      bill: member.totalCost,
+      balance: member.balance,
+    }));
     const totalBill = rows.reduce((sum, row) => sum + row.bill, 0);
     const totalDue = rows.reduce((sum, row) => sum + (row.balance < 0 ? Math.abs(row.balance) : 0), 0);
     const totalRefund = rows.reduce((sum, row) => sum + (row.balance > 0 ? row.balance : 0), 0);
@@ -199,7 +198,7 @@ export default function ReportsPage() {
     return {
       rows, totalExpenses, totalMealExpenses, totalFixedExpenses, totalMeals, rate,
       totalDeposits, totalBill, totalDue, totalRefund, mealPct,
-      remainingCash: totalDeposits - totalExpenses,
+      remainingCash: math.stats.remainingCash,
     };
   }, [details, from, to, fromKey, toKey]);
 

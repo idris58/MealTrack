@@ -16,13 +16,15 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL
   : null;
 const connectSources = ["'self'"];
 const scriptSources = ["'self'"];
+const sandboxSources: string[] = [];
 if (supabaseUrl) {
   connectSources.push(supabaseUrl.origin);
   connectSources.push(`${supabaseUrl.protocol === "https:" ? "wss:" : "ws:"}//${supabaseUrl.host}`);
 }
 if (process.env.NODE_ENV !== "production") {
   connectSources.push("ws:");
-  scriptSources.push("'unsafe-eval'");
+  scriptSources.push("'unsafe-eval'", "'unsafe-inline'");
+  sandboxSources.push("allow-scripts", "allow-same-origin", "allow-forms", "allow-popups", "allow-modals");
 }
 
 app.use(helmet({
@@ -39,6 +41,7 @@ app.use(helmet({
       objectSrc: ["'none'"],
       scriptSrc: scriptSources,
       scriptSrcAttr: ["'none'"],
+      ...(sandboxSources.length > 0 ? { sandbox: sandboxSources } : {}),
       styleSrc: ["'self'", "https:", "'unsafe-inline'"],
       workerSrc: ["'self'", "blob:"],
     },

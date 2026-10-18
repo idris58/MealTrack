@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 
-import { allocateIntegerBalances } from '@/lib/settlement-math';
+import { computeCycleMath } from '@shared/cycle-math';
 import type { Cycle, CycleDeposit, CycleDetails, Expense, MealLog, Member } from '@/lib/meal-types';
 
 type Options = {
@@ -22,27 +22,19 @@ export function useCycleDetails({ cycles, loadedCycleIds, membersForCycle, depos
     const cycleDeposits = deposits.filter((item) => item.cycleId === cycleId && memberIds.has(item.memberId));
     const cycleExpenses = expenses.filter((item) => item.cycleId === cycleId);
     const cycleLogs = mealLogs.filter((item) => item.cycleId === cycleId && memberIds.has(item.memberId));
-    const depositByMember = new Map<string, number>();
-    for (const deposit of cycleDeposits) depositByMember.set(deposit.memberId, (depositByMember.get(deposit.memberId) ?? 0) + deposit.amount);
-    const totalMealExpenses = cycleExpenses.filter((item) => item.type === 'meal').reduce((total, item) => total + item.amount, 0);
-    const totalFixedExpenses = cycleExpenses.filter((item) => item.type === 'fixed').reduce((total, item) => total + item.amount, 0);
-    const totalMealsConsumed = cycleLogs.reduce((total, item) => total + item.count, 0);
-    const totalDeposits = cycleDeposits.reduce((total, item) => total + item.amount, 0);
-    const mealRate = totalMealsConsumed ? totalMealExpenses / totalMealsConsumed : 0;
-    const fixedShare = members.length ? totalFixedExpenses / members.length : 0;
-    const remainingCash = totalDeposits - totalMealExpenses - totalFixedExpenses;
-    const raw = members.map((member) => {
-      const mealsEaten = cycleLogs.filter((log) => log.memberId === member.id).reduce((total, log) => total + log.count, 0);
-      const deposit = depositByMember.get(member.id) ?? 0;
-      const mealCost = mealsEaten * mealRate;
-      const fixedCost = fixedShare;
-      return { ...member, deposit, mealsEaten, hasPendingDeposit: cycleDeposits.some((item) => item.memberId === member.id && item.id.startsWith('offline-')), mealCost, fixedCost, totalCost: mealCost + fixedCost, balance: deposit - mealCost - fixedCost };
-    });
     const finalized = cycle.status === 'pending' || cycle.status === 'closed';
-    const computedMembers = finalized && raw.length
-      ? raw.map((member) => ({ ...member, balance: allocateIntegerBalances(raw, Math.round(remainingCash)).get(member.id) ?? member.balance }))
-      : raw;
-    return { cycle, stats: { totalDeposits, totalMealExpenses, totalFixedExpenses, totalMealsConsumed, currentMealRate: mealRate, fixedCostPerMember: fixedShare, remainingCash }, members: computedMembers, expenses: cycleExpenses, mealLogs: cycleLogs, deposits: cycleDeposits };
+    const math = computeCycleMath({
+      members,
+      deposits: cycleDeposits,
+      expenses: cycleExpenses,
+      mealLogs: cycleLogs,
+      finalized,
+    });
+    const computedMembers = math.members.map((member) => ({
+      ...member,
+      hasPendingDeposit: cycleDeposits.some((item) => item.memberId === member.id && item.id.startsWith('offline-')),
+    }));
+    return { cycle, stats: math.stats, members: computedMembers, expenses: cycleExpenses, mealLogs: cycleLogs, deposits: cycleDeposits };
   }, [cycles, deposits, expenses, mealLogs, membersForCycle]);
 
   const byId = useMemo(() => {

@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { log } from "./logger";
-import { allocateIntegerBalances } from "@shared/settlement-math";
+import { computeCycleMath, selectCycleMembers } from "@shared/cycle-math";
 
 /**
  * Wrap an async Express handler so that rejected promises are caught,
@@ -50,6 +50,8 @@ type MemberRow = {
   id: string;
   name: string;
   avatar: string | null;
+  deleted_at: string | null;
+  sort_order: number | null;
 };
 
 type SnapshotMember = {
@@ -111,26 +113,25 @@ function buildSharedPayload(
   expensesData: ExpenseRow[],
   mealLogsData: MealLogRow[],
 ) {
-  const members =
-    cycle.status === "active" || !cycle.members_snapshot
-      ? membersData.map((member) => ({
+  const historyMemberIds = [
+    ...depositsData.map((deposit) => deposit.member_id),
+    ...mealLogsData.map((log) => log.member_id),
+  ];
+  const members = cycle.status !== "active" && cycle.members_snapshot
+    ? cycle.members_snapshot.map((member) => ({
+        id: member.id,
+        name: member.name,
+        avatar: member.avatar || member.name.substring(0, 2).toUpperCase(),
+      }))
+    : selectCycleMembers(
+        membersData.map((member) => ({
           id: member.id,
           name: member.name,
           avatar: member.avatar || member.name.substring(0, 2).toUpperCase(),
-        }))
-      : cycle.members_snapshot.map((member) => ({
-          id: member.id,
-          name: member.name,
-          avatar: member.avatar || member.name.substring(0, 2).toUpperCase(),
-        }));
-
-  const depositsByMember = new Map<string, number>();
-  for (const deposit of depositsData) {
-    depositsByMember.set(
-      deposit.member_id,
-      (depositsByMember.get(deposit.member_id) || 0) + Number(deposit.amount),
-    );
-  }
+          deletedAt: member.deleted_at,
+        })),
+        historyMemberIds,
+      ).map(({ id, name, avatar }) => ({ id, name, avatar }));
 
   const expenses = expensesData.map((expense) => ({
     id: expense.id,
@@ -148,61 +149,13 @@ function buildSharedPayload(
     count: Number(log.count),
   }));
 
-  const totalMealExpenses = expenses
-    .filter((expense) => expense.type === "meal")
-    .reduce((sum, expense) => sum + expense.amount, 0);
-  const totalFixedExpenses = expenses
-    .filter((expense) => expense.type === "fixed")
-    .reduce((sum, expense) => sum + expense.amount, 0);
-  const totalMealsConsumed = mealLogs.reduce((sum, log) => sum + log.count, 0);
-  const memberCount = members.length;
-  const currentMealRate =
-    totalMealsConsumed > 0 ? totalMealExpenses / totalMealsConsumed : 0;
-  const fixedCostPerMember =
-    memberCount > 0 ? totalFixedExpenses / memberCount : 0;
-
-  const rawSummaries = members.map((member) => {
-    const mealsEaten = mealLogs
-      .filter((log) => log.memberId === member.id)
-      .reduce((sum, log) => sum + log.count, 0);
-    const deposit = depositsByMember.get(member.id) || 0;
-    const mealCost = mealsEaten * currentMealRate;
-    const fixedCost = fixedCostPerMember;
-    const totalCost = mealCost + fixedCost;
-    const balance = deposit - totalCost;
-
-    return {
-      ...member,
-      deposit,
-      mealsEaten,
-      mealCost,
-      fixedCost,
-      totalCost,
-      balance,
-    };
+  const math = computeCycleMath({
+    members,
+    deposits: depositsData.map((deposit) => ({ memberId: deposit.member_id, amount: Number(deposit.amount) })),
+    expenses: expenses.map((expense) => ({ amount: expense.amount, type: expense.type })),
+    mealLogs,
+    finalized: cycle.status === "pending" || cycle.status === "closed",
   });
-
-  const totalDeposits = rawSummaries.reduce(
-    (sum, member) => sum + member.deposit,
-    0,
-  );
-  const remainingCash = totalDeposits - (totalMealExpenses + totalFixedExpenses);
-
-  const isFinalized = cycle.status === "pending" || cycle.status === "closed";
-  let memberSummaries = rawSummaries;
-
-  if (isFinalized && rawSummaries.length > 0) {
-    const roundedRemainingCash = Math.round(remainingCash);
-    const allocatedMap = allocateIntegerBalances(rawSummaries, roundedRemainingCash);
-    memberSummaries = rawSummaries.map((member) => {
-      const allocatedBalance = allocatedMap.get(member.id);
-      if (allocatedBalance === undefined) return member;
-      return {
-        ...member,
-        balance: allocatedBalance,
-      };
-    });
-  }
 
   return {
     cycle: {
@@ -211,16 +164,8 @@ function buildSharedPayload(
       status: cycle.status,
       closedAt: cycle.closed_at,
     },
-    stats: {
-      totalDeposits,
-      totalMealExpenses,
-      totalFixedExpenses,
-      totalMealsConsumed,
-      currentMealRate,
-      fixedCostPerMember,
-      remainingCash,
-    },
-    members: memberSummaries,
+    stats: math.stats,
+    members: math.members,
     expenses,
     mealLogs,
   };
@@ -384,9 +329,9 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
     await Promise.all([
       supabaseAdmin
         .from("members")
-        .select("id, name, avatar")
+        .select("id, name, avatar, deleted_at, sort_order")
         .eq(...scopeFilter(scope))
-        .is("deleted_at", null)
+        .order("sort_order", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true }),
       supabaseAdmin
         .from("cycle_deposits")
@@ -736,16 +681,20 @@ export async function registerRoutes(
     const roster = Array.isArray(cycle.members_snapshot)
       ? cycle.members_snapshot as SnapshotMember[]
       : null;
-    const members = roster ?? await fetchAllPages<{ id: string; name: string }>(async (from, to) =>
+    const liveRoster = roster ? [] : await fetchAllPages<{
+      id: string;
+      name: string;
+      deleted_at: string | null;
+      sort_order: number | null;
+    }>(async (from, to) =>
       await supabaseAdmin
         .from("members")
-        .select("id, name")
+        .select("id, name, deleted_at, sort_order")
         .eq("mess_id", messId)
-        .is("deleted_at", null)
-        .order("id", { ascending: true })
+        .order("sort_order", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true })
         .range(from, to),
     );
-    if (members.length === 0) return res.json({ success: true });
 
     const depositsPromise = fetchAllPages<{ member_id: string; amount: number | string }>(async (from, to) =>
       await supabaseAdmin
@@ -777,35 +726,25 @@ export async function registerRoutes(
     );
     const [deposits, expenses, mealLogs] = await Promise.all([depositsPromise, expensesPromise, mealLogsPromise]);
 
-    const memberIds = new Set(members.map((member) => member.id));
-    const depositByMember = new Map<string, number>();
-    for (const deposit of deposits) {
-      if (!memberIds.has(deposit.member_id)) continue;
-      depositByMember.set(deposit.member_id, (depositByMember.get(deposit.member_id) ?? 0) + Number(deposit.amount));
-    }
-    const totalDeposits = Array.from(depositByMember.values()).reduce((sum, amount) => sum + amount, 0);
-    const mealExpenses = expenses.filter((expense) => expense.type === "meal").reduce((sum, expense) => sum + Number(expense.amount), 0);
-    const fixedExpenses = expenses.filter((expense) => expense.type === "fixed").reduce((sum, expense) => sum + Number(expense.amount), 0);
-    const mealCountByMember = new Map<string, number>();
-    let totalMeals = 0;
-    for (const log of mealLogs) {
-      if (!memberIds.has(log.member_id)) continue;
-      const count = Number(log.count);
-      mealCountByMember.set(log.member_id, (mealCountByMember.get(log.member_id) ?? 0) + count);
-      totalMeals += count;
-    }
-    const mealRate = totalMeals > 0 ? mealExpenses / totalMeals : 0;
-    const fixedShare = members.length > 0 ? fixedExpenses / members.length : 0;
-    const remainingCash = totalDeposits - mealExpenses - fixedExpenses;
-    const rawBalances = members.map((member) => ({
-      id: member.id,
-      name: member.name,
-      balance: (depositByMember.get(member.id) ?? 0) - (mealCountByMember.get(member.id) ?? 0) * mealRate - fixedShare,
-    }));
-    const allocatedBalances = allocateIntegerBalances(rawBalances, Math.round(remainingCash));
-    const dueMembers = rawBalances
-      .map((member) => ({ memberId: member.id, dueAmount: Math.abs(allocatedBalances.get(member.id) ?? member.balance) }))
-      .filter((member) => (allocatedBalances.get(member.memberId) ?? 0) < 0);
+    const members = roster ?? selectCycleMembers(
+      liveRoster.map((member) => ({ ...member, deletedAt: member.deleted_at })),
+      [
+        ...deposits.map((deposit) => deposit.member_id),
+        ...mealLogs.map((log) => log.member_id),
+      ],
+    );
+    if (members.length === 0) return res.json({ success: true });
+
+    const math = computeCycleMath({
+      members,
+      deposits: deposits.map((deposit) => ({ memberId: deposit.member_id, amount: Number(deposit.amount) })),
+      expenses: expenses.map((expense) => ({ amount: Number(expense.amount), type: expense.type })),
+      mealLogs: mealLogs.map((log) => ({ memberId: log.member_id, count: Number(log.count) })),
+      finalized: true,
+    });
+    const dueMembers = math.members
+      .filter((member) => member.balance < 0)
+      .map((member) => ({ memberId: member.id, dueAmount: Math.abs(member.balance) }));
 
     if (dueMembers.length > 0) {
       void sendSettlementPendingPush({

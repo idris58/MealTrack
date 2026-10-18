@@ -34,6 +34,7 @@ import {
 
 import { useAuth } from '@/lib/auth-context';
 import { useMeal, type CycleDeposit } from '@/lib/meal-context';
+import { computeMemberCosts } from '@shared/cycle-math';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -245,7 +246,7 @@ type Filter = 'all' | Kind;
 
 export function MemberDepositsView() {
   const { profile } = useAuth();
-  const { members, deposits, mealLogs, activeCycle, stats } = useMeal();
+  const { members, deposits, mealLogs, activeCycle, stats, getMemberStats } = useMeal();
 
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
@@ -287,10 +288,11 @@ export function MemberDepositsView() {
     const lastPayment = [...chrono].reverse().find((d) => d.amount > 0) ?? null;
 
     const rate = stats.currentMealRate;
-    const mealCost = rate * me.mealsEaten;
-    const fixedCost = stats.fixedCostPerMember;
-    const cost = mealCost + fixedCost;
-    const balance = net - cost;
+    const cycleMemberStats = getMemberStats(me.id);
+    const mealCost = cycleMemberStats.mealCost;
+    const fixedCost = cycleMemberStats.fixedCost;
+    const cost = cycleMemberStats.totalCost;
+    const balance = cycleMemberStats.balance;
     const burn = mealCost / elapsed;
     const runway = balance > 0 && burn > 0 ? Math.floor(balance / burn) : null;
 
@@ -309,11 +311,12 @@ export function MemberDepositsView() {
       const k = dayKey(day);
       cm += mealsByDay.get(k) ?? 0;
       cd += paidByDay.get(k) ?? 0;
-      return { label: format(day, 'd MMM'), value: cd - (cm * rate + fixedCost) };
+      const dayCost = computeMemberCosts(cm, rate, fixedCost).totalCost;
+      return { label: format(day, 'd MMM'), value: cd - dayCost };
     });
 
     return { mine, running, net, paidIn, carriedIn, takenOut, payments, lastPayment, rate, mealCost, fixedCost, cost, balance, burn, runway, series, elapsed };
-  }, [me, activeCycle, deposits, mealLogs, stats]);
+  }, [me, activeCycle, deposits, mealLogs, stats, getMemberStats]);
 
   const shown = useCountUp(v?.balance ?? 0);
 
