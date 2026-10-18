@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 
 import { useMeal, type MealLog, type Member } from '@/lib/meal-context';
+import { runMutation } from '@/lib/run-mutation';
 
 type MealCountEditorOptions = {
   members: Pick<Member, 'id'>[];
@@ -46,12 +47,14 @@ export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, on
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await saveMealLogs(
-        members.map((member) => ({ memberId: member.id, count: Math.max(0, Number.parseFloat(mealCounts[member.id] || '0') || 0) })),
-        format(date, 'yyyy-MM-dd'),
-        cycleId,
-      );
-      onSave?.();
+      await runMutation(async () => {
+        await saveMealLogs(
+          members.map((member) => ({ memberId: member.id, count: Math.max(0, Number.parseFloat(mealCounts[member.id] || '0') || 0) })),
+          format(date, 'yyyy-MM-dd'),
+          cycleId,
+        );
+        onSave?.();
+      });
     } finally {
       setIsSubmitting(false);
     }

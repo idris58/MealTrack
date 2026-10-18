@@ -43,6 +43,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SyncBadge } from '@/components/sync-badge';
 import { cn } from '@/lib/utils';
+import { runMutation } from '@/lib/run-mutation';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DELETE_GRACE_MS = 10 * 1000;
@@ -79,7 +80,7 @@ function AddMemberForm({ onClose }: { onClose: () => void }) {
   const onSubmit = async (data: z.infer<typeof memberSchema>) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
-    try { await addMember(data.name); onClose(); } finally { setIsSubmitting(false); }
+    try { await runMutation(async () => { await addMember(data.name); onClose(); }); } finally { setIsSubmitting(false); }
   };
   return (
     <Form {...form}>
@@ -105,7 +106,7 @@ function DepositForm({ memberId, onClose }: { memberId: string; onClose: () => v
     if (!isNaN(val) && val !== 0) {
       setIsSubmitting(true);
       const signedAmount = mode === 'deduct' ? -Math.abs(val) : Math.abs(val);
-      try { await addDeposit(memberId, signedAmount, undefined, mode === 'deduct' ? 'Deduction/Refund' : undefined); onClose(); }
+      try { await runMutation(async () => { await addDeposit(memberId, signedAmount, undefined, mode === 'deduct' ? 'Deduction/Refund' : undefined); onClose(); }); }
       finally { setIsSubmitting(false); }
     }
   };

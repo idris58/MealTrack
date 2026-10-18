@@ -22,6 +22,7 @@ import { MealLogTable } from '@/components/meal-log-table';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { ExpenseForm } from '@/components/expense-form';
+import { runMutation } from '@/lib/run-mutation';
 
 function formatCurrency(amount: number) {
   return `৳${amount.toFixed(2)}`;
@@ -81,8 +82,10 @@ function SettlementForm({
     setIsSubmitting(true);
 
     try {
-      await addDeposit(memberId, parsed, cycleId, note || undefined);
-      onClose();
+      await runMutation(async () => {
+        await addDeposit(memberId, parsed, cycleId, note || undefined);
+        onClose();
+      });
     } finally {
       setIsSubmitting(false);
     }

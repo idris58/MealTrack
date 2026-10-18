@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { runMutation } from '@/lib/run-mutation';
 
 const expenseFields = z.object({
   amount: z.preprocess(
@@ -71,13 +72,15 @@ export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = fals
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const formattedDate = format(date, 'yyyy-MM-dd');
-      if (mode === 'edit' && expense) {
-        await updateExpense(expense.id, { ...data, date: formattedDate });
-      } else {
-        await addExpense(data.amount, data.description.trim(), data.type, data.paidBy.trim(), cycleId, formattedDate);
-      }
-      onClose();
+      await runMutation(async () => {
+        const formattedDate = format(date, 'yyyy-MM-dd');
+        if (mode === 'edit' && expense) {
+          await updateExpense(expense.id, { ...data, date: formattedDate });
+        } else {
+          await addExpense(data.amount, data.description.trim(), data.type, data.paidBy.trim(), cycleId, formattedDate);
+        }
+        onClose();
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -87,9 +90,11 @@ export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = fals
     if (!expense || isDeleting) return;
     setIsDeleting(true);
     try {
-      await deleteExpense(expense.id);
-      onDeleted?.(expense);
-      onClose();
+      await runMutation(async () => {
+        await deleteExpense(expense.id);
+        onDeleted?.(expense);
+        onClose();
+      });
     } finally {
       setIsDeleting(false);
     }
