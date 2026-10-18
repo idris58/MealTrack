@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -50,6 +51,8 @@ app.use(helmet({
     },
   },
 }));
+
+app.use(compression());
 
 declare module "http" {
   interface IncomingMessage {
@@ -102,6 +105,9 @@ app.use((req, res, next) => {
 
   await initServerErrorTracking();
   await registerRoutes(httpServer, app);
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ message: "API route not found." });
+  });
   startMealReminderScheduler();
   startNotificationDeliveryCleanupScheduler();
   startSoftDeleteCleanupScheduler();

@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import rateLimit from "express-rate-limit";
+import { z } from "zod";
 import { log } from "./logger";
 import { computeCycleMath, selectCycleMembers } from "@shared/cycle-math";
 
@@ -31,11 +32,57 @@ function asyncHandler(
   };
 }
 
+function parseRequestBody<TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  body: unknown,
+  res: Response,
+): z.infer<TSchema> | null {
+  const parsed = schema.safeParse(body);
+  if (parsed.success) return parsed.data;
+
+  const firstIssue = parsed.error.issues[0];
+  res.status(400).json({ message: firstIssue?.message || "Invalid request body." });
+  return null;
+}
+
+const pushSubscriptionBodySchema = z.object({
+  endpoint: z.string().url().max(4096),
+  expirationTime: z.number().nullable().optional(),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+}).passthrough();
+const endpointBodySchema = z.object({ endpoint: z.string().url().max(4096) });
+const endpointStatusBodySchema = z.object({
+  endpoint: z.string().url().max(4096).optional(),
+}).default({});
+const notificationPreferencesBodySchema = z.object({
+  reminderTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Choose a valid reminder time.").optional(),
+  global: z.boolean().optional(),
+  categories: z.object({
+    notices: z.boolean().optional(),
+    mealReminders: z.boolean().optional(),
+    deposits: z.boolean().optional(),
+    settlements: z.boolean().optional(),
+    mealOff: z.boolean().optional(),
+  }).partial().optional(),
+}).strict();
+const uuidBodySchema = (key: string, label: string) => z.object({
+  [key]: z.string().uuid(`${label} must be a valid ID.`),
+});
+const mealOffSubmissionBodySchema = z.object({
+  requestId: z.string().min(1),
+  memberName: z.string().trim().min(1).max(160),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  mealPeriod: z.string().trim().min(1).max(40),
+});
+
 import { assertSupabaseAdmin } from "./supabase-admin";
 import {
   getVapidPublicKey,
   isPushConfigured,
-  parsePushSubscription,
   removePushSubscription,
   sendNoticePushToSharedSubscribers,
   sendNoticePushToMessMembers,
@@ -465,8 +512,6 @@ async function requireMessMember(userId: string) {
   return data.mess_id as string;
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 async function fetchAllPages<T>(
   fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
@@ -531,10 +576,9 @@ export async function registerRoutes(
       return res.status(503).json({ message: "Push notifications are not configured." });
     }
 
-    const subscription = parsePushSubscription(req.body);
-    if (!subscription) {
-      return res.status(400).json({ message: "Invalid push subscription." });
-    }
+    const body = parseRequestBody(pushSubscriptionBodySchema, req.body, res);
+    if (!body) return;
+    const subscription = { endpoint: body.endpoint, p256dh: body.keys.p256dh, auth: body.keys.auth };
 
     await upsertPushSubscription({
       userId,
@@ -553,10 +597,10 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid authorization token." });
     }
 
-    const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
-    if (!endpoint) {
-      return res.json({ subscribed: false });
-    }
+    const body = parseRequestBody(endpointStatusBodySchema, req.body, res);
+    if (!body) return;
+    const endpoint = body.endpoint;
+    if (!endpoint) return res.json({ subscribed: false });
 
     const supabaseAdmin = assertSupabaseAdmin();
     const { data, error } = await supabaseAdmin
@@ -581,10 +625,9 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid authorization token." });
     }
 
-    const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
-    if (!endpoint) {
-      return res.status(400).json({ message: "Missing subscription endpoint." });
-    }
+    const body = parseRequestBody(endpointBodySchema, req.body, res);
+    if (!body) return;
+    const endpoint = body.endpoint;
 
     await removePushSubscription({
       endpoint,
@@ -617,16 +660,13 @@ export async function registerRoutes(
   app.put("/api/push/preferences", asyncHandler(async (req, res) => {
     const userId = await getAuthenticatedUserId(req.get("authorization"));
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
-    const hasReminderTime = Object.prototype.hasOwnProperty.call(req.body ?? {}, "reminderTime");
-    const reminderTime = typeof req.body?.reminderTime === "string" ? req.body.reminderTime : "";
-    if (hasReminderTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(reminderTime)) return res.status(400).json({ message: "Choose a valid reminder time." });
-    const hasGlobal = typeof req.body?.global === "boolean";
-    const hasCategories = req.body?.categories && typeof req.body.categories === "object" && !Array.isArray(req.body.categories);
-    const categoryInput = hasCategories ? req.body.categories as Record<string, unknown> : {};
-    if (req.body?.global !== undefined && !hasGlobal) return res.status(400).json({ message: "Global notification preference must be a boolean." });
-    for (const key of ["notices", "mealReminders", "deposits", "settlements", "mealOff"]) {
-      if (categoryInput[key] !== undefined && typeof categoryInput[key] !== "boolean") return res.status(400).json({ message: "Notification category preferences must be boolean values." });
-    }
+    const body = parseRequestBody(notificationPreferencesBodySchema, req.body, res);
+    if (!body) return;
+    const hasReminderTime = body.reminderTime !== undefined;
+    const reminderTime = body.reminderTime ?? "";
+    const hasGlobal = body.global !== undefined;
+    const hasCategories = body.categories !== undefined;
+    const categoryInput = body.categories ?? {};
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: current, error: currentError } = await supabaseAdmin.from("profiles").select("reminder_time, notification_preferences").eq("id", userId).single();
     if (currentError) throw currentError;
@@ -634,7 +674,7 @@ export async function registerRoutes(
     const currentCategories = currentPreferences.categories && typeof currentPreferences.categories === "object" ? currentPreferences.categories as Record<string, unknown> : {};
     const nextPreferences = {
       ...currentPreferences,
-      ...(hasGlobal ? { global: req.body.global } : {}),
+      ...(hasGlobal ? { global: body.global } : {}),
       ...(hasCategories ? { categories: { ...currentCategories, ...categoryInput } } : {}),
     };
     const updates: Record<string, unknown> = { notification_preferences: nextPreferences, updated_at: new Date().toISOString() };
@@ -648,8 +688,9 @@ export async function registerRoutes(
     const userId = await getAuthenticatedUserId(req.get("authorization"));
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
     const messId = await requireMessOperator(userId);
-    const depositId = typeof req.body?.depositId === "string" ? req.body.depositId : "";
-    if (!UUID_PATTERN.test(depositId)) return res.status(400).json({ message: "A valid deposit ID is required." });
+    const body = parseRequestBody(uuidBodySchema("depositId", "Deposit ID"), req.body, res);
+    if (!body) return;
+    const depositId = body.depositId;
 
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: deposit, error } = await supabaseAdmin
@@ -670,8 +711,9 @@ export async function registerRoutes(
     const userId = await getAuthenticatedUserId(req.get("authorization"));
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
     const messId = await requireMessOperator(userId);
-    const cycleId = typeof req.body?.cycleId === "string" ? req.body.cycleId : "";
-    if (!UUID_PATTERN.test(cycleId)) return res.status(400).json({ message: "A valid cycle ID is required." });
+    const body = parseRequestBody(uuidBodySchema("cycleId", "Cycle ID"), req.body, res);
+    if (!body) return;
+    const cycleId = body.cycleId;
 
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: cycle, error: cycleError } = await supabaseAdmin
@@ -770,10 +812,9 @@ export async function registerRoutes(
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
     const messId = await requireMessMember(userId);
 
-    const { requestId, memberName, startDate, endDate, mealPeriod } = req.body ?? {};
-    if (!requestId || !memberName || !startDate || !endDate || !mealPeriod) {
-      return res.status(400).json({ message: "Missing required meal-off request details." });
-    }
+    const body = parseRequestBody(mealOffSubmissionBodySchema, req.body, res);
+    if (!body) return;
+    const { requestId, memberName, startDate, endDate, mealPeriod } = body;
 
     void sendMealOffRequestSubmittedPush({
       messId,
@@ -792,8 +833,9 @@ export async function registerRoutes(
     const userId = await getAuthenticatedUserId(req.get("authorization"));
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
     const messId = await requireMessOperator(userId);
-    const requestId = typeof req.body?.requestId === "string" ? req.body.requestId : "";
-    if (!UUID_PATTERN.test(requestId)) return res.status(400).json({ message: "A valid request ID is required." });
+    const body = parseRequestBody(uuidBodySchema("requestId", "Request ID"), req.body, res);
+    if (!body) return;
+    const requestId = body.requestId;
 
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: request, error } = await supabaseAdmin
@@ -831,10 +873,9 @@ export async function registerRoutes(
       return res.status(503).json({ message: "Push notifications are not configured." });
     }
 
-    const subscription = parsePushSubscription(req.body);
-    if (!subscription) {
-      return res.status(400).json({ message: "Invalid push subscription." });
-    }
+    const body = parseRequestBody(pushSubscriptionBodySchema, req.body, res);
+    if (!body) return;
+    const subscription = { endpoint: body.endpoint, p256dh: body.keys.p256dh, auth: body.keys.auth };
 
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: shareLink, error } = await supabaseAdmin
@@ -865,7 +906,9 @@ export async function registerRoutes(
 
   app.post("/api/push/shared/:token/status", sharedTokenRateLimit, asyncHandler(async (req, res) => {
     const token = normalizeShareToken(req.params.token);
-    const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
+    const body = parseRequestBody(endpointStatusBodySchema, req.body, res);
+    if (!body) return;
+    const endpoint = body.endpoint;
 
     if (!token || !endpoint) {
       return res.json({ subscribed: false });
@@ -904,9 +947,11 @@ export async function registerRoutes(
 
   app.post("/api/push/shared/:token/unsubscribe", sharedTokenRateLimit, asyncHandler(async (req, res) => {
     const token = normalizeShareToken(req.params.token);
-    const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
+    const body = parseRequestBody(endpointBodySchema, req.body, res);
+    if (!body) return;
+    const endpoint = body.endpoint;
 
-    if (!token || !endpoint) {
+    if (!token) {
       return res.status(400).json({ message: "Missing subscription endpoint." });
     }
 
