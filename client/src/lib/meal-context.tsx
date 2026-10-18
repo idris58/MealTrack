@@ -26,189 +26,44 @@ import { useCycleLoader } from '@/hooks/use-cycle-loader';
 import { useMealIdentity } from '@/hooks/use-meal-identity';
 import { useMealScopeLoader } from '@/hooks/use-meal-scope-loader';
 
-export interface Member {
-  id: string;
-  name: string;
-  deposit: number;
-  mealsEaten: number;
-  avatar?: string;
-  profileId?: string | null;
-  hasPendingDeposit?: boolean;
-  archived?: boolean;
-}
-
-export interface Expense {
-  id: string;
-  cycleId: string;
-  amount: number;
-  description: string;
-  type: 'meal' | 'fixed';
-  date: string;
-  paidBy: string;
-}
-
-export interface MealLog {
-  id: string;
-  cycleId: string;
-  date: string;
-  memberId: string;
-  count: number;
-}
-
-export interface CycleDeposit {
-  id: string;
-  cycleId: string;
-  memberId: string;
-  amount: number;
-  note?: string;
-  createdAt: string;
-}
-
-export type CycleStatus = 'active' | 'pending' | 'closed';
-export type ChangelogEntityType = 'member' | 'expense' | 'meal_log' | 'deposit';
-export type ChangelogAction = 'create' | 'update' | 'delete';
-
-type ChangelogValue = string | number | boolean | null;
-
-export interface ChangelogChange {
-  field: string;
-  label: string;
-  value?: ChangelogValue;
-  from?: ChangelogValue;
-  to?: ChangelogValue;
-}
-
-export interface ChangelogActor {
-  id: string;
-  name: string;
-  pictureUrl?: string | null;
-  role?: 'manager' | 'coordinator' | 'member' | null;
-}
-
-export interface ChangelogEntry {
-  id: string;
-  cycleId: string;
-  entityType: ChangelogEntityType;
-  entityId: string;
-  action: ChangelogAction;
-  title: string;
-  changes: ChangelogChange[];
-  createdAt: string;
-  actor?: ChangelogActor | null;
-}
-
-export interface Cycle {
-  id: string;
-  name: string;
-  status: CycleStatus;
-  startedAt: string;
-  closedAt?: string | null;
-  finalizedAt?: string | null;
-  membersSnapshot?: SnapshotMember[] | null;
-}
-
-type SnapshotMember = {
-  id: string;
-  name: string;
-  avatar?: string;
-};
-
-export interface CycleDetails {
-  cycle: Cycle;
-  stats: {
-    totalDeposits: number;
-    totalMealExpenses: number;
-    totalFixedExpenses: number;
-    totalMealsConsumed: number;
-    currentMealRate: number;
-    fixedCostPerMember: number;
-    remainingCash: number;
-  };
-  members: (Member & { mealCost: number; fixedCost: number; totalCost: number; balance: number })[];
-  expenses: Expense[];
-  mealLogs: MealLog[];
-  deposits: CycleDeposit[];
-}
-
-export interface MealDataContextType {
-  members: Member[];
-  expenses: Expense[];
-  deposits: CycleDeposit[];
-  mealLogs: MealLog[];
-  cycles: Cycle[];
-  activeCycleChangelogEntries: ChangelogEntry[];
-  pendingCycleChangelogEntries: ChangelogEntry[];
-  changelogEntries: ChangelogEntry[];
-  hasMoreChangelogEntries: boolean;
-  changelogLoading: boolean;
-  activeCycle: Cycle | null;
-  pendingCycle: Cycle | null;
-  loading: boolean;
-  initialLoading: boolean;
-  refreshing: boolean;
-  stats: CycleDetails['stats'];
-  pendingSyncIds: Set<string>;
-  failedSyncOps: OfflineOp[];
-  archivedMembers: Member[];
-  dataError: string | null;
-  getMemberStats: (memberId: string, cycleId?: string) => {
-    mealCost: number;
-    fixedCost: number;
-    totalCost: number;
-    balance: number;
-    mealsEaten: number;
-  };
-  getCycleDetails: (cycleId: string) => CycleDetails | null;
-  isCycleDetailsLoading: (cycleId: string) => boolean;
-  getCycleDetailsError: (cycleId: string) => string | null;
-}
-
-export interface MealActionsContextType {
-  addMember: (name: string) => Promise<void>;
-  updateMember: (id: string, updates: Partial<Member>) => Promise<void>;
-  removeMember: (id: string) => Promise<void>;
-  restoreMember: (id: string) => Promise<void>;
-  reorderMembers: (memberIds: string[]) => Promise<void>;
-  addExpense: (amount: number, description: string, type: 'meal' | 'fixed', paidBy: string, cycleId?: string, expenseDate?: string) => Promise<void>;
-  updateExpense: (id: string, updates: {
-    amount: number;
-    description: string;
-    type: 'meal' | 'fixed';
-    paidBy: string;
-    date?: string;
-  }) => Promise<void>;
-  deleteExpense: (id: string) => Promise<void>;
-  restoreExpense: (id: string) => Promise<void>;
-  addDeposit: (memberId: string, amount: number, cycleId?: string, note?: string) => Promise<void>;
-  saveMealLogs: (entries: Array<{ memberId: string; count: number }>, date: string, cycleId?: string) => Promise<void>;
-  logMeal: (memberId: string, count: number, date: string, cycleId?: string) => Promise<void>;
-  renameActiveCycle: (name: string) => Promise<void>;
-  /** Closes the active cycle (moves it to pending). Does NOT auto-start a new cycle. */
-  closeActiveCycle: () => Promise<void>;
-  /**
-   * Creates a new active cycle. Only callable when there is no current active cycle.
-   */
-  startNewCycle: (
-    name: string,
-    startedAt?: string,
-    carryForwards?: Array<{ memberId: string; amount: number }>,
-  ) => Promise<void>;
-  /** Suggests a default cycle name based on the given date and existing cycles. */
-  suggestCycleName: (date?: Date) => string;
-  markCycleClosed: (cycleId: string) => Promise<void>;
-  deleteCycle: (cycleId: string) => Promise<void>;
-  restoreCycle: (cycleId: string) => Promise<void>;
-  loadCycleDetails: (cycleId: string, options?: { force?: boolean }) => Promise<void>;
-  loadMoreChangelogEntries: () => Promise<void>;
-  /** Flush the offline queue against Supabase — called when back online. */
-  triggerSync: () => Promise<void>;
-  retryFailedSync: () => Promise<void>;
-  discardFailedSync: (id: string) => Promise<void>;
-  /** Retry the initial data load after a failure. */
-  retryLoadData: () => void;
-}
-
-export type MealContextType = MealDataContextType & MealActionsContextType;
+import type {
+  ChangelogAction,
+  ChangelogActor,
+  ChangelogChange,
+  ChangelogEntry,
+  ChangelogValue,
+  Cycle,
+  CycleDeposit,
+  CycleDetails,
+  CycleStatus,
+  Expense,
+  MealActionsContextType,
+  MealContextType,
+  MealDataContextType,
+  MealLog,
+  Member,
+  SnapshotMember,
+} from './meal-types';
+export type {
+  ChangelogAction,
+  ChangelogActor,
+  ChangelogChange,
+  ChangelogEntityType,
+  ChangelogEntry,
+  ChangelogValue,
+  Cycle,
+  CycleDeposit,
+  CycleDetails,
+  CycleStatus,
+  Expense,
+  MealActionsContextType,
+  MealContextType,
+  MealDataContextType,
+  MealLog,
+  Member,
+  MemberStats,
+  SnapshotMember,
+} from './meal-types';
 
 export const MealDataContext = createContext<MealDataContextType | undefined>(undefined);
 export const MealActionsContext = createContext<MealActionsContextType | undefined>(undefined);
@@ -321,31 +176,8 @@ function getDefaultCycleBaseName(dateValue: string | Date) {
   return `Meal ${getCycleSeasonName(date)}-${year}`;
 }
 
-function buildUpdateChange(
-  field: string,
-  label: string,
-  from: ChangelogValue,
-  to: ChangelogValue,
-): ChangelogChange | null {
-  return from === to ? null : { field, label, from, to };
-}
-
 function buildSnapshotChange(field: string, label: string, value: ChangelogValue): ChangelogChange {
   return { field, label, value };
-}
-
-function getMealLogAction(changes: ChangelogChange[]): ChangelogAction {
-  const created = changes.some((change) => change.from === 0 && typeof change.to === 'number' && change.to > 0);
-  const deleted = changes.some((change) => typeof change.from === 'number' && change.from > 0 && change.to === 0);
-  const updated = changes.some((change) => typeof change.from === 'number' && typeof change.to === 'number' && change.from > 0 && change.to > 0 && change.from !== change.to);
-
-  if (updated || (created && deleted) || (created && updated) || (deleted && updated)) {
-    return 'update';
-  }
-
-  if (deleted) return 'delete';
-  if (created) return 'create';
-  return 'update';
 }
 
 export function MealProvider({ children }: { children: ReactNode }) {
@@ -771,130 +603,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     broadcast: () => void broadcastSharedUpdate(),
   });
 
-  const saveMealLogs = useCallback(async (
-    entries: Array<{ memberId: string; count: number }>,
-    dateStr: string,
-    cycleId?: string,
-  ) => {
-    if (!userId || !messId) return;
-    if (entries.length === 0) return;
-
-    const targetCycleId = getRequiredCycleId(cycleId);
-    if (!targetCycleId) return;
-
-    // ── Offline path ──────────────────────────────────────────────────────────
-    if (!navigator.onLine) {
-      const tempId = `offline-${uuidv4()}`;
-      setAllMealLogs((prev) => {
-        let next = [...prev];
-        for (const entry of entries) {
-          const normalizedCount = Number.isNaN(entry.count) ? 0 : entry.count;
-          const existingIdx = next.findIndex(
-            (log) => log.memberId === entry.memberId && log.date === dateStr && log.cycleId === targetCycleId,
-          );
-          if (existingIdx !== -1) {
-            if (normalizedCount === 0) {
-              next = next.filter((_, i) => i !== existingIdx);
-            } else {
-              next = next.map((log, i) =>
-                i === existingIdx ? { ...log, count: normalizedCount } : log,
-              );
-            }
-          } else if (normalizedCount > 0) {
-            next = [
-              ...next,
-              {
-                id: `offline-meal-${uuidv4()}`,
-                cycleId: targetCycleId,
-                memberId: entry.memberId,
-                date: dateStr,
-                count: normalizedCount,
-              },
-            ];
-          }
-        }
-        return next;
-      });
-      setPendingSyncIds((prev) => new Set(prev).add(tempId));
-      await enqueue({
-        id: tempId,
-        type: 'ADD_MEAL_LOG',
-        payload: { entries, dateStr, cycleId: targetCycleId, userId, messId },
-        createdAt: Date.now(),
-      });
-      return;
-    }
-
-    const memberIds = Array.from(new Set(entries.map((entry) => entry.memberId)));
-    const { data: existingLogs, error: existingLogsError } = await supabase
-      .from('meal_logs')
-      .select('member_id, count')
-      .eq('cycle_id', targetCycleId)
-      .eq('date', dateStr)
-      .in('member_id', memberIds);
-
-    if (existingLogsError) {
-      console.error('Error loading existing meal logs for changelog:', existingLogsError);
-      throw new Error('Unable to compare existing meal logs. Please try again.');
-    }
-
-    const previousCounts = new Map(
-      (existingLogs ?? []).map((log) => [log.member_id, Number(log.count)]),
-    );
-    const sortedMealLogChanges = entries
-      .map((entry) => {
-        const nextCount = Number.isNaN(entry.count) ? 0 : entry.count;
-        return buildUpdateChange(
-          `member:${entry.memberId}`,
-          getMemberName(entry.memberId, targetCycleId),
-          previousCounts.get(entry.memberId) ?? 0,
-          nextCount,
-        );
-      })
-      .filter((change): change is ChangelogChange => Boolean(change))
-      .sort((left, right) => left.label.localeCompare(right.label));
-
-    if (sortedMealLogChanges.length === 0) return;
-
-    const changedMemberIds = new Set(sortedMealLogChanges.map((change) => change.field.slice('member:'.length)));
-    const rows = entries.filter((entry) => changedMemberIds.has(entry.memberId)).map((entry) => ({
-      member_id: entry.memberId,
-      cycle_id: targetCycleId,
-      date: dateStr,
-      count: Number.isNaN(entry.count) ? 0 : entry.count,
-      user_id: userId,
-      mess_id: messId,
-    }));
-    const { data, error } = await supabase
-      .from('meal_logs')
-      .upsert(rows, { onConflict: 'member_id,date,cycle_id' })
-      .select();
-
-    if (error) {
-      console.error('Error upserting meal logs:', error);
-      throw new Error('Unable to save meal log. Please try again.');
-    }
-
-    const savedLogs = (data ?? []) as Array<{ id: string; cycle_id: string; member_id: string; date: string; count: number }>;
-    setAllMealLogs((prev) => [
-      ...prev.filter((log) => !rows.some((row) => log.memberId === row.member_id && log.date === row.date && log.cycleId === row.cycle_id)),
-      ...savedLogs.map((log) => ({ id: log.id, cycleId: log.cycle_id, memberId: log.member_id, date: log.date, count: Number(log.count) })),
-    ]);
-
-    await recordChangelog({
-      cycleId: targetCycleId,
-      entityType: 'meal_log',
-      entityId: targetCycleId,
-      action: getMealLogAction(sortedMealLogChanges),
-      title: `Updated meal log for ${sortedMealLogChanges.length} ${sortedMealLogChanges.length === 1 ? 'member' : 'members'}`,
-      changes: [
-        buildSnapshotChange('date', 'Date', dateStr),
-        buildSnapshotChange('members_changed', 'Members Changed', sortedMealLogChanges.length),
-        ...sortedMealLogChanges,
-      ],
-    });
-    void broadcastSharedUpdate();
-  }, [userId, messId, getRequiredCycleId, getMemberName, recordChangelog]);
+  const saveMealLogsForReplayRef = useRef<MealActionsContextType["saveMealLogs"]>(async () => {});
 
   const replayOp = useCallback(async (op: OfflineOp) => {
     if (!userId || !messId) throw new Error('Not authenticated');
@@ -1011,11 +720,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
         entries: Array<{ memberId: string; count: number }>;
         dateStr: string; cycleId: string; userId: string; messId: string;
       };
-      await saveMealLogs(p.entries, p.dateStr, p.cycleId);
+      await saveMealLogsForReplayRef.current(p.entries, p.dateStr, p.cycleId);
       setAllMealLogs((prev) => prev.filter((log) => !log.id.startsWith('offline-')));
       return;
     }
-  }, [userId, messId, recordChangelog, getMemberName, saveMealLogs]);
+  }, [userId, messId, recordChangelog, getMemberName]);
 
   const pendingItemId = useCallback((operation: OfflineOp) => (
     (operation.type === 'UPDATE_EXPENSE' || operation.type === 'DELETE_EXPENSE') &&
@@ -1079,6 +788,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     recordChange: recordChangelog,
     broadcast: () => void broadcastSharedUpdate(),
   });
+  saveMealLogsForReplayRef.current = mealLogActions.saveMealLogs;
 
   const cycleActions = useCycles({
     userId,
