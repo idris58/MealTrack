@@ -4,10 +4,12 @@ import {
   dequeueAll,
   removeFromQueue,
   updateQueuedOp,
+  type OfflineQueueScope,
   type OfflineOp,
 } from '@/lib/offline-queue';
 
 type UseOfflineSyncOptions = {
+  scope: OfflineQueueScope | null;
   replay: (operation: OfflineOp) => Promise<void>;
   afterSync: () => void;
   pendingItemId: (operation: OfflineOp) => string;
@@ -18,6 +20,7 @@ type UseOfflineSyncOptions = {
  * the owning action hook; this hook only handles queue lifecycle and retries.
  */
 export function useOfflineSync({
+  scope,
   replay,
   afterSync,
   pendingItemId,
@@ -27,7 +30,7 @@ export function useOfflineSync({
   const syncingRef = useRef(false);
 
   useEffect(() => {
-    void dequeueAll()
+    void dequeueAll(scope ?? undefined)
       .then((operations) => {
         setPendingSyncIds(new Set(
           operations
@@ -41,14 +44,15 @@ export function useOfflineSync({
       .catch(() => {
         // IndexedDB can be unavailable in private browsing; the app remains usable online.
       });
-  }, [pendingItemId]);
+  }, [pendingItemId, scope?.userId, scope?.messId]);
 
   const triggerSync = useCallback(async () => {
     if (syncingRef.current) return;
     syncingRef.current = true;
 
     try {
-      const operations = (await dequeueAll()).filter(
+      if (!scope) return;
+      const operations = (await dequeueAll(scope)).filter(
         (operation) => operation.status !== 'failed' && operation.status !== 'conflict',
       );
 
@@ -97,10 +101,17 @@ export function useOfflineSync({
     } finally {
       syncingRef.current = false;
     }
-  }, [afterSync, pendingItemId, replay]);
+  }, [afterSync, pendingItemId, replay, scope]);
+
+  // Replay operations left behind by a previous PWA session on startup.
+  useEffect(() => {
+    if (!scope || !navigator.onLine) return;
+    void triggerSync();
+  }, [scope?.userId, scope?.messId, triggerSync]);
 
   const retryFailedSync = useCallback(async () => {
-    const operations = await dequeueAll();
+    if (!scope) return;
+    const operations = await dequeueAll(scope);
     for (const operation of operations.filter((item) => item.status === 'failed')) {
       await updateQueuedOp({
         ...operation,
@@ -112,10 +123,11 @@ export function useOfflineSync({
     }
     setFailedSyncOps((previous) => previous.filter((operation) => operation.status === 'conflict'));
     await triggerSync();
-  }, [pendingItemId, triggerSync]);
+  }, [pendingItemId, scope, triggerSync]);
 
   const discardFailedSync = useCallback(async (id: string) => {
-    const operation = (await dequeueAll()).find((item) => item.id === id);
+    if (!scope) return;
+    const operation = (await dequeueAll(scope)).find((item) => item.id === id);
     if (!operation) return;
 
     await removeFromQueue(id);
@@ -126,7 +138,7 @@ export function useOfflineSync({
     });
     setFailedSyncOps((previous) => previous.filter((item) => item.id !== id));
     afterSync();
-  }, [afterSync, pendingItemId]);
+  }, [afterSync, pendingItemId, scope]);
 
   return {
     pendingSyncIds,

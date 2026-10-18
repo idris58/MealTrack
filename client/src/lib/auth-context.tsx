@@ -9,6 +9,7 @@ import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/lib/supabase";
 import { cleanupPushSubscriptionOnLogout } from "@/lib/push-notifications";
+import { clearOfflineData } from "@/lib/offline-queue";
 
 interface AuthContextValue {
   session: Session | null;
@@ -206,10 +207,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // ignore push cleanup errors on logout
       }
+      try {
+        await clearOfflineData();
+      } catch {
+        // Keep logout available if IndexedDB is blocked or unavailable.
+      }
       const { error } = await supabase.auth.signOut({ scope: "local" });
 
       if (error) {
         throw error;
+      }
+      try {
+        await clearOfflineData();
+      } catch {
+        // A concurrent snapshot write must not survive a successful logout.
       }
     },
     refreshProfile: fetchProfile,

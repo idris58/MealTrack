@@ -17,6 +17,8 @@ type Options = {
   recordChange: (input: { cycleId: string; entityType: 'deposit'; entityId: string; action: 'update'; title: string; changes: ChangelogChange[] }) => Promise<void>;
   broadcast: () => void;
 };
+const isNetworkError = (error: { message?: string; status?: number }) =>
+  error.status === 0 || /fetch|network|connection|offline|load failed/i.test(error.message ?? '');
 
 export function useDeposits({ userId, messId, deposits, setDeposits, setPendingSyncIds, getCycleId, getMemberName, recordChange, broadcast }: Options) {
   const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string) => {
@@ -28,6 +30,7 @@ export function useDeposits({ userId, messId, deposits, setDeposits, setPendingS
       .filter((deposit) => deposit.cycleId === targetCycleId && deposit.memberId === memberId)
       .reduce((total, deposit) => total + deposit.amount, 0);
 
+    const recordId = uuidv4();
     if (!navigator.onLine) {
       const id = `offline-${uuidv4()}`;
       setDeposits((previous) => [...previous, {
@@ -37,16 +40,25 @@ export function useDeposits({ userId, messId, deposits, setDeposits, setPendingS
       await enqueue({
         id,
         type: 'ADD_DEPOSIT',
-        payload: { memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId },
+        payload: { recordId, memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId },
         createdAt: Date.now(),
       });
       return;
     }
 
-    const { data, error } = await supabase.from('cycle_deposits').insert([{
-      member_id: memberId, cycle_id: targetCycleId, amount, note: note ?? null, user_id: userId, mess_id: messId,
-    }]).select().single();
-    if (error) throw new Error('Unable to add deposit. Please try again.');
+    const { data, error } = await supabase.from('cycle_deposits').upsert([{
+      id: recordId, member_id: memberId, cycle_id: targetCycleId, amount, note: note ?? null, user_id: userId, mess_id: messId,
+    }], { onConflict: 'id' }).select().single();
+    if (error) {
+      if (isNetworkError(error)) {
+        const id = `offline-${uuidv4()}`;
+        setDeposits((previous) => [...previous, { id, cycleId: targetCycleId, memberId, amount, note: note ?? undefined, createdAt: new Date().toISOString() }]);
+        setPendingSyncIds((previous) => new Set(previous).add(id));
+        await enqueue({ id, type: 'ADD_DEPOSIT', payload: { recordId, memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId }, createdAt: Date.now() });
+        return;
+      }
+      throw new Error('Unable to add deposit. Please try again.');
+    }
 
     setDeposits((previous) => [...previous, {
       id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount),

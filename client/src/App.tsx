@@ -246,7 +246,7 @@ const legacyMainRouteMap: Record<string, string> = {
 };
 
 function AppShell() {
-  const { session, loading, lastAuthEvent, profile, profileLoading, profileError, refreshProfile } = useAuth();
+  const { session, loading, lastAuthEvent, profile, profileLoading, profileError, refreshProfile, signOut } = useAuth();
   const [location, setLocation] = useLocation();
   const routePath = location.split("?")[0];
   const [isSharedLandingRoute] = useRoute("/shared");
@@ -436,7 +436,7 @@ function AppShell() {
           <p className="text-sm text-muted-foreground">{profileError}</p>
           <div className="flex justify-center gap-2">
             <Button onClick={() => void refreshProfile()}>Try again</Button>
-            <Button variant="outline" onClick={() => void supabase.auth.signOut({ scope: "local" })}>Sign out</Button>
+            <Button variant="outline" onClick={() => void signOut()}>Sign out</Button>
           </div>
         </div>
       </div>

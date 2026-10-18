@@ -26,6 +26,12 @@ export interface OfflineOp {
   lastError?: string;
 }
 
+export type OfflineQueueScope = { userId: string; messId: string };
+
+function belongsToScope(op: OfflineOp, scope: OfflineQueueScope): boolean {
+  return op.payload.userId === scope.userId && op.payload.messId === scope.messId;
+}
+
 const DB_NAME = 'mealtrack-offline';
 const STORE_NAME = 'sync-queue';
 export const OFFLINE_DB_VERSION = 2;
@@ -70,14 +76,46 @@ export async function enqueue(op: OfflineOp): Promise<void> {
 }
 
 /** Return all queued operations, oldest first. */
-export async function dequeueAll(): Promise<OfflineOp[]> {
+export async function dequeueAll(scope?: OfflineQueueScope): Promise<OfflineOp[]> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const req = tx.objectStore(STORE_NAME).getAll();
     req.onsuccess = () =>
-      resolve((req.result as OfflineOp[]).sort((a, b) => a.createdAt - b.createdAt));
+      resolve((req.result as OfflineOp[])
+        .filter((op) => !scope || belongsToScope(op, scope))
+        .sort((a, b) => a.createdAt - b.createdAt));
     req.onerror = () => reject(req.error);
+  });
+}
+
+/** Remove the signed-out user's queue and cached snapshot. */
+export async function clearOfflineData(userId?: string, messId?: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const stores = ['sync-queue', 'data-cache'];
+    const tx = db.transaction(stores, 'readwrite');
+    if (userId && messId) {
+      const queue = tx.objectStore('sync-queue');
+      const request = queue.getAll();
+      request.onsuccess = () => {
+        for (const op of request.result as OfflineOp[]) {
+          if (belongsToScope(op, { userId, messId })) queue.delete(op.id);
+        }
+      };
+      const cache = tx.objectStore('data-cache');
+      const cacheRequest = cache.getAllKeys();
+      cacheRequest.onsuccess = () => {
+        for (const key of cacheRequest.result) {
+          if (typeof key === 'string' && key.startsWith(`mealtrack-data-cache-${userId}-${messId}`)) cache.delete(key);
+        }
+      };
+    } else {
+      tx.objectStore('sync-queue').clear();
+      tx.objectStore('data-cache').clear();
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 

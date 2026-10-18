@@ -700,6 +700,23 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
   }, [userId, messId, fetchCycleRows]);
 
+  React.useEffect(() => {
+    if (!userId || !messId || !hasLoadedDataRef.current) return;
+    const cacheKey = `mealtrack-data-cache-${userId}-${messId}`;
+    void writeOfflineSnapshot(cacheKey, {
+      members: memberRoster,
+      archivedMembers: archivedMemberRoster,
+      cycles,
+      deposits: allDeposits,
+      expenses: allExpenses,
+      mealLogs: allMealLogs,
+      changelog: allChangelogEntries,
+      loadedCycleIds: Array.from(loadedCycleIds),
+    }).catch(() => {
+      // Snapshot persistence is best effort; live app state remains available.
+    });
+  }, [userId, messId, memberRoster, archivedMemberRoster, cycles, allDeposits, allExpenses, allMealLogs, allChangelogEntries, loadedCycleIds]);
+
   const clearDataError = useCallback(() => {
     setDataError(null);
   }, []);
@@ -872,15 +889,19 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
   const replayOp = useCallback(async (op: OfflineOp) => {
     if (!userId || !messId) throw new Error('Not authenticated');
+    if (op.payload.userId !== userId || op.payload.messId !== messId) {
+      throw new Error('This offline change belongs to a different account or mess. Sign in with its original account to sync it.');
+    }
 
     if (op.type === 'ADD_EXPENSE') {
       const p = op.payload as {
         amount: number; description: string; type: 'meal' | 'fixed';
-        paidBy: string; date: string; userId: string; messId: string; cycleId: string;
+        recordId?: string; paidBy: string; date: string; userId: string; messId: string; cycleId: string;
       };
       const { data, error } = await supabase
         .from('expenses')
-        .insert([{
+        .upsert([{
+          id: p.recordId ?? op.id.slice('offline-'.length),
           amount: p.amount,
           description: p.description,
           type: p.type,
@@ -889,7 +910,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           user_id: userId,
           mess_id: messId,
           cycle_id: p.cycleId,
-        }])
+        }], { onConflict: 'id' })
         .select()
         .single();
       if (error) throw error;
@@ -947,18 +968,19 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     if (op.type === 'ADD_DEPOSIT') {
       const p = op.payload as {
-        memberId: string; amount: number; cycleId: string; note: string | null; userId: string; messId: string;
+        recordId?: string; memberId: string; amount: number; cycleId: string; note: string | null; userId: string; messId: string;
       };
       const { data, error } = await supabase
         .from('cycle_deposits')
-        .insert([{
+        .upsert([{
+          id: p.recordId ?? op.id.slice('offline-'.length),
           member_id: p.memberId,
           cycle_id: p.cycleId,
           amount: p.amount,
           note: p.note,
           user_id: userId,
           mess_id: messId,
-        }])
+        }], { onConflict: 'id' })
         .select()
         .single();
       if (error) throw error;
@@ -998,6 +1020,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     void loadData();
   }, [loadData]);
 
+  const offlineScope = useMemo(() => userId && messId ? { userId, messId } : null, [userId, messId]);
+
   const {
     pendingSyncIds,
     setPendingSyncIds,
@@ -1006,6 +1030,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     retryFailedSync,
     discardFailedSync,
   } = useOfflineSync({
+    scope: offlineScope,
     replay: replayOp,
     afterSync: afterOfflineSync,
     pendingItemId,
