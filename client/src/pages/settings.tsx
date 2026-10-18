@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useLocation } from 'wouter';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Archive,
@@ -24,14 +23,12 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { addHours, format, formatDistanceToNow, isPast, parseISO } from 'date-fns';
+import { format, formatDistanceToNow, parseISO } from 'date-fns';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -52,13 +49,6 @@ import { cn } from '@/lib/utils';
 type ShareLinkConfig = {
   token: string;
   is_enabled: boolean;
-};
-
-type ActiveNotice = {
-  id: string;
-  title: string;
-  content: string;
-  expires_at: string;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ import { useAuth } from '@/lib/auth-context';
 import { RoleBadge } from '@/components/role-badge';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { PasswordStrengthIndicator, getPasswordStrength } from '@/components/password-strength-indicator';
+import { getPasswordStrength } from '@/components/password-strength-indicator';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -98,27 +98,11 @@ function UserProfileCard() {
     setMessage(null);
 
     try {
-      // 1. Try RPC function first (recommended & secure)
       const { error: rpcError } = await supabase.rpc('update_user_profile', {
         name_input: trimName,
         picture_url_input: trimUrl || null,
       });
-
-      if (rpcError) {
-        // 2. Fallback to direct table update if RPC is not yet created
-        const { error: tableError } = await supabase
-          .from('profiles')
-          .update({
-            full_name: trimName,
-            picture_url: trimUrl || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.id);
-
-        if (tableError) {
-          throw new Error(rpcError.message || tableError.message || 'Unable to update profile');
-        }
-      }
+      if (rpcError) throw rpcError;
 
       setMessage('Profile updated successfully.');
       setIsEditing(false);
@@ -473,7 +457,6 @@ function MessInfoCard() {
 // ─── Security Settings Card ───────────────────────────────────────────────────
 
 function SecuritySettingsCard() {
-  const { user } = useAuth();
   const [isChanging, setIsChanging] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

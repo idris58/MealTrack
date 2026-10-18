@@ -491,7 +491,7 @@ export async function sendNoticePushToMessMembers(
   }));
 
   const rowsForDelivery = (subs || []).filter((subscription: { user_id: string }) => eligibleUserIds.has(subscription.user_id)) as PushSubscriptionRow[];
-  const failedUserIds = await sendPushToRows(rowsForDelivery, {
+  await sendPushToRows(rowsForDelivery, {
     title: `📢 ${notice.title}`,
     body: truncateNotificationBody(notice.content),
     url: `/app`,
@@ -870,7 +870,7 @@ export async function sendMealLogReminders() {
   }
 
   const cycleIds = cycles.map((cycle) => cycle.id);
-  let mealLogsQuery = supabase
+  const mealLogsQuery = supabase
     .from("meal_logs")
     .select("cycle_id, mess_id, user_id")
     .in("cycle_id", cycleIds)

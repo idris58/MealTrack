@@ -1,42 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
 import { useMeal, Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ShoppingBag, Zap, ChartPie, Plus, Pencil, DollarSign, Search, Play, Settings2 } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ShoppingBag, Zap, ChartPie, Plus, Pencil, DollarSign, Search, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Calendar as CalendarIcon } from 'lucide-react';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { SyncBadge } from '@/components/sync-badge';
 import { ExpenseForm } from '@/components/expense-form';
-import { normalizeBengaliDigits } from '@/lib/localized-number';
 
 const DELETE_GRACE_MS = 10 * 1000;
-
-const expenseSchema = z.object({
-  amount: z.preprocess(
-    (value) => typeof value === 'string'
-      ? normalizeBengaliDigits(value.trim()) || undefined
-      : value,
-    z.coerce.number({ invalid_type_error: 'Amount is required' }).positive('Amount must be greater than zero'),
-  ),
-  description: z.string().min(2, 'Description is required'),
-  type: z.enum(['meal', 'fixed']),
-  paidBy: z.string().min(2, 'Shopper name is required'),
-});
 
 type DeletedExpenseGhost = {
   expense: Expense;
@@ -78,200 +56,6 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
         </div>
       </div>
     </div>
-  );
-}
-
-function ExpenseEditor({
-  expense,
-  onClose,
-  onDeleted,
-}: {
-  expense?: Expense | null;
-  onClose: () => void;
-  onDeleted?: (expense: Expense) => void;
-}) {
-  const { addExpense, updateExpense, deleteExpense } = useMeal();
-  const [date, setDate] = useState<Date>(expense ? parseISO(expense.date) : new Date());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const form = useForm<z.infer<typeof expenseSchema>>({
-    resolver: zodResolver(expenseSchema),
-    defaultValues: {
-      amount: expense?.amount,
-      description: expense?.description ?? '',
-      type: expense?.type ?? 'meal',
-      paidBy: expense?.paidBy ?? '',
-    },
-  });
-
-  useEffect(() => {
-    form.reset({
-      amount: expense?.amount,
-      description: expense?.description ?? '',
-      type: expense?.type ?? 'meal',
-      paidBy: expense?.paidBy ?? '',
-    });
-    setDate(expense ? parseISO(expense.date) : new Date());
-  }, [expense, form]);
-
-  const onSubmit = async (data: z.infer<typeof expenseSchema>) => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      if (expense) {
-        await updateExpense(expense.id, { ...data, date: format(date, 'yyyy-MM-dd') });
-      } else {
-        await addExpense(data.amount, data.description, data.type, data.paidBy, undefined, format(date, 'yyyy-MM-dd'));
-      }
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!expense || isDeleting) return;
-    setIsDeleting(true);
-    try {
-      await deleteExpense(expense.id);
-      onDeleted?.(expense);
-      onClose();
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-        <FormField
-          control={form.control}
-          name="type"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Expense Type</FormLabel>
-              <FormControl>
-                <div role="radiogroup" aria-label="Expense type" className="grid grid-cols-2 rounded-xl border bg-muted/40 p-1">
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={field.value === 'meal'}
-                    onClick={() => field.onChange('meal')}
-                    className={cn('rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors', field.value === 'meal' ? 'bg-emerald-600 text-white shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground')}
-                  >
-                    <ShoppingBag className="mr-1.5 inline-block h-4 w-4" />Meal
-                    <span className="ml-1 hidden text-xs font-normal opacity-80 sm:inline">(Food)</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={field.value === 'fixed'}
-                    onClick={() => field.onChange('fixed')}
-                    className={cn('rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors', field.value === 'fixed' ? 'bg-slate-700 text-white shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground')}
-                  >
-                    <Zap className="mr-1.5 inline-block h-4 w-4" />Fixed
-                    <span className="ml-1 hidden text-xs font-normal opacity-80 sm:inline">(Bills)</span>
-                  </button>
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl><Input placeholder="e.g., Rice, WiFi Bill" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Date</label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className={cn('w-full justify-start text-left font-normal', !date && 'text-muted-foreground')}>
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date ? format(date, 'PPP') : <span>Pick a date</span>}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[18rem] rounded-xl border bg-card p-0 shadow-2xl" align="center">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={(nextDate) => {
-                  if (nextDate) {
-                    setDate(nextDate);
-                    const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape' });
-                    document.dispatchEvent(escapeEvent);
-                  }
-                }}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-        <FormField
-          control={form.control}
-          name="amount"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Amount</FormLabel>
-              <FormControl>
-                <Input type="text" inputMode="decimal" placeholder="100" {...field} value={field.value ?? ''} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="paidBy"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Who Shopped?</FormLabel>
-              <FormControl><Input placeholder="Shopper's Name" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        {expense ? (
-          <div className="flex gap-3">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button type="button" variant="destructive" className="flex-1" disabled={isSubmitting || isDeleting}>
-                  Delete
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete this expense?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will remove the expense from the current cycle totals and expense list.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
-                    {isDeleting ? 'Deleting...' : 'Yes, Delete Expense'}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-            <Button type="submit" className="flex-1" disabled={isSubmitting || isDeleting}>
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        ) : (
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Adding...' : 'Add Expense'}
-          </Button>
-        )}
-      </form>
-    </Form>
   );
 }
 

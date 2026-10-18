@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 export function NotificationSettingsCard() {
   const { profile } = useAuth();
   const canManageMealReminders = profile?.role === 'manager' || profile?.role === 'coordinator';
-  const { supported, permission, hasSubscription, working, error, message, subscribe, refreshSubscriptionState } = usePushNotifications({ mode: 'main' });
+  const { supported, permission, error, message, subscribe, refreshSubscriptionState } = usePushNotifications({ mode: 'main' });
   const [reminderTime, setReminderTime] = useState('22:00');
   const [globalEnabled, setGlobalEnabled] = useState(true);
   const [noticesEnabled, setNoticesEnabled] = useState(true);

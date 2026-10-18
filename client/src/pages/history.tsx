@@ -172,20 +172,6 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
     (total, member) => total + Math.abs(cleanCurrencyFloat(member.balance)),
     0,
   );
-  const memberMealTotals = useMemo(() => {
-    const totals = new Map<string, number>();
-
-    for (const member of details.members) {
-      totals.set(member.id, 0);
-    }
-
-    for (const log of details.mealLogs) {
-      totals.set(log.memberId, (totals.get(log.memberId) ?? 0) + log.count);
-    }
-
-    return totals;
-  }, [details.mealLogs, details.members]);
-
   const days = useMemo(() => {
     if (details.mealLogs.length === 0) {
       return [startOfDay(new Date(details.cycle.closedAt || details.cycle.startedAt))];
@@ -808,7 +794,6 @@ function ClosedCycleCard({
                   {details.members.map((member) => {
                     const isSettled = Math.abs(member.balance) <= 1;
                     const isDue = member.balance < -1;
-                    const isRefund = member.balance > 1;
                     return (
                       <TableRow key={member.id} className="hover:bg-muted/30 transition-colors">
                         <TableCell>

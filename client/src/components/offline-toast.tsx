@@ -29,7 +29,6 @@ async function requestBackgroundSync() {
     if (!('serviceWorker' in navigator)) return;
     const reg = await navigator.serviceWorker.ready;
     // Background Sync API — not available on all browsers (Firefox, Safari)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const syncManager = (reg as any).sync as { register: (tag: string) => Promise<void> } | undefined;
     if (syncManager) {
       await syncManager.register('mealtrack-sync');

@@ -13,7 +13,7 @@ import {
   UtensilsCrossed,
   Zap,
 } from "lucide-react";
-import { eachDayOfInterval, format, isSameDay, max, min, parseISO, startOfDay } from "date-fns";
+import { eachDayOfInterval, format, max, min, parseISO, startOfDay } from "date-fns";
 import { useLocation } from "wouter";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -629,24 +629,6 @@ export default function SharedPage({ token }: { token: string }) {
         ? max([...logDates, startOfDay(new Date())])
         : max(logDates);
     return eachDayOfInterval({ start: startDate, end: endDate }).reverse();
-  }, [data]);
-
-  const memberMealTotals = useMemo(() => {
-    if (!data) {
-      return new Map<string, number>();
-    }
-
-    const totals = new Map<string, number>();
-
-    for (const member of data.members) {
-      totals.set(member.id, 0);
-    }
-
-    for (const log of data.mealLogs) {
-      totals.set(log.memberId, (totals.get(log.memberId) ?? 0) + log.count);
-    }
-
-    return totals;
   }, [data]);
 
   const visibleSummaryMembers = useMemo(() => {

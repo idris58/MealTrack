@@ -94,6 +94,16 @@ create table if not exists public.meal_logs (
   constraint meal_logs_member_id_date_cycle_key unique (member_id, date, cycle_id)
 );
 
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'meal_logs_count_nonnegative_check' and conrelid = 'public.meal_logs'::regclass) then
+    alter table public.meal_logs add constraint meal_logs_count_nonnegative_check check (count >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'expenses_amount_nonzero_check' and conrelid = 'public.expenses'::regclass) then
+    alter table public.expenses add constraint expenses_amount_nonzero_check check (amount <> 0);
+  end if;
+end $$;
+
 -- Requests describe future meal absences only. They never alter the actual
 -- meal_logs ledger, so an already-recorded lunch remains intact when a member
 -- requests dinner off later that day.

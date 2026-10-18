@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { format, startOfDay, startOfMonth, subDays, endOfDay } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import {
-  BadgeCheck,
   CalendarIcon,
   ClipboardCopy,
   Download,
@@ -13,9 +12,7 @@ import {
   Play,
   Share2,
   ShoppingBag,
-  Users,
   Utensils,
-  Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -26,7 +23,6 @@ import { toast } from 'sonner';
 import { useMeal } from '@/lib/meal-context';
 import { computeCycleMath } from '@shared/cycle-math';
 import { useAuth } from '@/lib/auth-context';
-import { cn } from '@/lib/utils';
 import { Link, useLocation } from 'wouter';
 
 type ReportMember = { id: string; name: string; meals: number; deposit: number; bill: number; balance: number };
@@ -104,19 +100,6 @@ function isDateInFilterRange(dateStr: string, fromDate: Date, toDate: Date, from
 }
 
 // ── Statement stat cell (ledger-bar segment) ──────────────────────────────────
-function StatCell({ label, value, isLoading, accent }: { label: string; value: string; isLoading?: boolean; accent?: string }) {
-  return (
-    <div className="flex flex-col justify-center px-4 py-4 sm:px-6 sm:py-5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.13em]" style={{ color: `${INK}96` }}>{label}</p>
-      {isLoading ? (
-        <Skeleton className="mt-2 h-6 w-20" />
-      ) : (
-        <p className="mt-1 font-heading text-xl font-bold tabular-nums sm:text-[1.45rem]" style={{ color: accent ?? INK }}>{value}</p>
-      )}
-    </div>
-  );
-}
-
 // ── Meta strip cell (statement no / cycle / prepared by / members) ──────────
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
@@ -126,8 +109,6 @@ function MetaCell({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-type PresetKey = 'cycle' | '7d' | '30d' | 'month';
 
 export default function ReportsPage() {
   const { activeCycle, getCycleDetails, loading } = useMeal();
@@ -157,23 +138,6 @@ export default function ReportsPage() {
   const fromKey = fileDate(from); const toKey = fileDate(to);
   const generatedAt = useMemo(() => new Date(), [fromKey, toKey, details]);
 
-  const applyPreset = (preset: PresetKey) => {
-    const cycleStart = activeCycle?.startedAt ? startOfDay(new Date(activeCycle.startedAt)) : today;
-    if (preset === 'cycle') { setFrom(cycleStart); setTo(today); return; }
-    if (preset === '7d') { setFrom(startOfDay(subDays(today, 6))); setTo(today); return; }
-    if (preset === '30d') { setFrom(startOfDay(subDays(today, 29))); setTo(today); return; }
-    if (preset === 'month') { setFrom(startOfDay(startOfMonth(today))); setTo(today); return; }
-  };
-  const activePreset: PresetKey | null = useMemo(() => {
-    const cycleStart = activeCycle?.startedAt ? startOfDay(new Date(activeCycle.startedAt)) : today;
-    const toIsToday = fileDate(to) === fileDate(today);
-    if (!toIsToday) return null;
-    if (fileDate(from) === fileDate(cycleStart)) return 'cycle';
-    if (fileDate(from) === fileDate(startOfDay(subDays(today, 6)))) return '7d';
-    if (fileDate(from) === fileDate(startOfDay(subDays(today, 29)))) return '30d';
-    if (fileDate(from) === fileDate(startOfDay(startOfMonth(today)))) return 'month';
-    return null;
-  }, [from, to, activeCycle?.startedAt, today]);
 
   const report = useMemo(() => {
     const members = details?.members ?? [];
@@ -520,13 +484,6 @@ export default function ReportsPage() {
   };
   const run = async (task: () => Promise<void>) => { if (isGenerating) return; setIsGenerating(true); try { await task(); } catch (error) { console.error('Report generation failed:', error); toast.error('Could not create statement', { description: 'Please try again. If the issue continues, refresh the page.' }); } finally { setIsGenerating(false); } };
   const share = async (blob: Blob, name: string, type: string) => { const file = new File([blob], name, { type }); if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) { try { await navigator.share({ title: 'MealTrack statement', files: [file] }); } catch (error) { if ((error as DOMException).name !== 'AbortError') throw error; } return; } download(blob, name); toast.info('Statement downloaded', { description: 'Your browser does not support file sharing, so the statement was downloaded.' }); };
-
-  const presets: { key: PresetKey; label: string }[] = [
-    { key: 'cycle', label: 'Full cycle' },
-    { key: '7d', label: 'Last 7 days' },
-    { key: '30d', label: 'Last 30 days' },
-    { key: 'month', label: 'This month' },
-  ];
 
   return (
     <div className="space-y-6">

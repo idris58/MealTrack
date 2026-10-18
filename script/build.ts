@@ -22,7 +22,6 @@ const allowlist = [
   "web-push",
   "xlsx",
   "zod",
-  "zod-validation-error",
 ];
 
 async function buildAll() {

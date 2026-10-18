@@ -20,7 +20,7 @@ import React, {
 } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth-context';
-import { addHours, isPast, parseISO } from 'date-fns';
+import { isPast, parseISO } from 'date-fns';
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 

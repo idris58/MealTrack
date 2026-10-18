@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Utensils, UtensilsCrossed, Calendar as CalendarIcon, Users, Play, Settings2 } from 'lucide-react';
+import { Plus, Utensils, UtensilsCrossed, Users, Play } from 'lucide-react';
 import { format, eachDayOfInterval, parseISO, max, startOfDay } from 'date-fns';
 import { Link } from 'wouter';
 import { SyncBadge } from '@/components/sync-badge';

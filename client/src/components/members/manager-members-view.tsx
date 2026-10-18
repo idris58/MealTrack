@@ -339,10 +339,7 @@ export function ManagerMembersView() {
   useEffect(() => {
     let active = true;
     if (!user) return;
-    void Promise.all([
-      supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
-      supabase.from('profiles').select('id, full_name, email, role').order('full_name'),
-    ]).then(([selfResult, profilesResult]) => {
+    void supabase.from('profiles').select('id, full_name, email, role').order('full_name').then((profilesResult) => {
       if (!active) return;
       setProfiles((profilesResult.data ?? []).filter((profile) => profile.id !== user.id));
     });

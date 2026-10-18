@@ -164,7 +164,7 @@ function NotificationOnboardingToast() {
         handleDismiss();
       };
       toastId.current = toast.custom(
-        (id) => (
+        () => (
           <div className="pointer-events-auto w-full max-w-[calc(100vw-2rem)] sm:w-[360px] mx-auto overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl shadow-black/20 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/10">
             {/* gradient accent bar */}
             <div className="h-[3px] w-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500" />

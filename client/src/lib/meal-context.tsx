@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { v4 as uuidv4 } from 'uuid';
 import { supabase } from './supabase';
 import {
-  enqueue,
   type OfflineOp,
 } from './offline-queue';
 import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
@@ -27,14 +25,12 @@ import { useMealIdentity } from '@/hooks/use-meal-identity';
 import { useMealScopeLoader } from '@/hooks/use-meal-scope-loader';
 
 import type {
-  ChangelogAction,
   ChangelogActor,
   ChangelogChange,
   ChangelogEntry,
   ChangelogValue,
   Cycle,
   CycleDeposit,
-  CycleDetails,
   CycleStatus,
   Expense,
   MealActionsContextType,
@@ -50,7 +46,6 @@ export type {
   ChangelogChange,
   ChangelogEntityType,
   ChangelogEntry,
-  ChangelogValue,
   Cycle,
   CycleDeposit,
   CycleDetails,
@@ -61,8 +56,6 @@ export type {
   MealDataContextType,
   MealLog,
   Member,
-  MemberStats,
-  SnapshotMember,
 } from './meal-types';
 
 export const MealDataContext = createContext<MealDataContextType | undefined>(undefined);
