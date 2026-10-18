@@ -28,7 +28,7 @@ export default defineConfig({
       ],
       manifest: false,
       injectManifest: {
-        globPatterns: ["**/*.{js,css,html,png,jpg,jpeg,svg,webmanifest,woff2}"],
+        globPatterns: ["**/*.{js,css,html,png,jpg,jpeg,svg,webmanifest,woff2,ttf}"],
         // Keep the initial app shell available offline, while report exporters
         // are fetched only when a user asks to export a report.
         maximumFileSizeToCacheInBytes: 768 * 1024,

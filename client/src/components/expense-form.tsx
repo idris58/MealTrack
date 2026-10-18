@@ -14,10 +14,13 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { runMutation } from '@/lib/run-mutation';
+import { normalizeBengaliDigits } from '@/lib/localized-number';
 
 const expenseFields = z.object({
   amount: z.preprocess(
-    (value) => value === '' ? undefined : value,
+    (value) => typeof value === 'string'
+      ? normalizeBengaliDigits(value.trim()) || undefined
+      : value,
     z.coerce.number({ invalid_type_error: 'Amount is required' }),
   ),
   description: z.string().min(2, 'Description is required'),

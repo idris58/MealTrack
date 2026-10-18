@@ -22,12 +22,15 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { SyncBadge } from '@/components/sync-badge';
 import { ExpenseForm } from '@/components/expense-form';
+import { normalizeBengaliDigits } from '@/lib/localized-number';
 
 const DELETE_GRACE_MS = 10 * 1000;
 
 const expenseSchema = z.object({
   amount: z.preprocess(
-    (value) => value === '' ? undefined : value,
+    (value) => typeof value === 'string'
+      ? normalizeBengaliDigits(value.trim()) || undefined
+      : value,
     z.coerce.number({ invalid_type_error: 'Amount is required' }).positive('Amount must be greater than zero'),
   ),
   description: z.string().min(2, 'Description is required'),

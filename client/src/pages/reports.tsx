@@ -231,6 +231,15 @@ export default function ReportsPage() {
     const sandRgb: [number, number, number] = [188, 158, 96];
 
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const bengaliFontResponse = await fetch('/fonts/HindSiliguri-Regular.ttf');
+    if (!bengaliFontResponse.ok) throw new Error('Could not load the Bengali font for the PDF export.');
+    const bengaliFontBytes = new Uint8Array(await bengaliFontResponse.arrayBuffer());
+    let bengaliFontBinary = '';
+    for (let offset = 0; offset < bengaliFontBytes.length; offset += 0x8000) {
+      bengaliFontBinary += String.fromCharCode(...Array.from(bengaliFontBytes.subarray(offset, offset + 0x8000)));
+    }
+    doc.addFileToVFS('HindSiliguri-Regular.ttf', btoa(bengaliFontBinary));
+    doc.addFont('HindSiliguri-Regular.ttf', 'HindSiliguri', 'normal');
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 40;
 
@@ -354,7 +363,7 @@ export default function ReportsPage() {
       footStyles: { fillColor: paperRgb, textColor: inkRgb, fontStyle: 'bold', fontSize: 9.5, cellPadding: { top: 10, bottom: 10, left: 10, right: 10 }, lineColor: goldRgb, lineWidth: { top: 1.2 } },
       alternateRowStyles: { fillColor: [246, 244, 238] },
       styles: { fontSize: 9.5, cellPadding: { top: 9, bottom: 9, left: 10, right: 10 }, textColor: [30, 41, 37], lineColor: [232, 228, 217], lineWidth: { bottom: 0.5 } },
-      columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right', textColor: [176, 58, 46] }, 5: { halign: 'right', textColor: [15, 118, 90] } },
+      columnStyles: { 0: { font: 'HindSiliguri', fontStyle: 'normal' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right', textColor: [176, 58, 46] }, 5: { halign: 'right', textColor: [15, 118, 90] } },
       margin: { left: margin, right: margin, bottom: 56 },
     });
 

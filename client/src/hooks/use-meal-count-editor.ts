@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 
 import { useMeal, type MealLog, type Member } from '@/lib/meal-context';
 import { runMutation } from '@/lib/run-mutation';
+import { normalizeBengaliDigits } from '@/lib/localized-number';
 
 type MealCountEditorOptions = {
   members: Pick<Member, 'id'>[];
@@ -12,7 +13,7 @@ type MealCountEditorOptions = {
   onSave?: () => void;
 };
 
-const validMealCount = /^\d*\.?\d*$/;
+const validMealCount = /^[0-9\u09E6-\u09EF]*\.?[0-9\u09E6-\u09EF]*$/;
 
 export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, onSave }: MealCountEditorOptions) {
   const { saveMealLogs } = useMeal();
@@ -34,7 +35,7 @@ export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, on
 
   const updateCount = (memberId: string, delta: number) => {
     setMealCounts((previous) => {
-      const current = Number.parseFloat(previous[memberId] || '0');
+      const current = Number.parseFloat(normalizeBengaliDigits(previous[memberId] || '0'));
       return { ...previous, [memberId]: String(Math.max(0, (Number.isFinite(current) ? current : 0) + delta)) };
     });
   };
@@ -49,7 +50,7 @@ export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, on
     try {
       await runMutation(async () => {
         await saveMealLogs(
-          members.map((member) => ({ memberId: member.id, count: Math.max(0, Number.parseFloat(mealCounts[member.id] || '0') || 0) })),
+          members.map((member) => ({ memberId: member.id, count: Math.max(0, Number.parseFloat(normalizeBengaliDigits(mealCounts[member.id] || '0')) || 0) })),
           format(date, 'yyyy-MM-dd'),
           cycleId,
         );
