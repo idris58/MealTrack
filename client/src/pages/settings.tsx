@@ -83,10 +83,10 @@ function formatMealCount(value: number) {
 
 // ── Section Navigation ───────────────────────────────────────────────────────
 
-function SettingsNavigation({ canManageCycles }: { canManageCycles: boolean }) {
+function SettingsNavigation({ canManageCycles, canViewSharing }: { canManageCycles: boolean; canViewSharing: boolean }) {
   const items = [
     ...(canManageCycles ? [{ href: '#cycle-operations', icon: RefreshCcw, label: 'Cycle' }] : []),
-    ...(canManageCycles ? [{ href: '#public-access', icon: Share2, label: 'Sharing' }] : []),
+    ...(canViewSharing ? [{ href: '#public-access', icon: Share2, label: 'Sharing' }] : []),
     { href: '#notice-board', icon: Megaphone, label: 'Notices' },
     { href: '#notifications', icon: BellRing, label: 'Alerts' },
   ];
@@ -567,7 +567,7 @@ function CycleManagementCard() {
 
 // ── Share Settings Card ───────────────────────────────────────────────────────
 
-function ShareSettingsCard() {
+function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) {
   const { user, profile } = useAuth();
   const [config, setConfig] = useState<ShareLinkConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -601,7 +601,7 @@ function ShareSettingsCard() {
   const mealCode = config?.token ?? '';
 
   const upsertConfig = async (nextConfig: ShareLinkConfig) => {
-    if (!user?.id || working) return null;
+    if (!canManageSharing || !user?.id || working) return null;
     setWorking(true); setError(null); setMessage(null);
     try {
       const payload: Record<string, any> = { user_id: user.id, profile_id: user.id, token: nextConfig.token, is_enabled: nextConfig.is_enabled, updated_at: new Date().toISOString() };
@@ -673,9 +673,11 @@ function ShareSettingsCard() {
               </p>
             )}
           </div>
-          <Button variant={config?.is_enabled ? 'outline' : 'default'} size="sm" onClick={config?.is_enabled ? handleDisableSharing : handleEnableSharing} disabled={loading || working}>
-            {config?.is_enabled ? 'Disable' : 'Enable Share'}
-          </Button>
+          {canManageSharing ? (
+            <Button variant={config?.is_enabled ? 'outline' : 'default'} size="sm" onClick={config?.is_enabled ? handleDisableSharing : handleEnableSharing} disabled={loading || working}>
+              {config?.is_enabled ? 'Disable' : 'Enable Share'}
+            </Button>
+          ) : null}
         </div>
         <div className="space-y-2">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Public Link</label>
@@ -699,7 +701,9 @@ function ShareSettingsCard() {
           ) : (
             <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled><ExternalLink className="h-3.5 w-3.5" />Open Shared View</Button>
           )}
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleRegenerate} disabled={loading || working}><RefreshCcw className="h-3.5 w-3.5" />Regenerate Link</Button>
+          {canManageSharing ? (
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleRegenerate} disabled={loading || working}><RefreshCcw className="h-3.5 w-3.5" />Regenerate Link</Button>
+          ) : null}
         </div>
         {message && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">{message}</p>}
         {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">{error}</p>}
@@ -832,6 +836,7 @@ export default function SettingsPage() {
   const { profile, canManageCycles } = useAuth();
   const isMember = profile?.role === 'member';
   const isManager = profile?.role === 'manager';
+  const canViewSharing = isManager || profile?.role === 'coordinator';
 
   if (isMember) {
     return (
@@ -871,7 +876,7 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <SettingsNavigation canManageCycles={canManageCycles} />
+      <SettingsNavigation canManageCycles={canManageCycles} canViewSharing={canViewSharing} />
 
       {canManageCycles && (
         <section id="cycle-operations" className="scroll-mt-20">
@@ -880,9 +885,9 @@ export default function SettingsPage() {
       )}
 
       <div className="grid gap-8 lg:grid-cols-2 lg:gap-6">
-        {isManager ? (
+        {canViewSharing ? (
           <section id="public-access" className="scroll-mt-20">
-            <ShareSettingsCard />
+            <ShareSettingsCard canManageSharing={isManager} />
           </section>
         ) : null}
 
