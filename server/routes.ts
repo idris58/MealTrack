@@ -380,7 +380,7 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
     return null;
   }
 
-  const [membersResult, depositsResult, expensesResult, mealLogsResult, activeNotice] =
+  const [membersResult, depositsResult, expensesResult, activeNotice] =
     await Promise.all([
       supabaseAdmin
         .from("members")
@@ -401,12 +401,6 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
         .eq("cycle_id", cycle.id)
         .is("deleted_at", null)
         .order("date", { ascending: false }),
-      supabaseAdmin
-        .from("meal_logs")
-        .select("id, cycle_id, date, member_id, count")
-        .eq(...scopeFilter(scope))
-        .eq("cycle_id", cycle.id)
-        .order("date", { ascending: false }),
       getActiveNoticeForScope(scope),
     ]);
 
@@ -422,8 +416,21 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
     throw expensesResult.error;
   }
 
-  if (mealLogsResult.error) {
-    throw mealLogsResult.error;
+  const mealLogRows: MealLogRow[] = [];
+  const mealLogPageSize = 1000;
+  for (let offset = 0; ; offset += mealLogPageSize) {
+    const { data, error } = await supabaseAdmin
+      .from("meal_logs")
+      .select("id, cycle_id, date, member_id, count")
+      .eq(...scopeFilter(scope))
+      .eq("cycle_id", cycle.id)
+      .order("date", { ascending: false })
+      .order("id", { ascending: true })
+      .range(offset, offset + mealLogPageSize - 1);
+    if (error) throw error;
+    const page = (data || []) as MealLogRow[];
+    mealLogRows.push(...page);
+    if (page.length < mealLogPageSize) break;
   }
 
   return {
@@ -432,7 +439,7 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
       membersResult.data || [],
       depositsResult.data || [],
       expensesResult.data || [],
-      mealLogsResult.data || [],
+      mealLogRows,
     ),
     activeNotice,
   };

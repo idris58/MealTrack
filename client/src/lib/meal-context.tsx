@@ -443,7 +443,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
-    const [depositsResult, expensesResult, mealLogsResult] = await Promise.all([
+    const [depositsResult, expensesResult] = await Promise.all([
       supabase
         .from('cycle_deposits')
         .select('*')
@@ -457,22 +457,31 @@ export function MealProvider({ children }: { children: ReactNode }) {
         .eq('cycle_id', cycleId)
         .is('deleted_at', null)
         .order('date', { ascending: false }),
-      supabase
-        .from('meal_logs')
-        .select('*')
-        .eq('mess_id', messId)
-        .eq('cycle_id', cycleId)
-        .order('date', { ascending: false }),
     ]);
 
     if (depositsResult.error) throw depositsResult.error;
     if (expensesResult.error) throw expensesResult.error;
-    if (mealLogsResult.error) throw mealLogsResult.error;
+    const mealLogRows: MealLogRow[] = [];
+    const mealLogPageSize = 1000;
+    for (let offset = 0; ; offset += mealLogPageSize) {
+      const { data, error } = await supabase
+        .from('meal_logs')
+        .select('*')
+        .eq('mess_id', messId)
+        .eq('cycle_id', cycleId)
+        .order('date', { ascending: false })
+        .order('id', { ascending: true })
+        .range(offset, offset + mealLogPageSize - 1);
+      if (error) throw error;
+      const page = (data || []) as MealLogRow[];
+      mealLogRows.push(...page);
+      if (page.length < mealLogPageSize) break;
+    }
 
     return {
       deposits: mapDepositRows((depositsResult.data || []) as CycleDepositRow[]),
       expenses: mapExpenseRows((expensesResult.data || []) as ExpenseRow[]),
-      mealLogs: mapMealLogRows((mealLogsResult.data || []) as MealLogRow[]),
+      mealLogs: mapMealLogRows(mealLogRows),
     };
   }, [userId, messId]);
 
