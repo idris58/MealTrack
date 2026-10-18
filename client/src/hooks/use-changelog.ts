@@ -27,7 +27,12 @@ export type ChangelogRow = {
     full_name: string;
     picture_url?: string | null;
     role?: string | null;
-  } | null;
+  } | Array<{
+    id: string;
+    full_name: string;
+    picture_url?: string | null;
+    role?: string | null;
+  }> | null;
 };
 
 export function mapChangelogRows(
@@ -111,7 +116,7 @@ export function useChangelog(
         title,
         changes,
       }])
-      .select('*, profiles(id, full_name, picture_url, role)')
+      .select('id, cycle_id, user_id, profile_id, entity_type, entity_id, action, title, changes, created_at, profiles(id, full_name, picture_url, role)')
       .single();
 
     if (error) {
@@ -137,7 +142,7 @@ export function useChangelog(
     try {
       let query = supabase
         .from('changelog_entries')
-        .select('*, profiles(id, full_name, picture_url, role)')
+        .select('id, cycle_id, user_id, profile_id, entity_type, entity_id, action, title, changes, created_at, profiles(id, full_name, picture_url, role)')
         .eq('mess_id', messId)
         .in('cycle_id', cycleIds);
       if (entityType !== 'all') query = query.eq('entity_type', entityType);

@@ -8,10 +8,7 @@ import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
 import { broadcastSharedUpdate } from './shared-update';
 import { triggerDepositPush } from './push-triggers';
 import {
-  CHANGELOG_PAGE_SIZE,
-  mapChangelogRows,
   useChangelog,
-  type ChangelogRow,
 } from '@/hooks/use-changelog';
 import { useOfflineSync } from '@/hooks/use-offline-sync';
 import { useMembers } from '@/hooks/use-members';
@@ -69,7 +66,6 @@ type MemberRow = {
   avatar: string | null;
   deleted_at?: string | null;
   delete_expires_at?: string | null;
-  sort_order?: number | null;
   profile_id?: string | null;
 };
 
@@ -81,8 +77,6 @@ type CycleRow = {
   closed_at: string | null;
   finalized_at: string | null;
   members_snapshot: SnapshotMember[] | null;
-  created_at: string;
-  deleted_at?: string | null;
 };
 
 type ExpenseRow = {
@@ -93,7 +87,6 @@ type ExpenseRow = {
   type: 'meal' | 'fixed';
   date: string;
   paid_by: string;
-  deleted_at?: string | null;
 };
 
 type MealLogRow = {
@@ -120,7 +113,7 @@ type MealDataSnapshot = {
   deposits: CycleDeposit[];
   expenses: Expense[];
   mealLogs: MealLog[];
-  changelog: ChangelogEntry[];
+  changelog?: ChangelogEntry[];
   loadedCycleIds?: string[];
 };
 
@@ -215,7 +208,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     entries: allChangelogEntries,
     setEntries: setAllChangelogEntries,
     hasMore: hasMoreChangelogEntries,
-    setHasMore: setHasMoreChangelogEntries,
     loading: changelogLoading,
     recordChangelog,
     loadMore: loadMoreChangelogEntries,
@@ -294,13 +286,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const [depositsResult, expensesResult] = await Promise.all([
       supabase
         .from('cycle_deposits')
-        .select('*')
+        .select('id, cycle_id, member_id, amount, note, created_at')
         .eq('mess_id', messId)
         .eq('cycle_id', cycleId)
         .order('created_at', { ascending: true }),
       supabase
         .from('expenses')
-        .select('*')
+        .select('id, cycle_id, amount, description, type, date, paid_by')
         .eq('mess_id', messId)
         .eq('cycle_id', cycleId)
         .is('deleted_at', null)
@@ -314,7 +306,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     for (let offset = 0; ; offset += mealLogPageSize) {
       const { data, error } = await supabase
         .from('meal_logs')
-        .select('*')
+        .select('id, cycle_id, member_id, date, count')
         .eq('mess_id', messId)
         .eq('cycle_id', cycleId)
         .order('date', { ascending: false })
@@ -339,8 +331,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     const [depositsResult, expensesResult] = await Promise.all([
-      supabase.from('cycle_deposits').select('*').eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
-      supabase.from('expenses').select('*').eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
+      supabase.from('cycle_deposits').select('id, cycle_id, member_id, amount, note, created_at').eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
+      supabase.from('expenses').select('id, cycle_id, amount, description, type, date, paid_by').eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
     ]);
     if (depositsResult.error) throw depositsResult.error;
     if (expensesResult.error) throw expensesResult.error;
@@ -350,7 +342,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     for (let offset = 0; ; offset += mealLogPageSize) {
       const { data, error } = await supabase
         .from('meal_logs')
-        .select('*')
+        .select('id, cycle_id, member_id, date, count')
         .eq('mess_id', messId)
         .in('cycle_id', cycleIds)
         .order('date', { ascending: false })
@@ -401,7 +393,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         setAllDeposits(snapshot.deposits);
         setAllExpenses(snapshot.expenses);
         setAllMealLogs(snapshot.mealLogs);
-        setAllChangelogEntries(snapshot.changelog);
+        setAllChangelogEntries(snapshot.changelog ?? []);
         setLoadedCycleIds(new Set(snapshot.loadedCycleIds ?? []));
         setDataError(null);
         hasLoadedDataRef.current = true;
@@ -429,7 +421,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           setAllDeposits(snap.deposits);
           setAllExpenses(snap.expenses);
           setAllMealLogs(snap.mealLogs);
-          setAllChangelogEntries(snap.changelog);
+          setAllChangelogEntries(snap.changelog ?? []);
           setLoadedCycleIds(new Set(snap.loadedCycleIds));
           setDataError(null);
           hasLoadedDataRef.current = true;
@@ -451,45 +443,23 @@ export function MealProvider({ children }: { children: ReactNode }) {
     try {
       if (isInitialLoad && !snapshot) setLoading(true);
 
-      const [membersResult, cyclesResult, changelogResult, profilesResult] = await Promise.all([
+      const [membersResult, cyclesResult] = await Promise.all([
         supabase
           .from('members')
-          .select('*')
+          .select('id, name, avatar, deleted_at, delete_expires_at, profile_id')
           .eq('mess_id', messId)
           .order('sort_order', { ascending: true, nullsFirst: false })
           .order('created_at', { ascending: true }),
         supabase
           .from('cycles')
-          .select('*')
+          .select('id, name, status, started_at, closed_at, finalized_at, members_snapshot')
           .eq('mess_id', messId)
           .is('deleted_at', null)
           .order('started_at', { ascending: false }),
-        supabase
-          .from('changelog_entries')
-          .select('*, profiles(id, full_name, picture_url, role)')
-          .eq('mess_id', messId)
-          .order('created_at', { ascending: false })
-          .range(0, CHANGELOG_PAGE_SIZE - 1),
-        supabase
-          .from('profiles')
-          .select('id, full_name, picture_url, role')
-          .eq('mess_id', messId),
       ]);
 
       if (membersResult.error) throw membersResult.error;
       if (cyclesResult.error) throw cyclesResult.error;
-      if (changelogResult.error) throw changelogResult.error;
-
-      const nextProfilesMap = new Map<string, ChangelogActor>();
-      ((profilesResult.data || []) as any[]).forEach((p) => {
-        nextProfilesMap.set(p.id, {
-          id: p.id,
-          name: p.full_name,
-          pictureUrl: p.picture_url ?? null,
-          role: p.role ?? null,
-        });
-      });
-      profilesMapRef.current = nextProfilesMap;
 
       const memberRows = (membersResult.data || []) as MemberRow[];
       const nextMembers = memberRows
@@ -518,7 +488,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
         }));
 
       const nextCycles = ((cyclesResult.data || []) as CycleRow[])
-        .filter((cycle) => !cycle.deleted_at)
         .map((cycle) => ({
           id: cycle.id,
           name: cycle.name || getDefaultCycleBaseName(cycle.started_at),
@@ -529,10 +498,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
           membersSnapshot: cycle.members_snapshot,
         }));
 
-      const nextChangelogEntries = mapChangelogRows(
-        (changelogResult.data || []) as ChangelogRow[],
-        nextProfilesMap,
-      );
       const initialCycleIds = nextCycles
         .filter((cycle) => cycle.status === 'active' || cycle.status === 'pending')
         .map((cycle) => cycle.id);
@@ -548,8 +513,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setAllExpenses(nextExpenses);
       setAllMealLogs(nextMealLogs);
       setLoadedCycleIds(new Set(initialCycleIds));
-      setAllChangelogEntries(nextChangelogEntries);
-      setHasMoreChangelogEntries(nextChangelogEntries.length === CHANGELOG_PAGE_SIZE);
       setDataError(null);
       hasLoadedDataRef.current = true;
 
@@ -562,7 +525,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
           deposits: nextDeposits,
           expenses: nextExpenses,
           mealLogs: nextMealLogs,
-          changelog: nextChangelogEntries,
           loadedCycleIds: initialCycleIds,
         });
       } catch {
@@ -591,7 +553,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
             setAllDeposits(snap.deposits);
             setAllExpenses(snap.expenses);
             setAllMealLogs(snap.mealLogs);
-            setAllChangelogEntries(snap.changelog);
+            setAllChangelogEntries(snap.changelog ?? []);
             setLoadedCycleIds(new Set(snap.loadedCycleIds));
             setDataError(null);
             hasLoadedDataRef.current = true;
