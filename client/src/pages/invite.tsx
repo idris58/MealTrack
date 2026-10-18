@@ -58,7 +58,7 @@ export default function InvitePage({ token }: { token: string }) {
     });
   }, [claimAttempted, claimed, claiming, preview, profile, profileLoading, refreshProfile, session, setLocation, token]);
 
-  const goToAuth = (mode: "login" | "signup") => setLocation(`/auth?invite=${encodeURIComponent(token)}&mode=${mode}`);
+  const goToAuth = (mode: "login" | "signup") => setLocation(`/app/auth?invite=${encodeURIComponent(token)}&mode=${mode}`);
   const expiry = preview ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(preview.expires_at)) : "";
 
   return <div className="min-h-screen bg-background px-4 py-10"><div className="mx-auto flex min-h-[80vh] max-w-lg items-center"><Card className="w-full shadow-xl"><CardHeader className="text-center"><div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground"><UsersRound className="h-7 w-7" /></div><CardTitle className="text-2xl">Join a MealTrack mess</CardTitle><CardDescription>{loading ? "Checking your invitation..." : preview ? `You’ve been invited to ${preview.mess_name}.` : "We could not open this invitation."}</CardDescription></CardHeader><CardContent className="space-y-5">
