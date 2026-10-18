@@ -20,7 +20,6 @@ type Options = {
   setExpenses: Dispatch<SetStateAction<Expense[]>>;
   setMealLogs: Dispatch<SetStateAction<MealLog[]>>;
   setChangelogEntries: Dispatch<SetStateAction<ChangelogEntry[]>>;
-  addDeposit: (memberId: string, amount: number, cycleId?: string, note?: string) => Promise<void>;
   reload: () => void;
   broadcast: () => void;
 };
@@ -32,7 +31,7 @@ function defaultCycleName(date: string | Date) {
   return `Meal ${season}-${String(value.getFullYear()).slice(-2)}`;
 }
 
-export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, getCycleMembers, getCycleDetails, setCycles, setLoadedCycleIds, setDeposits, setExpenses, setMealLogs, setChangelogEntries, addDeposit, reload, broadcast }: Options) {
+export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, getCycleMembers, getCycleDetails, setCycles, setLoadedCycleIds, setDeposits, setExpenses, setMealLogs, setChangelogEntries, reload, broadcast }: Options) {
   const renameActiveCycle = useCallback(async (name: string) => {
     if (!userId || !messId || !activeCycle) return;
     const trimmed = name.trim();
@@ -74,20 +73,18 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
     const trimmed = name.trim();
     if (!trimmed) throw new Error('Cycle name is required.');
     if (cycles.some((cycle) => cycle.name.trim().toLowerCase() === trimmed.toLowerCase())) throw new Error('A cycle with this name already exists.');
-    const { data, error } = await supabase.from('cycles').insert([{ name: trimmed, status: 'active', user_id: userId, mess_id: messId, started_at: startedAt ?? new Date().toISOString() }]).select().single();
-    if (error) throw new Error(error.code === '23505' ? 'A cycle with this name already exists.' : 'Unable to start a new cycle. Please try again.');
+    const { data, error } = await supabase.rpc('start_new_cycle', {
+      cycle_name_input: trimmed,
+      started_at_input: startedAt ?? new Date().toISOString(),
+      pending_cycle_id_input: carryForwards?.length ? pendingCycle?.id ?? null : null,
+      carry_forwards_input: carryForwards ?? [],
+    });
+    if (error || !data) throw new Error(error?.code === '23505' ? 'A cycle with this name already exists.' : error?.message || 'Unable to start a new cycle. Please try again.');
     setCycles((previous) => [{ id: data.id, name: data.name ?? trimmed, status: data.status, startedAt: data.started_at, closedAt: data.closed_at, finalizedAt: data.finalized_at, membersSnapshot: data.members_snapshot }, ...previous]);
     setLoadedCycleIds((previous) => new Set(previous).add(data.id));
-    if (pendingCycle && carryForwards?.length) {
-      for (const { memberId, amount } of carryForwards) {
-        if (amount <= 0) continue;
-        const value = Math.round(amount * 100) / 100;
-        await addDeposit(memberId, -value, pendingCycle.id, 'Carry-forward correction — balance moved to next cycle');
-        await addDeposit(memberId, value, data.id, `Carry-forward from ${pendingCycle.name}`);
-      }
-    }
+    if (carryForwards?.length) reload();
     broadcast();
-  }, [activeCycle, addDeposit, broadcast, cycles, messId, pendingCycle, setCycles, setLoadedCycleIds, userId]);
+  }, [activeCycle, broadcast, cycles, messId, pendingCycle, reload, setCycles, setLoadedCycleIds, userId]);
 
   const suggestCycleName = useCallback((date?: Date) => {
     const base = defaultCycleName(date ?? new Date());
@@ -100,11 +97,9 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
 
   const markCycleClosed = useCallback(async (cycleId: string) => {
     if (!userId || !messId) return;
-    const finalizedAt = new Date().toISOString();
-    const { error } = await supabase.from('cycles').update({ status: 'closed', finalized_at: finalizedAt }).eq('id', cycleId).eq('mess_id', messId);
-    if (error) throw new Error('Unable to finalize the cycle. Please try again.');
-    const { error: changelogError } = await supabase.from('changelog_entries').delete().eq('cycle_id', cycleId).eq('mess_id', messId);
-    if (changelogError) console.error('Error deleting cycle changelog entries:', changelogError);
+    const { data, error } = await supabase.rpc('mark_cycle_closed', { cycle_id_input: cycleId });
+    if (error || !data) throw new Error(error?.message || 'Unable to finalize the cycle. Please try again.');
+    const finalizedAt = data.finalized_at ?? new Date().toISOString();
     setCycles((previous) => previous.map((cycle) => cycle.id === cycleId ? { ...cycle, status: 'closed', finalizedAt } : cycle));
     setChangelogEntries((previous) => previous.filter((entry) => entry.cycleId !== cycleId));
     broadcast();

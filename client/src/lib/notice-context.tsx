@@ -267,38 +267,23 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     title?: string,
   ): Promise<Notice | null> => {
     if (!user?.id) return null;
-    const now = new Date().toISOString();
     const effectiveTitle = (title && title.trim()) || 'Notice';
-
-    // Expire any current active notice first
-    let expireQ = supabase.from('notices').update({ expires_at: now });
-    if (profile?.mess_id) expireQ = expireQ.eq('mess_id', profile.mess_id);
-    else expireQ = expireQ.eq('user_id', user.id);
-    await expireQ.gt('expires_at', now);
-
-    const payload: Record<string, any> = {
-      user_id: user.id,
-      profile_id: user.id,
-      title: effectiveTitle,
-      content,
-      expires_at: expiresAt.toISOString(),
-    };
-    if (profile?.mess_id) payload.mess_id = profile.mess_id;
-
-    const { data, error } = await supabase
-      .from('notices')
-      .insert([payload])
-      .select('id, title, content, expires_at, created_at')
-      .single();
+    const { data, error } = await supabase.rpc('post_notice', {
+      content_input: content,
+      expires_at_input: expiresAt.toISOString(),
+      title_input: effectiveTitle,
+    });
 
     if (error) { console.error('Error posting notice:', error); return null; }
-    const n = rowToNotice(data as any);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return null;
+    const n = rowToNotice(row as any);
     setNotice(n);
     checkDismissed(n);
     scheduleExpiry(n);
     void broadcastToServer();
     return n;
-  }, [user?.id, profile?.mess_id, broadcastToServer, checkDismissed]);
+  }, [user?.id, broadcastToServer, checkDismissed]);
 
   const updateNotice = useCallback(async (
     id: string,

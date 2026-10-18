@@ -1094,7 +1094,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setExpenses: setAllExpenses,
     setMealLogs: setAllMealLogs,
     setChangelogEntries: setAllChangelogEntries,
-    addDeposit: depositActions.addDeposit,
     reload: () => void loadData(),
     broadcast: () => void broadcastSharedUpdate(),
   });
