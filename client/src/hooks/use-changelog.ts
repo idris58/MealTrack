@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 
 import { supabase } from '@/lib/supabase';
 import type {
@@ -84,6 +84,9 @@ export function useChangelog(
   const [entries, setEntries] = useState<ChangelogEntry[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  const pageRef = useRef(0);
+  const requestRef = useRef(0);
+  const loadingRef = useRef(false);
 
   const recordChangelog = useCallback(async ({
     cycleId,
@@ -120,36 +123,51 @@ export function useChangelog(
     setEntries((previous) => [entry, ...previous]);
   }, [messId, profilesMapRef, userId]);
 
-  const loadMore = useCallback(async () => {
-    if (!userId || !messId || loading || !hasMore) return;
+  const loadMore = useCallback(async (
+    cycleIds: string[],
+    entityType: ChangelogEntityType | 'all',
+    reset = false,
+  ) => {
+    if (!userId || !messId || cycleIds.length === 0 || (loadingRef.current && !reset)) return;
 
+    const requestId = ++requestRef.current;
+    const from = reset ? 0 : pageRef.current;
+    loadingRef.current = true;
     setLoading(true);
     try {
-      const from = entries.length;
-      const { data, error } = await supabase
+      let query = supabase
         .from('changelog_entries')
         .select('*, profiles(id, full_name, picture_url, role)')
         .eq('mess_id', messId)
+        .in('cycle_id', cycleIds);
+      if (entityType !== 'all') query = query.eq('entity_type', entityType);
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .range(from, from + CHANGELOG_PAGE_SIZE - 1);
 
       if (error) throw error;
+      if (requestId !== requestRef.current) return;
 
       const next = mapChangelogRows(
         (data ?? []) as ChangelogRow[],
         profilesMapRef.current,
       );
       setEntries((previous) => {
+        if (reset) return next;
         const seen = new Set(previous.map((entry) => entry.id));
         return [...previous, ...next.filter((entry) => !seen.has(entry.id))];
       });
+      pageRef.current = from + next.length;
       setHasMore(next.length === CHANGELOG_PAGE_SIZE);
     } catch (error) {
-      console.error('Error loading changelog entries:', error);
+      if (requestId === requestRef.current) console.error('Error loading changelog entries:', error);
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
-  }, [entries.length, hasMore, loading, messId, profilesMapRef, userId]);
+  }, [messId, profilesMapRef, userId]);
 
   return {
     entries,

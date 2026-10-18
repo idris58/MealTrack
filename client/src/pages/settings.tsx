@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -564,6 +565,7 @@ function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) 
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'disable' | 'regenerate' | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -585,7 +587,7 @@ function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) 
     };
     void loadConfig();
     return () => { active = false; };
-  }, [user?.id]);
+  }, [profile?.mess_id, user?.id]);
 
   const shareUrl = config?.token ? `${window.location.origin}/shared/${config.token}` : '';
   const mealCode = config?.token ?? '';
@@ -627,7 +629,31 @@ function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) 
 
   const handleEnableSharing = async () => { const saved = await upsertConfig({ token: config?.token ?? createShareToken(), is_enabled: true }); if (saved) setMessage('Sharing is enabled. You can now copy the public view link.'); };
   const handleDisableSharing = async () => { if (!config) return; const saved = await upsertConfig({ token: config.token, is_enabled: false }); if (saved) setMessage('Sharing is disabled. The old link will no longer work.'); };
-  const handleRegenerate = async () => { const saved = await upsertConfig({ token: createShareToken(), is_enabled: true }); if (saved) setMessage('A new share link was generated. The previous link is now invalid.'); };
+  const handleRegenerate = async () => {
+    const oldToken = config?.token;
+    const saved = await upsertConfig({ token: createShareToken(), is_enabled: true });
+    if (!saved) return;
+    if (oldToken && oldToken !== saved.token) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const response = await fetch('/api/push/shared/cleanup-stale', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {}) },
+          body: JSON.stringify({ oldToken }),
+        });
+        if (!response.ok) throw new Error('The previous link was replaced, but its push subscriptions could not be removed.');
+      } catch (cleanupError) {
+        setError(cleanupError instanceof Error ? cleanupError.message : 'The previous link was replaced, but its push subscriptions could not be removed.');
+      }
+    }
+    setMessage('A new share link was generated. The previous link is now invalid.');
+  };
+  const confirmPendingAction = async () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (action === 'disable') await handleDisableSharing();
+    if (action === 'regenerate') await handleRegenerate();
+  };
   const handleCopy = async () => {
     if (!shareUrl || !config?.is_enabled) return;
     try { await navigator.clipboard.writeText(shareUrl); setMessage('Shared link copied to clipboard.'); setError(null); }
@@ -664,7 +690,7 @@ function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) 
             )}
           </div>
           {canManageSharing ? (
-            <Button variant={config?.is_enabled ? 'outline' : 'default'} size="sm" onClick={config?.is_enabled ? handleDisableSharing : handleEnableSharing} disabled={loading || working}>
+            <Button variant={config?.is_enabled ? 'outline' : 'default'} size="sm" onClick={() => config?.is_enabled ? setConfirmAction('disable') : void handleEnableSharing()} disabled={loading || working}>
               {config?.is_enabled ? 'Disable' : 'Enable Share'}
             </Button>
           ) : null}
@@ -692,12 +718,30 @@ function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) 
             <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled><ExternalLink className="h-3.5 w-3.5" />Open Shared View</Button>
           )}
           {canManageSharing ? (
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleRegenerate} disabled={loading || working}><RefreshCcw className="h-3.5 w-3.5" />Regenerate Link</Button>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setConfirmAction('regenerate')} disabled={loading || working}><RefreshCcw className="h-3.5 w-3.5" />Regenerate Link</Button>
           ) : null}
         </div>
         {message && <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">{message}</p>}
         {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">{error}</p>}
       </CardContent>
+      <AlertDialog open={confirmAction !== null} onOpenChange={(open) => { if (!open) setConfirmAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmAction === 'disable' ? 'Disable public sharing?' : 'Regenerate share link?'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction === 'disable'
+                ? 'The current public link and Meal Code will stop working immediately.'
+                : 'The current public link and Meal Code will stop working immediately. Anyone using them will need the new link or code.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmPendingAction()}>
+              {confirmAction === 'disable' ? 'Disable sharing' : 'Regenerate link'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

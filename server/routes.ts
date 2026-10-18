@@ -54,6 +54,7 @@ const pushSubscriptionBodySchema = z.object({
   }),
 }).passthrough();
 const endpointBodySchema = z.object({ endpoint: z.string().url().max(4096) });
+const sharedTokenCleanupSchema = z.object({ oldToken: z.string().trim().min(1).max(32) });
 const endpointStatusBodySchema = z.object({
   endpoint: z.string().url().max(4096).optional(),
 }).default({});
@@ -587,6 +588,37 @@ export async function registerRoutes(
       userAgent: req.get("user-agent") ?? undefined,
     });
 
+    return res.json({ ok: true });
+  }));
+
+  app.post("/api/push/shared/cleanup-stale", asyncHandler(async (req, res) => {
+    const userId = await getAuthenticatedUserId(req.get("authorization"));
+    if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
+    const body = parseRequestBody(sharedTokenCleanupSchema, req.body, res);
+    if (!body) return;
+    const oldToken = normalizeShareToken(body.oldToken);
+    if (!oldToken) return res.status(400).json({ message: "Invalid old share token." });
+
+    const supabaseAdmin = assertSupabaseAdmin();
+    const scope = await resolveScopeForUserId(userId);
+    if (scope.messId) await requireMessOperator(userId);
+    let linkQuery = supabaseAdmin.from("share_links").select("token");
+    linkQuery = scope.messId
+      ? linkQuery.eq("mess_id", scope.messId)
+      : linkQuery.eq("user_id", userId).is("mess_id", null);
+    const { data: currentLink, error: linkError } = await linkQuery.maybeSingle();
+    if (linkError) throw linkError;
+    if (!currentLink || normalizeShareToken(currentLink.token) === oldToken) {
+      return res.status(409).json({ message: "The share token has not changed." });
+    }
+
+    let deleteQuery = supabaseAdmin.from("push_subscriptions").delete()
+      .eq("audience", "shared").eq("share_token", oldToken);
+    deleteQuery = scope.messId
+      ? deleteQuery.eq("mess_id", scope.messId)
+      : deleteQuery.eq("user_id", userId).is("mess_id", null);
+    const { error: deleteError } = await deleteQuery;
+    if (deleteError) throw deleteError;
     return res.json({ ok: true });
   }));
 

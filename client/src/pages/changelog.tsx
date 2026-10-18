@@ -475,6 +475,12 @@ export default function ChangelogPage() {
   const [actionFilter, setActionFilter] = useState<ChangelogAction | 'all'>('all');
   const [entityFilter, setEntityFilter] = useState<ChangelogEntityType | 'all'>('all');
   const [search, setSearch] = useState('');
+  const cycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
+
+  useEffect(() => {
+    const scopedCycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
+    if (scopedCycleIds.length) void loadMoreChangelogEntries(scopedCycleIds, entityFilter, true);
+  }, [activeCycle?.id, pendingCycle?.id, entityFilter, loadMoreChangelogEntries]);
 
   useEffect(() => {
     if (profile?.role === 'member') setLocation('/app');
@@ -560,6 +566,8 @@ export default function ChangelogPage() {
             return (
               <button
                 key={opt.value}
+                type="button"
+                aria-pressed={isActive}
                 onClick={() => setActionFilter(opt.value)}
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
@@ -583,6 +591,8 @@ export default function ChangelogPage() {
             return (
               <button
                 key={opt.value}
+                type="button"
+                aria-pressed={isActive}
                 onClick={() => setEntityFilter(opt.value)}
                 className={cn(
                   'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
@@ -636,7 +646,7 @@ export default function ChangelogPage() {
                 id="changelog-load-more"
                 type="button"
                 variant="outline"
-                onClick={() => void loadMoreChangelogEntries()}
+                onClick={() => void loadMoreChangelogEntries(cycleIds, entityFilter)}
                 disabled={changelogLoading}
                 className="gap-2"
               >

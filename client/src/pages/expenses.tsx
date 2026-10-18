@@ -272,8 +272,7 @@ export default function Expenses() {
         </Card>
       ) : (
         <div
-          className="flex-1 overflow-y-auto rounded-xl pr-0.5"
-          style={{ maxHeight: 'calc(100vh - 340px)', minHeight: '200px' }}
+          className="flex-1 rounded-xl pr-0.5 min-h-[200px]"
         >
           <div className="space-y-2.5 pb-4">
             {rows.length === 0 ? (

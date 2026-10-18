@@ -107,6 +107,10 @@ export function NotificationSettingsCard() {
   };
 
   const isBlocked = permission === 'denied';
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
 
   return (
     <>
@@ -164,7 +168,9 @@ export function NotificationSettingsCard() {
             </div>
           ) : !supported ? (
             <div className="rounded-xl border border-muted bg-muted/30 p-3 text-xs text-muted-foreground">
-              This browser does not support Web Push notifications.
+              {isIOS && !isStandalone
+                ? 'Install to Home Screen to enable notifications.'
+                : 'This browser does not support Web Push notifications.'}
             </div>
           ) : null}
 
