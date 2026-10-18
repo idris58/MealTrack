@@ -6,7 +6,7 @@ import { Link } from 'wouter';
 
 import { useMeal, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
-import { computeSettlementSummary } from '@/lib/settlement-math';
+import { cleanCurrencyFloat, computeSettlementSummary } from '@/lib/settlement-math';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -157,21 +157,21 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
     details.stats.totalFixedExpenses;
   const {
     allocatedBalances,
-    managerShouldGet,
     managerShouldGive,
     managerGetPlusRemaining,
-    settlementMismatch,
-    roundedRemainingBalance,
   } = useMemo(
     () => computeSettlementSummary(details.members, remainingBalance),
     [details.members, remainingBalance],
   );
 
-  // Balances are apportioned as whole currency units using the Largest-Remainder
-  // Method, so settlementMismatch is mathematically guaranteed to be 0.
-  // We retain tolerance as a defense-in-depth safety net so locking is never blocked.
-  const settlementRoundingTolerance = Math.max(1, details.members.length);
-  const isSettlementMatched = Math.abs(settlementMismatch) <= settlementRoundingTolerance;
+  const unsettledMembers = useMemo(
+    () => details.members.filter((member) => cleanCurrencyFloat(member.balance) !== 0),
+    [details.members],
+  );
+  const unsettledBalanceTotal = unsettledMembers.reduce(
+    (total, member) => total + Math.abs(cleanCurrencyFloat(member.balance)),
+    0,
+  );
   const memberMealTotals = useMemo(() => {
     const totals = new Map<string, number>();
 
@@ -195,7 +195,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
   }, [details]);
 
   const handleMarkClosed = async () => {
-    if (!canLock || isMarkingClosed || !isSettlementMatched) return;
+    if (!canLock || isMarkingClosed) return;
     setIsMarkingClosed(true);
 
     try {
@@ -328,12 +328,11 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
           {canLock ? <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
-                variant={isSettlementMatched ? "default" : "secondary"}
-                className={cn("gap-2 shadow-sm transition-all", isSettlementMatched ? "bg-indigo-600 text-white hover:bg-indigo-700 hover:-translate-y-0.5" : "text-muted-foreground")}
-                disabled={!canLock || isMarkingClosed || !isSettlementMatched}
-                title={!isSettlementMatched ? 'Cannot lock cycle until settlement math matches' : undefined}
+                variant="default"
+                className="gap-2 bg-indigo-600 text-white shadow-sm transition-all hover:bg-indigo-700 hover:-translate-y-0.5"
+                disabled={!canLock || isMarkingClosed}
               >
-                {!isSettlementMatched ? <AlertCircle className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                <Lock className="h-4 w-4" />
                 {isMarkingClosed ? 'Locking...' : 'Lock & Archive Cycle'}
               </Button>
             </AlertDialogTrigger>
@@ -341,13 +340,15 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
               <AlertDialogHeader>
                 <AlertDialogTitle>Lock this pending cycle?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will permanently archive the cycle. It will become read-only and no further settlements or corrections can be made.
+                  {unsettledMembers.length > 0
+                    ? `${unsettledMembers.length} ${unsettledMembers.length === 1 ? 'member has' : 'members have'} a nonzero balance, totaling ${formatCurrency(unsettledBalanceTotal)} in outstanding balances. Locking archives the cycle as read-only, so no further settlements or corrections can be made. Do you want to continue?`
+                    : 'No members have an outstanding balance. Locking permanently archives the cycle as read-only, so no further settlements or corrections can be made.'}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction onClick={handleMarkClosed} disabled={isMarkingClosed}>
-                  {isMarkingClosed ? 'Locking...' : 'Yes, Lock & Archive'}
+                  {isMarkingClosed ? 'Locking...' : unsettledMembers.length > 0 ? 'Archive with Outstanding Balances' : 'Yes, Lock & Archive'}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -367,25 +368,27 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
             </div>
           </div>
           
-          <Card className={cn("border-2 transition-colors", isSettlementMatched ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5")}>
+          <Card className={cn("border-2 transition-colors", unsettledMembers.length === 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-amber-500/20 bg-amber-500/5")}>
             <CardContent className="space-y-4 py-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-base font-semibold">Settlement Math Check</p>
+                  <p className="text-base font-semibold">Settlement Status</p>
                   <p className="text-xs text-muted-foreground">
-                    Verifies that the money you collect plus what's left covers what you must pay out.
+                    {unsettledMembers.length === 0
+                      ? 'All member balances are zero.'
+                      : `${unsettledMembers.length} ${unsettledMembers.length === 1 ? 'member has' : 'members have'} nonzero balances totaling ${formatCurrency(unsettledBalanceTotal)}.`}
                   </p>
                 </div>
                 <div
                   className={cn(
                     'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider',
-                    isSettlementMatched
+                    unsettledMembers.length === 0
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
-                      : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400',
                   )}
                 >
-                  {isSettlementMatched ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
-                  {isSettlementMatched ? 'Calculation Matched' : 'Calculation Mismatch'}
+                  {unsettledMembers.length === 0 ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                  {unsettledMembers.length === 0 ? 'Fully Settled' : `${unsettledMembers.length} Unsettled`}
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -412,9 +415,9 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
                   </p>
                 </div>
               </div>
-              {!isSettlementMatched ? (
-                <p className="text-sm font-medium text-red-600 dark:text-red-400 text-center">
-                  Mismatch of {formatCurrency(Math.abs(settlementMismatch))} — Please add corrections to fix this before locking.
+              {unsettledMembers.length > 0 ? (
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-400 text-center">
+                  {unsettledMembers.length} {unsettledMembers.length === 1 ? 'member has' : 'members have'} outstanding balances totaling {formatCurrency(unsettledBalanceTotal)}. Review or settle these balances before archiving.
                 </p>
               ) : null}
             </CardContent>
