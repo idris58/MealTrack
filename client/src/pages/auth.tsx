@@ -44,20 +44,30 @@ function getAuthRedirectUrl() {
 function mapAuthError(error: unknown, mode: AuthMode) {
   if (typeof error === "object" && error !== null) {
     const authErr = error as any;
-    if (authErr.status === 400 || authErr.code === "invalid_credentials" || authErr.code === "email_not_confirmed") {
-      return mode === "login"
-        ? "The email or password is incorrect, or your email has not been confirmed yet."
-        : "This account is not ready yet. Check your email for the confirmation link.";
+    const code = String(authErr.code ?? "").toLowerCase();
+    const message = String(authErr.message ?? "").toLowerCase();
+    if (code === "invalid_credentials" || code === "email_not_confirmed") {
+      return code === "email_not_confirmed"
+        ? "Please confirm your email before signing in. You can request another confirmation email below."
+        : mode === "login"
+          ? "The email or password is incorrect."
+          : "This account could not be verified. Check your email or try signing in.";
     }
-    if (authErr.code === "user_already_exists") {
+    if (code === "user_already_exists" || code === "email_exists" || message.includes("already registered")) {
       return "This email is already registered. Try logging in instead.";
     }
-    if (authErr.code === "over_email_send_rate_limit" || authErr.status === 429) {
+    if (code === "weak_password" || code === "password_too_short" || /password.{0,40}(weak|short|least|required|characters)/.test(message)) {
+      return "Choose a stronger password that meets the account password requirements.";
+    }
+    if (code === "signup_disabled" || message.includes("signups not allowed") || message.includes("signup is disabled")) {
+      return "New account registration is currently disabled. Contact the manager for access.";
+    }
+    if (code === "over_email_send_rate_limit" || authErr.status === 429) {
       return mode === "forgot-password"
         ? "A reset email was requested recently. Please wait a little and try again."
         : "Please wait a little before trying again.";
     }
-    if (authErr.status === 0 || authErr.message?.toLowerCase().includes("network") || authErr.message?.toLowerCase().includes("fetch")) {
+    if (authErr.status === 0 || message.includes("network") || message.includes("fetch")) {
       return "We could not reach the authentication service. Please check your network connection and try again.";
     }
   }
@@ -65,10 +75,11 @@ function mapAuthError(error: unknown, mode: AuthMode) {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
 
-  if (normalized.includes("invalid login credentials") || normalized.includes("email not confirmed")) {
-    return mode === "login"
-      ? "The email or password is incorrect, or your email has not been confirmed yet."
-      : "This account is not ready yet. Check your email for the confirmation link.";
+  if (normalized.includes("invalid login credentials")) {
+    return mode === "login" ? "The email or password is incorrect." : "This account could not be verified. Check your email or try signing in.";
+  }
+  if (normalized.includes("email not confirmed")) {
+    return "Please confirm your email before signing in. You can request another confirmation email below.";
   }
   if (normalized.includes("user already registered") || normalized.includes("already been registered")) {
     return "This email is already registered. Try logging in instead.";
@@ -78,6 +89,12 @@ function mapAuthError(error: unknown, mode: AuthMode) {
   }
   if (normalized.includes("network")) {
     return "We could not reach the authentication service. Please try again.";
+  }
+  if (/password.{0,40}(weak|short|least|required|characters)/.test(normalized)) {
+    return "Choose a stronger password that meets the account password requirements.";
+  }
+  if (normalized.includes("signups not allowed") || normalized.includes("signup is disabled")) {
+    return "New account registration is currently disabled. Contact the manager for access.";
   }
   if (normalized.includes("rate limit") || normalized.includes("security purposes") || normalized.includes("too many requests")) {
     return mode === "forgot-password"
@@ -145,6 +162,8 @@ export default function AuthPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
+  const [resendingConfirmation, setResendingConfirmation] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -182,6 +201,7 @@ export default function AuthPage() {
     setMode(next);
     setError(null);
     setMessage(null);
+    setCanResendConfirmation(false);
     setFullName("");
     setPassword("");
     setConfirmPassword("");
@@ -203,6 +223,7 @@ export default function AuthPage() {
     setSubmitting(true);
     setError(null);
     setMessage(null);
+    setCanResendConfirmation(false);
     try {
       const validationError = validateForm(mode);
       if (validationError) { setError(validationError); return; }
@@ -245,16 +266,43 @@ export default function AuthPage() {
         return;
       }
       if (!data.session) {
-        setEmail(""); setPassword(""); setFullName(""); setConfirmPassword("");
+        setPassword(""); setFullName(""); setConfirmPassword("");
+        setCanResendConfirmation(true);
         setMessage("Account created. Check your email to confirm your account.");
       } else {
         setMessage("Account created. You are now signed in.");
       }
     } catch (caughtError) {
       if (mode === "forgot-password") console.error("Password reset email error:", caughtError);
+      const authError = caughtError as { code?: string; message?: string };
+      if (mode === "login" && (authError.code === "email_not_confirmed" || authError.message?.toLowerCase().includes("email not confirmed"))) {
+        setCanResendConfirmation(true);
+      }
       setError(mapAuthError(caughtError, mode));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    const normalizedEmail = email.trim();
+    if (!EMAIL_PATTERN.test(normalizedEmail) || resendingConfirmation) return;
+
+    setResendingConfirmation(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email: normalizedEmail,
+        options: { emailRedirectTo: authRedirectUrl },
+      });
+      if (resendError) throw resendError;
+      setMessage("If this account needs confirmation, a new email has been sent.");
+    } catch (caughtError) {
+      setError(mapAuthError(caughtError, "signup"));
+    } finally {
+      setResendingConfirmation(false);
     }
   };
 
@@ -585,6 +633,19 @@ export default function AuthPage() {
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{message}</span>
                 </div>
+              )}
+
+              {canResendConfirmation && (
+                <Button
+                  className="w-full gap-2"
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleResendConfirmation()}
+                  disabled={resendingConfirmation || !EMAIL_PATTERN.test(email.trim())}
+                >
+                  {resendingConfirmation ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  {resendingConfirmation ? "Sending confirmation…" : "Resend confirmation email"}
+                </Button>
               )}
 
               {/* Submit */}

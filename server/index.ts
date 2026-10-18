@@ -9,6 +9,9 @@ import { log } from "./logger";
 import { initServerErrorTracking, captureServerError } from "./error-tracking";
 
 const app = express();
+// The app runs behind one trusted ingress/reverse proxy in production. Avoid `true`,
+// which would let clients spoof their address via X-Forwarded-For.
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL

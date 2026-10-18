@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeftRight,
   BellRing,
@@ -6,6 +6,7 @@ import {
   KeyRound,
   Loader2,
   Megaphone,
+  RefreshCw,
   Share2,
   ShoppingBag,
   Users,
@@ -412,71 +413,129 @@ export default function SharedPage({ token }: { token: string }) {
   const [data, setData] = useState<SharedPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const [showingCachedData, setShowingCachedData] = useState(false);
+  const [liveConnected, setLiveConnected] = useState(false);
   const [summaryMode, setSummaryMode] = useState<"all" | "single">("all");
   const [selectedMemberId, setSelectedMemberId] = useState("");
+  const dataRef = useRef<SharedPayload | null>(data);
+  dataRef.current = data;
 
   const handleSwitchCode = () => {
     window.sessionStorage.setItem(SWITCH_SHARED_MEAL_CODE_KEY, "true");
     setLocation("/shared");
   };
 
+  const handleRetry = () => {
+    setError(null);
+    setRetryKey((current) => current + 1);
+  };
+
   useEffect(() => {
     let active = true;
+    let reconnectTimer: number | undefined;
+    let reconnectDelay = 5_000;
+    let disconnected = false;
+    const cacheKey = `mealtrack:shared-cache:${token.toUpperCase()}`;
+
+    const readCache = (): SharedPayload | null => {
+      try {
+        const value = window.localStorage.getItem(cacheKey);
+        if (!value) return null;
+        const parsed = JSON.parse(value) as { savedAt?: number; payload?: SharedPayload };
+        if (!parsed.payload || !Array.isArray(parsed.payload.members) || !parsed.payload.cycle) return null;
+        return parsed.payload;
+      } catch {
+        return null;
+      }
+    };
+
+    const savePayload = (payload: SharedPayload) => {
+      try {
+        window.localStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), payload }));
+      } catch {
+        // Keep the online shared view usable if browser storage is unavailable.
+      }
+    };
+
+    const commitPayload = (payload: SharedPayload, fromCache = false) => {
+      dataRef.current = payload;
+      setData(payload);
+      setShowingCachedData(fromCache);
+      if (!fromCache) savePayload(payload);
+    };
 
     const loadSharedData = async () => {
+      if (!dataRef.current) setLoading(true);
       try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch(`/api/share/${token}`);
+        const response = await fetch(`/api/share/${encodeURIComponent(token)}`);
         const body = await response.json().catch(() => null);
 
         if (!response.ok) {
-          throw new Error(body?.message || "Unable to load shared dashboard.");
+          const requestError = new Error(body?.message || "Unable to load shared dashboard.") as Error & { status: number };
+          requestError.status = response.status;
+          throw requestError;
         }
+        if (!body?.cycle || !Array.isArray(body.members)) throw new Error("The shared dashboard response was invalid.");
 
         if (active) {
-          window.localStorage.setItem(LAST_SHARED_MEAL_CODE_KEY, token);
-          setData(body as SharedPayload);
+          try {
+            window.localStorage.setItem(LAST_SHARED_MEAL_CODE_KEY, token);
+          } catch {
+            // The shared view remains usable when browser storage is unavailable.
+          }
+          commitPayload(body as SharedPayload);
+          setError(null);
         }
       } catch (caughtError) {
-        if (!active) {
-          return;
+        if (!active) return;
+        const status = (caughtError as { status?: number })?.status;
+        const canUseCache = status === undefined || status === 429 || status >= 500;
+        const cachedPayload = canUseCache ? readCache() : null;
+        if (cachedPayload) {
+          commitPayload(cachedPayload, true);
+          setError(null);
+        } else {
+          setError(caughtError instanceof Error ? caughtError.message : "Unable to load shared dashboard.");
         }
-
-        const nextError =
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Unable to load shared dashboard.";
-        setError(nextError);
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     };
 
     void loadSharedData();
 
-    return () => {
-      active = false;
-    };
-  }, [token]);
-
-  useEffect(() => {
     const events = new EventSource(`/api/share/${encodeURIComponent(token)}/events`);
+    events.onopen = () => {
+      setLiveConnected(true);
+      reconnectDelay = 5_000;
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      }
+      if (disconnected) {
+        disconnected = false;
+        void loadSharedData();
+      }
+    };
+    events.onerror = () => {
+      setLiveConnected(false);
+      disconnected = true;
+      if (reconnectTimer === undefined) {
+        const delay = reconnectDelay;
+        reconnectDelay = Math.min(reconnectDelay * 2, 60_000);
+        reconnectTimer = window.setTimeout(() => {
+          reconnectTimer = undefined;
+          void loadSharedData();
+        }, delay);
+      }
+    };
 
     const handleNoticeUpdate = (event: MessageEvent) => {
       try {
         const payload = JSON.parse(event.data) as Pick<SharedPayload, "activeNotice">;
-        setData((currentData) =>
-          currentData
-            ? {
-                ...currentData,
-                activeNotice: payload.activeNotice,
-              }
-            : currentData,
-        );
+        const currentData = dataRef.current;
+        if (currentData) commitPayload({ ...currentData, activeNotice: payload.activeNotice });
       } catch (caughtError) {
         console.error("Error parsing notice update:", caughtError);
       }
@@ -492,7 +551,7 @@ export default function SharedPage({ token }: { token: string }) {
         }
 
         setError(null);
-        setData(payload.data);
+        commitPayload(payload.data);
       } catch (caughtError) {
         console.error("Error parsing shared data update:", caughtError);
       }
@@ -502,11 +561,13 @@ export default function SharedPage({ token }: { token: string }) {
     events.addEventListener("shared-data", handleSharedDataUpdate);
 
     return () => {
+      active = false;
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
       events.removeEventListener("notice", handleNoticeUpdate);
       events.removeEventListener("shared-data", handleSharedDataUpdate);
       events.close();
     };
-  }, [token]);
+  }, [token, retryKey]);
 
   useEffect(() => {
     if (!data?.members.length) {
@@ -622,10 +683,16 @@ export default function SharedPage({ token }: { token: string }) {
             <p className="text-sm text-muted-foreground">
               Ask the manager for a fresh shared link or Meal Code if you still need access.
             </p>
-            <Button variant="outline" className="gap-2" onClick={handleSwitchCode}>
-              <ArrowLeftRight className="h-4 w-4" />
-              Switch Code
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button className="gap-2" onClick={handleRetry}>
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </Button>
+              <Button variant="outline" className="gap-2" onClick={handleSwitchCode}>
+                <ArrowLeftRight className="h-4 w-4" />
+                Switch Code
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -673,6 +740,19 @@ export default function SharedPage({ token }: { token: string }) {
       {data.activeNotice && <NoticeTicker notice={data.activeNotice} />}
 
       <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 md:px-8">
+        {(showingCachedData || !liveConnected) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground">
+            <span>
+              {showingCachedData
+                ? "Showing the last saved dashboard. Live updates are reconnecting."
+                : "Live updates are disconnected. Reconnecting…"}
+            </span>
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleRetry}>
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        )}
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card className="border-none bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg xl:col-span-2">
             <CardHeader className="pb-2">

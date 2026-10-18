@@ -963,6 +963,7 @@ export async function registerRoutes(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
+    res.write("retry: 10000\n\n");
 
     // Register under the mess scope so updates from ANY operator in the mess
     // (manager or coordinator) reach this viewer.
