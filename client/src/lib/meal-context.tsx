@@ -21,8 +21,8 @@ import { useMealLogs } from '@/hooks/use-meal-logs';
 import { useCycles } from '@/hooks/use-cycles';
 import { useCycleDetails } from '@/hooks/use-cycle-details';
 import { useCycleLoader } from '@/hooks/use-cycle-loader';
-import { useMealIdentity } from '@/hooks/use-meal-identity';
 import { useMealScopeLoader } from '@/hooks/use-meal-scope-loader';
+import { useAuth } from '@/lib/auth-context';
 
 import type {
   ChangelogActor,
@@ -113,6 +113,17 @@ type CycleDepositRow = {
   created_at: string;
 };
 
+type MealDataSnapshot = {
+  members: Member[];
+  archivedMembers?: Member[];
+  cycles: Cycle[];
+  deposits: CycleDeposit[];
+  expenses: Expense[];
+  mealLogs: MealLog[];
+  changelog: ChangelogEntry[];
+  loadedCycleIds?: string[];
+};
+
 function mapExpenseRows(rows: ExpenseRow[]): Expense[] {
   return rows
     .filter((expense) => Boolean(expense.cycle_id))
@@ -174,6 +185,7 @@ function buildSnapshotChange(field: string, label: string, value: ChangelogValue
 }
 
 export function MealProvider({ children }: { children: ReactNode }) {
+  const { user, profile } = useAuth();
   const [memberRoster, setMemberRoster] = useState<Member[]>([]);
   const [archivedMemberRoster, setArchivedMemberRoster] = useState<Member[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
@@ -186,7 +198,18 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const hasLoadedDataRef = useRef(false);
   const loadedScopeRef = useRef<string | null>(null);
   const profilesMapRef = useRef<Map<string, ChangelogActor>>(new Map());
-  const { userId, messId } = useMealIdentity(profilesMapRef);
+  const userId = user?.id ?? null;
+  const currentProfile = profile?.id === userId ? profile : null;
+  const messId = currentProfile?.mess_id ?? null;
+  React.useEffect(() => {
+    if (!currentProfile) return;
+    profilesMapRef.current.set(currentProfile.id, {
+      id: currentProfile.id,
+      name: currentProfile.full_name,
+      pictureUrl: currentProfile.picture_url,
+      role: currentProfile.role,
+    });
+  }, [currentProfile]);
   const [dataError, setDataError] = useState<string | null>(null);
   const {
     entries: allChangelogEntries,
@@ -310,6 +333,42 @@ export function MealProvider({ children }: { children: ReactNode }) {
     };
   }, [userId, messId]);
 
+  const fetchCycleRowsForCycles = useCallback(async (cycleIds: string[]) => {
+    if (!userId || !messId || cycleIds.length === 0) {
+      return { deposits: [] as CycleDeposit[], expenses: [] as Expense[], mealLogs: [] as MealLog[] };
+    }
+
+    const [depositsResult, expensesResult] = await Promise.all([
+      supabase.from('cycle_deposits').select('*').eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
+      supabase.from('expenses').select('*').eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
+    ]);
+    if (depositsResult.error) throw depositsResult.error;
+    if (expensesResult.error) throw expensesResult.error;
+
+    const mealLogRows: MealLogRow[] = [];
+    const mealLogPageSize = 1000;
+    for (let offset = 0; ; offset += mealLogPageSize) {
+      const { data, error } = await supabase
+        .from('meal_logs')
+        .select('*')
+        .eq('mess_id', messId)
+        .in('cycle_id', cycleIds)
+        .order('date', { ascending: false })
+        .order('id', { ascending: true })
+        .range(offset, offset + mealLogPageSize - 1);
+      if (error) throw error;
+      const page = (data || []) as MealLogRow[];
+      mealLogRows.push(...page);
+      if (page.length < mealLogPageSize) break;
+    }
+
+    return {
+      deposits: mapDepositRows((depositsResult.data || []) as CycleDepositRow[]),
+      expenses: mapExpenseRows((expensesResult.data || []) as ExpenseRow[]),
+      mealLogs: mapMealLogRows(mealLogRows),
+    };
+  }, [userId, messId]);
+
   const cycleLoader = useCycleLoader({
     enabled: Boolean(userId && messId),
     isLoaded: (cycleId) => computedCycleDetails.getCycleDetails(cycleId) !== null,
@@ -327,6 +386,28 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setRefreshing(true);
 
     const cacheKey = `mealtrack-data-cache-${userId}-${messId}`;
+
+    let snapshot: MealDataSnapshot | null = null;
+    if (navigator.onLine) {
+      try {
+        snapshot = await readOfflineSnapshot<MealDataSnapshot>(cacheKey);
+      } catch {
+        // Ignore an unavailable cache and continue with the server request.
+      }
+      if (snapshot) {
+        setMemberRoster(snapshot.members);
+        setArchivedMemberRoster(snapshot.archivedMembers ?? []);
+        setCycles(snapshot.cycles);
+        setAllDeposits(snapshot.deposits);
+        setAllExpenses(snapshot.expenses);
+        setAllMealLogs(snapshot.mealLogs);
+        setAllChangelogEntries(snapshot.changelog);
+        setLoadedCycleIds(new Set(snapshot.loadedCycleIds ?? []));
+        setDataError(null);
+        hasLoadedDataRef.current = true;
+        setLoading(false);
+      }
+    }
 
     // ── Offline path: hydrate from localStorage cache ────────────────────────
     if (!navigator.onLine) {
@@ -368,7 +449,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     // ── Online path ──────────────────────────────────────────────────────────
     try {
-      if (isInitialLoad) setLoading(true);
+      if (isInitialLoad && !snapshot) setLoading(true);
 
       const [membersResult, cyclesResult, changelogResult, profilesResult] = await Promise.all([
         supabase
@@ -455,10 +536,10 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const initialCycleIds = nextCycles
         .filter((cycle) => cycle.status === 'active' || cycle.status === 'pending')
         .map((cycle) => cycle.id);
-      const initialRows = await Promise.all(initialCycleIds.map((cycleId) => fetchCycleRows(cycleId)));
-      const nextDeposits = initialRows.flatMap((rows) => rows?.deposits ?? []);
-      const nextExpenses = initialRows.flatMap((rows) => rows?.expenses ?? []);
-      const nextMealLogs = initialRows.flatMap((rows) => rows?.mealLogs ?? []);
+      const initialRows = await fetchCycleRowsForCycles(initialCycleIds);
+      const nextDeposits = initialRows.deposits;
+      const nextExpenses = initialRows.expenses;
+      const nextMealLogs = initialRows.mealLogs;
 
       setMemberRoster(nextMembers);
       setArchivedMemberRoster(nextArchivedMembers);
@@ -521,7 +602,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         } catch { /* ignore */ }
       }
 
-      if (isInitialLoad) {
+      if (isInitialLoad && !hasLoadedDataRef.current) {
         setDataError(
           error instanceof Error
             ? error.message
@@ -532,7 +613,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, messId, fetchCycleRows]);
+  }, [userId, messId, fetchCycleRowsForCycles]);
 
   React.useEffect(() => {
     if (!userId || !messId || !hasLoadedDataRef.current) return;
