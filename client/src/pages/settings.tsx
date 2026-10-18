@@ -86,7 +86,7 @@ function formatMealCount(value: number) {
 function SettingsNavigation({ canManageCycles }: { canManageCycles: boolean }) {
   const items = [
     ...(canManageCycles ? [{ href: '#cycle-operations', icon: RefreshCcw, label: 'Cycle' }] : []),
-    { href: '#public-access', icon: Share2, label: 'Sharing' },
+    ...(canManageCycles ? [{ href: '#public-access', icon: Share2, label: 'Sharing' }] : []),
     { href: '#notice-board', icon: Megaphone, label: 'Notices' },
     { href: '#notifications', icon: BellRing, label: 'Alerts' },
   ];
@@ -831,6 +831,7 @@ function NoticeSettingsCard() {
 export default function SettingsPage() {
   const { profile, canManageCycles } = useAuth();
   const isMember = profile?.role === 'member';
+  const isManager = profile?.role === 'manager';
 
   if (isMember) {
     return (
@@ -879,9 +880,11 @@ export default function SettingsPage() {
       )}
 
       <div className="grid gap-8 lg:grid-cols-2 lg:gap-6">
-        <section id="public-access" className="scroll-mt-20">
-          <ShareSettingsCard />
-        </section>
+        {isManager ? (
+          <section id="public-access" className="scroll-mt-20">
+            <ShareSettingsCard />
+          </section>
+        ) : null}
 
         <section id="notifications" className="scroll-mt-20">
           <NotificationSettingsCard />

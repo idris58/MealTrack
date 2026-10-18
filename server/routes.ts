@@ -99,6 +99,12 @@ const sharedTokenRateLimit = rateLimit({
   message: { message: "Too many shared-view requests. Please try again shortly." },
 });
 
+function normalizeShareToken(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const token = value.trim().toUpperCase();
+  return /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/.test(token) ? token : "";
+}
+
 type CycleDepositRow = {
   id: string;
   cycle_id: string;
@@ -815,7 +821,7 @@ export async function registerRoutes(
   }));
 
   app.post("/api/push/shared/:token/subscribe", sharedTokenRateLimit, asyncHandler(async (req, res) => {
-    const token = String(req.params.token || "").trim();
+    const token = normalizeShareToken(req.params.token);
 
     if (!token) {
       return res.status(400).json({ message: "Missing share token." });
@@ -834,7 +840,7 @@ export async function registerRoutes(
     const { data: shareLink, error } = await supabaseAdmin
       .from("share_links")
       .select("user_id, mess_id, is_enabled")
-      .eq("token", token)
+      .ilike("token", token)
       .maybeSingle();
 
     if (error) {
@@ -858,7 +864,7 @@ export async function registerRoutes(
   }));
 
   app.post("/api/push/shared/:token/status", sharedTokenRateLimit, asyncHandler(async (req, res) => {
-    const token = String(req.params.token || "").trim();
+    const token = normalizeShareToken(req.params.token);
     const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
 
     if (!token || !endpoint) {
@@ -869,7 +875,7 @@ export async function registerRoutes(
     const { data: shareLink, error: shareLinkError } = await supabaseAdmin
       .from("share_links")
       .select("user_id, mess_id, is_enabled")
-      .eq("token", token)
+      .ilike("token", token)
       .maybeSingle();
 
     if (shareLinkError) {
@@ -897,7 +903,7 @@ export async function registerRoutes(
   }));
 
   app.post("/api/push/shared/:token/unsubscribe", sharedTokenRateLimit, asyncHandler(async (req, res) => {
-    const token = String(req.params.token || "").trim();
+    const token = normalizeShareToken(req.params.token);
     const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
 
     if (!token || !endpoint) {
@@ -908,7 +914,7 @@ export async function registerRoutes(
     const { data: shareLink, error } = await supabaseAdmin
       .from("share_links")
       .select("user_id, mess_id")
-      .eq("token", token)
+      .ilike("token", token)
       .maybeSingle();
 
     if (error) {
@@ -929,7 +935,7 @@ export async function registerRoutes(
   }));
 
   app.get("/api/share/:token/events", sharedTokenRateLimit, asyncHandler(async (req, res) => {
-    const token = String(req.params.token || "").trim();
+    const token = normalizeShareToken(req.params.token);
 
     if (!token) {
       return res.status(400).json({ message: "Missing share token." });
@@ -940,7 +946,7 @@ export async function registerRoutes(
     const { data: shareLink, error: shareLinkError } = await supabaseAdmin
       .from("share_links")
       .select("user_id, is_enabled, mess_id")
-      .eq("token", token)
+      .ilike("token", token)
       .maybeSingle();
 
     if (shareLinkError) {
@@ -1012,7 +1018,7 @@ export async function registerRoutes(
   }));
 
   app.get("/api/share/:token", sharedTokenRateLimit, asyncHandler(async (req, res) => {
-    const token = String(req.params.token || "").trim();
+    const token = normalizeShareToken(req.params.token);
 
     if (!token) {
       return res.status(400).json({ message: "Missing share token." });
@@ -1023,7 +1029,7 @@ export async function registerRoutes(
     const { data: shareLink, error: shareLinkError } = await supabaseAdmin
       .from("share_links")
       .select("user_id, is_enabled, mess_id")
-      .eq("token", token)
+      .ilike("token", token)
       .maybeSingle();
 
     if (shareLinkError) {

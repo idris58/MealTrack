@@ -298,7 +298,7 @@ export function SharedAccessPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalizedCode = mealCode.trim();
+    const normalizedCode = mealCode.trim().toUpperCase();
 
     if (!normalizedCode) {
       setError("Enter the Meal Code shared by the manager.");
@@ -362,7 +362,7 @@ export function SharedAccessPage() {
                   id="meal-code"
                   value={mealCode}
                   onChange={(event) => {
-                    setMealCode(event.target.value);
+                    setMealCode(event.target.value.toUpperCase());
                     if (error) {
                       setError(null);
                     }
