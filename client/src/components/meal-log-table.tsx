@@ -63,7 +63,15 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const monthOptions = useMemo(() => Array.from(new Set(days.map((d) => format(d, 'yyyy-MM')))), [days]);
+  const dayPresentation = useMemo(() => new Map(days.map((day) => [day, {
+    key: format(day, 'yyyy-MM-dd'),
+    month: format(day, 'yyyy-MM'),
+    weekday: format(day, 'EEE'),
+    dayNumber: format(day, 'd'),
+    weekdayLong: format(day, 'EEEE'),
+    label: dayLabel(day),
+  }] as const)), [days]);
+  const monthOptions = useMemo(() => Array.from(new Set(days.map((day) => dayPresentation.get(day)!.month))), [dayPresentation, days]);
   const selectedMonth = monthOptions[monthIndex] ?? monthOptions[0];
 
   useEffect(() => {
@@ -76,8 +84,8 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
 
   // Every day in the current scope (used for totals).
   const scopeDays = useMemo(
-    () => (showAll || !selectedMonth ? days : days.filter((d) => format(d, 'yyyy-MM') === selectedMonth)),
-    [days, showAll, selectedMonth],
+    () => (showAll || !selectedMonth ? days : days.filter((day) => dayPresentation.get(day)?.month === selectedMonth)),
+    [days, dayPresentation, showAll, selectedMonth],
   );
   // Only lazy-load in All mode; a single month is at most 31 rows.
   const visibleDays = showAll ? scopeDays.slice(0, visibleCount) : scopeDays;
@@ -91,7 +99,7 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
   }, [mealLogs]);
 
   const shownMembers = focusId ? members.filter((m) => m.id === focusId) : members;
-  const countFor = (day: Date, memberId: string) => lookup.get(cellKey(format(day, 'yyyy-MM-dd'), memberId))?.count ?? 0;
+  const countFor = (day: Date, memberId: string) => lookup.get(cellKey(dayPresentation.get(day)?.key ?? '', memberId))?.count ?? 0;
   const dayTotal = (day: Date) => shownMembers.reduce((sum, m) => sum + countFor(day, m.id), 0);
   const memberTotal = (id: string) => scopeDays.reduce((s, d) => s + countFor(d, id), 0);
   const grandTotal =
@@ -239,6 +247,7 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
         <div ref={scrollRef} className={cn(maxHeight, 'overflow-y-auto overscroll-auto')}>
           <ul className="divide-y">
             {visibleDays.map((day) => {
+              const presentation = dayPresentation.get(day)!;
               const total = dayTotal(day);
               const eating = shownMembers.filter((m) => countFor(day, m.id) > 0);
               const absent = shownMembers.length - eating.length;
@@ -260,12 +269,12 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
                         today ? 'border-primary bg-primary text-primary-foreground' : 'bg-background',
                       )}
                     >
-                      <span className="text-[10px] font-medium leading-none opacity-80">{format(day, 'EEE')}</span>
-                      <span className="mt-0.5 font-heading text-lg font-bold leading-none">{format(day, 'd')}</span>
+                      <span className="text-[10px] font-medium leading-none opacity-80">{presentation.weekday}</span>
+                      <span className="mt-0.5 font-heading text-lg font-bold leading-none">{presentation.dayNumber}</span>
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      {showAll && <p className="mb-1 text-[11px] text-muted-foreground">{dayLabel(day)}</p>}
+                      {showAll && <p className="mb-1 text-[11px] text-muted-foreground">{presentation.label}</p>}
                       {total === 0 ? (
                         <p className="pt-2.5 text-sm text-muted-foreground">
                           {onDayClick ? 'Nothing logged. Tap to add meals.' : 'Nothing logged'}
@@ -274,7 +283,7 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
                         <>
                           <div className="flex flex-wrap gap-1.5">
                             {eating.map((m) => {
-                              const log = lookup.get(cellKey(format(day, 'yyyy-MM-dd'), m.id));
+                              const log = lookup.get(cellKey(presentation.key, m.id));
                               const count = log?.count ?? 0;
                               return (
                                 <span key={m.id} className="inline-flex items-center gap-1.5 rounded-full border bg-background py-0.5 pl-0.5 pr-2.5 text-xs">
@@ -343,13 +352,14 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
             </thead>
             <tbody>
               {visibleDays.map((day, index) => {
-                const dk = format(day, 'yyyy-MM-dd');
+                const presentation = dayPresentation.get(day)!;
+                const dk = presentation.key;
                 const total = dayTotal(day);
                 return (
                   <tr key={dk} onClick={() => onDayClick?.(day)} className={cn('group', onDayClick && 'cursor-pointer', tintedRows && index % 2 === 1 && 'bg-muted/20')}>
                     <td className={cn('sticky left-0 z-10 whitespace-nowrap border-b border-r bg-card px-4 py-2.5 group-hover:bg-muted', isToday(day) && 'border-l-2 border-l-primary')}>
-                      <span className={cn('block font-medium leading-tight', isToday(day) && 'text-primary')}>{dayLabel(day)}</span>
-                      <span className="block text-[10px] text-muted-foreground">{format(day, 'EEEE')}</span>
+                      <span className={cn('block font-medium leading-tight', isToday(day) && 'text-primary')}>{presentation.label}</span>
+                      <span className="block text-[10px] text-muted-foreground">{presentation.weekdayLong}</span>
                     </td>
                     {shownMembers.map((m) => {
                       const log = lookup.get(cellKey(dk, m.id));

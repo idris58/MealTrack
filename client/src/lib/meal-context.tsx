@@ -224,6 +224,18 @@ export function MealProvider({ children }: { children: ReactNode }) {
     [cycles],
   );
 
+  const historyMemberIdsByCycle = useMemo(() => {
+    const grouped = new Map<string, Set<string>>();
+    const addMember = (cycleId: string, memberId: string) => {
+      const memberIds = grouped.get(cycleId) ?? new Set<string>();
+      memberIds.add(memberId);
+      grouped.set(cycleId, memberIds);
+    };
+    for (const log of allMealLogs) addMember(log.cycleId, log.memberId);
+    for (const deposit of allDeposits) addMember(deposit.cycleId, deposit.memberId);
+    return grouped;
+  }, [allMealLogs, allDeposits]);
+
   const activeCycleChangelogEntries = useMemo(
     () => activeCycle ? allChangelogEntries.filter((entry) => entry.cycleId === activeCycle.id) : [],
     [allChangelogEntries, activeCycle],
@@ -243,10 +255,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const snapshot = cycle.membersSnapshot;
 
     const cycleMemberIds = new Set<string>();
-    const cycleHistoryMemberIds = new Set([
-      ...allMealLogs.filter((log) => log.cycleId === cycleId).map((log) => log.memberId),
-      ...allDeposits.filter((deposit) => deposit.cycleId === cycleId).map((deposit) => deposit.memberId),
-    ]);
+    const cycleHistoryMemberIds = historyMemberIdsByCycle.get(cycleId) ?? new Set<string>();
     const snapshotMembers = (snapshot && cycle.status !== 'active' ? snapshot : memberRoster).map((member) => {
       cycleMemberIds.add(member.id);
       return {
@@ -262,7 +271,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       .filter((member) => cycleHistoryMemberIds.has(member.id) && !cycleMemberIds.has(member.id))
       .map((member) => ({ ...member, deposit: 0, mealsEaten: 0 }));
     return [...snapshotMembers, ...archivedHistoryMembers];
-  }, [cycles, memberRoster, archivedMemberRoster, allMealLogs, allDeposits]);
+  }, [cycles, memberRoster, archivedMemberRoster, historyMemberIdsByCycle]);
 
   const getMemberName = useCallback((memberId: string, cycleId?: string) => {
     const scopedMembers = cycleId ? getCycleMembers(cycleId) : memberRoster;
