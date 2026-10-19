@@ -18,6 +18,8 @@ import {
   Check,
   LogOut,
   ArrowRightLeft,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -976,6 +978,244 @@ function InfoRow({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+
+// ─── DangerZoneCard ──────────────────────────────────────────────────────────
+
+function DangerZoneCard() {
+  const { profile, signOut, refreshProfile } = useAuth();
+  const isManager = profile?.role === 'manager';
+  const hasMess = Boolean(profile?.mess_id);
+
+  // Delete Mess state
+  const [deleteMessOpen, setDeleteMessOpen] = useState(false);
+  const [deletingMess, setDeletingMess] = useState(false);
+  const [messConfirmText, setMessConfirmText] = useState('');
+
+  // Delete Account state
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [accountConfirmText, setAccountConfirmText] = useState('');
+  const [accountError, setAccountError] = useState<string | null>(null);
+
+  const handleDeleteMess = async () => {
+    if (deletingMess || messConfirmText !== 'DELETE') return;
+    setDeletingMess(true);
+    try {
+      const { error: rpcErr } = await supabase.rpc('delete_current_mess');
+      if (rpcErr) throw rpcErr;
+      toast.success('Mess deleted successfully.');
+      setDeleteMessOpen(false);
+      try {
+        if (profile?.id) localStorage.removeItem(`mealtrack-profile-${profile.id}`);
+      } catch { /* ignore */ }
+      await refreshProfile();
+      window.location.href = '/app/onboarding';
+    } catch (err) {
+      toast.error('Unable to delete mess', {
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    } finally {
+      setDeletingMess(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deletingAccount || accountConfirmText !== 'DELETE') return;
+    setDeletingAccount(true);
+    setAccountError(null);
+    try {
+      const { error: rpcErr } = await supabase.rpc('delete_user_account');
+      if (rpcErr) throw rpcErr;
+      toast.success('Your account has been permanently deleted.');
+      setDeleteAccountOpen(false);
+      try {
+        if (profile?.id) localStorage.removeItem(`mealtrack-profile-${profile.id}`);
+      } catch { /* ignore */ }
+      await signOut();
+      window.location.href = '/app/auth';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to delete account.';
+      setAccountError(msg);
+      toast.error('Could not delete account', { description: msg });
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  return (
+    <Card className="border-destructive/30 bg-destructive/5 dark:bg-destructive/10">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2 text-destructive">
+          <AlertTriangle className="h-5 w-5" />
+          <CardTitle>Danger Zone</CardTitle>
+        </div>
+        <CardDescription>
+          Irreversible and destructive actions. Please proceed with caution.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Delete Mess – only for managers of a mess */}
+        {isManager && hasMess && (
+          <div className="flex flex-col gap-3 rounded-lg border border-destructive/20 bg-background/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-foreground">Delete Mess</p>
+              <p className="text-sm text-muted-foreground">
+                Permanently delete this mess and all associated meals, cycles, deposits, and notices.
+              </p>
+            </div>
+            <AlertDialog
+              open={deleteMessOpen}
+              onOpenChange={(open) => {
+                setDeleteMessOpen(open);
+                if (!open) setMessConfirmText('');
+              }}
+            >
+              <AlertDialogTrigger asChild>
+                <Button
+                  id="delete-mess-btn"
+                  variant="outline"
+                  className="shrink-0 gap-2 text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive/30"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Mess
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-destructive flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" /> Delete this mess?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-2">
+                    <span className="block">
+                      This will permanently erase all data for this mess, including active and closed cycles, member meal logs, expense records, deposits, and notices. All members will be removed.
+                    </span>
+                    <span className="block font-semibold text-destructive">
+                      This action cannot be undone.
+                    </span>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-2 py-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Type <strong className="font-mono text-destructive">DELETE</strong> to confirm:
+                  </Label>
+                  <Input
+                    id="confirm-delete-mess-input"
+                    value={messConfirmText}
+                    onChange={(e) => setMessConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    className="font-mono"
+                    disabled={deletingMess}
+                  />
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deletingMess}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={messConfirmText !== 'DELETE' || deletingMess}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleDeleteMess();
+                    }}
+                  >
+                    {deletingMess ? 'Deleting Mess…' : 'I understand, delete mess'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
+
+        {/* Delete User Account – available to any user */}
+        <div className="flex flex-col gap-3 rounded-lg border border-destructive/20 bg-background/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium text-foreground">Delete Account</p>
+            <p className="text-sm text-muted-foreground">
+              Permanently delete your personal account and all associated profile credentials.
+            </p>
+          </div>
+          <AlertDialog
+            open={deleteAccountOpen}
+            onOpenChange={(open) => {
+              setDeleteAccountOpen(open);
+              if (!open) {
+                setAccountConfirmText('');
+                setAccountError(null);
+              }
+            }}
+          >
+            <AlertDialogTrigger asChild>
+              <Button
+                id="delete-account-btn"
+                variant="outline"
+                className="shrink-0 gap-2 text-destructive hover:bg-destructive hover:text-destructive-foreground border-destructive/30"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete Account
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-destructive flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" /> Delete your account?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="space-y-2">
+                  <span className="block">
+                    Your profile, authentication account, and notifications will be permanently removed.
+                  </span>
+                  {isManager && hasMess && (
+                    <span className="block rounded-md bg-amber-500/10 p-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+                      Note: If you have active members in your mess, you must transfer management or delete the mess first.
+                    </span>
+                  )}
+                  <span className="block font-semibold text-destructive">
+                    This action is immediate and cannot be reversed.
+                  </span>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="space-y-2 py-2">
+                <Label className="text-xs text-muted-foreground">
+                  Type <strong className="font-mono text-destructive">DELETE</strong> to confirm:
+                </Label>
+                <Input
+                  id="confirm-delete-account-input"
+                  value={accountConfirmText}
+                  onChange={(e) => {
+                    setAccountConfirmText(e.target.value);
+                    setAccountError(null);
+                  }}
+                  placeholder="DELETE"
+                  className="font-mono"
+                  disabled={deletingAccount}
+                />
+                {accountError && (
+                  <p className="text-xs text-destructive flex items-center gap-1 font-medium mt-1">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    {accountError}
+                  </p>
+                )}
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletingAccount}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={accountConfirmText !== 'DELETE' || deletingAccount}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void handleDeleteAccount();
+                  }}
+                >
+                  {deletingAccount ? 'Deleting Account…' : 'Permanently Delete Account'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+
 export default function ProfilePage() {
   return (
     <div className="space-y-6 pb-20">
@@ -989,6 +1229,7 @@ export default function ProfilePage() {
       <UserProfileCard />
       <SecuritySettingsCard />
       <MessInfoCard />
+      <DangerZoneCard />
     </div>
   );
 }

@@ -118,6 +118,8 @@ declare target_mess_id uuid := public.current_mess_id();
 begin
   if not public.is_current_mess_manager() then raise exception 'Only a manager can delete a mess'; end if;
   if target_mess_id is null then raise exception 'No active mess'; end if;
+  delete from public.member_invites where mess_id = target_mess_id;
+  delete from public.meal_off_requests where mess_id = target_mess_id;
   delete from public.notification_deliveries where mess_id = target_mess_id;
   delete from public.push_subscriptions where mess_id = target_mess_id;
   delete from public.notices where mess_id = target_mess_id;
@@ -591,6 +593,95 @@ begin
 end;
 $$;
 
+-- ── delete_user_account ────────────────────────────────────────────────────────
+-- Permanently deletes the authenticated user's account from auth.users.
+-- 1. If caller is manager of a mess that has other members/profiles:
+--    raises an exception instructing them to transfer management or delete the mess first.
+-- 2. If caller is manager and the only person in the mess:
+--    completely removes the mess and all associated records.
+-- 3. If caller is a non-manager member in a mess:
+--    soft-deletes their roster row (with 10-second grace if no history) and unlinks profile.
+-- 4. Removes user's push subscriptions and deletes the row from auth.users,
+--    which cascades to public.profiles. Historical logs have user_id set to null.
+create or replace function public.delete_user_account()
+returns void language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  caller_uid uuid := auth.uid();
+  caller_mess_id uuid;
+  caller_role text;
+  other_members_count integer;
+  member_row public.members;
+  has_history boolean;
+begin
+  if caller_uid is null then
+    raise exception 'Authentication is required';
+  end if;
+
+  -- Read caller's mess association and role
+  select mess_id, role into caller_mess_id, caller_role
+  from public.profiles
+  where id = caller_uid;
+
+  if caller_mess_id is not null then
+    if caller_role = 'manager' then
+      -- Count other profiles or active member rows in this mess
+      select count(*) into other_members_count
+      from (
+        select id from public.profiles
+        where mess_id = caller_mess_id and id <> caller_uid
+        union
+        select id from public.members
+        where mess_id = caller_mess_id and deleted_at is null and (profile_id is null or profile_id <> caller_uid)
+      ) sub;
+
+      if other_members_count > 0 then
+        raise exception 'You are the manager of an active mess with other members. Please transfer management or delete the mess before deleting your account.';
+      else
+        -- Sole member: wipe the mess cleanly
+        delete from public.member_invites where mess_id = caller_mess_id;
+        delete from public.meal_off_requests where mess_id = caller_mess_id;
+        delete from public.notification_deliveries where mess_id = caller_mess_id;
+        delete from public.push_subscriptions where mess_id = caller_mess_id;
+        delete from public.notices where mess_id = caller_mess_id;
+        delete from public.share_links where mess_id = caller_mess_id;
+        delete from public.changelog_entries where mess_id = caller_mess_id;
+        delete from public.cycle_deposits where mess_id = caller_mess_id;
+        delete from public.meal_logs where mess_id = caller_mess_id;
+        delete from public.expenses where mess_id = caller_mess_id;
+        delete from public.cycles where mess_id = caller_mess_id;
+        delete from public.members where mess_id = caller_mess_id;
+        update public.profiles set mess_id = null, role = 'member', updated_at = now() where mess_id = caller_mess_id;
+        delete from public.messes where id = caller_mess_id;
+      end if;
+    else
+      -- Regular member: soft-delete their member row if linked
+      select * into member_row
+      from public.members
+      where profile_id = caller_uid and mess_id = caller_mess_id and deleted_at is null
+      for update;
+
+      if found then
+        has_history := exists (select 1 from public.meal_logs where member_id = member_row.id)
+                    or exists (select 1 from public.cycle_deposits where member_id = member_row.id);
+
+        update public.members
+        set deleted_at = now(),
+            delete_expires_at = case when has_history then null else now() + interval '10 seconds' end,
+            profile_id = null
+        where id = member_row.id;
+      end if;
+    end if;
+  end if;
+
+  -- Delete push subscriptions for this user
+  delete from public.push_subscriptions where user_id = caller_uid;
+
+  -- Delete from auth.users (cascades to public.profiles)
+  delete from auth.users where id = caller_uid;
+end;
+$$;
+
 revoke all on function public.create_mess(text), public.set_mess_role(uuid, text), public.update_mess_settings(text), public.delete_current_mess(), public.update_user_profile(text, text) from public;
 grant execute on function public.create_mess(text), public.set_mess_role(uuid, text), public.update_mess_settings(text), public.delete_current_mess(), public.update_user_profile(text, text) to authenticated;
 revoke all on function public.link_member_profile(uuid, uuid), public.create_member_invite(uuid), public.list_member_invites(), public.revoke_member_invite(uuid), public.accept_member_invite(uuid) from public;
@@ -601,5 +692,6 @@ revoke all on function public.start_new_cycle(text, timestamptz, uuid, jsonb), p
 grant execute on function public.start_new_cycle(text, timestamptz, uuid, jsonb), public.post_notice(text, timestamptz, text), public.mark_cycle_closed(uuid) to authenticated;
 revoke all on function public.reorder_mess_members(uuid[]) from public;
 grant execute on function public.reorder_mess_members(uuid[]) to authenticated;
-revoke all on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid) from public;
-grant execute on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid) to authenticated;
+revoke all on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() from public;
+grant execute on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() to authenticated;
+
