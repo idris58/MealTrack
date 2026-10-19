@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { usePushNotifications } from '@/lib/push-notifications';
-import { getNotificationPreferences, saveNotificationPreferences } from '@/lib/notification-preferences';
+import type { NotificationPreferences } from '@/lib/notification-preferences';
+import { useNotificationPreferences } from '@/lib/notification-preferences-context';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 
@@ -19,43 +20,29 @@ export function NotificationSettingsCard() {
   const { profile } = useAuth();
   const canManageMealReminders = profile?.role === 'manager' || profile?.role === 'coordinator';
   const { supported, permission, error, message, subscribe, refreshSubscriptionState } = usePushNotifications({ mode: 'main' });
+  const { preferences, loading: preferencesLoading, save: savePreferencesToServer } = useNotificationPreferences();
   const [reminderTime, setReminderTime] = useState('22:00');
-  const [globalEnabled, setGlobalEnabled] = useState(true);
-  const [noticesEnabled, setNoticesEnabled] = useState(true);
-  const [mealRemindersEnabled, setMealRemindersEnabled] = useState(true);
-  const [preferencesLoading, setPreferencesLoading] = useState(true);
   const [preferencesSaving, setPreferencesSaving] = useState(false);
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
   const [preferencesError, setPreferencesError] = useState<string | null>(null);
   const [showUnblockDialog, setShowUnblockDialog] = useState(false);
   const [checkingPermission, setCheckingPermission] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    void getNotificationPreferences().then((preferences) => {
-      if (!active) return;
-      setReminderTime(preferences.reminderTime || '22:00');
-      setGlobalEnabled(preferences.global !== false);
-      setNoticesEnabled(preferences.categories?.notices !== false);
-      setMealRemindersEnabled(preferences.categories?.mealReminders !== false);
-    }).catch((loadError) => {
-      if (active) setPreferencesError(loadError instanceof Error ? loadError.message : 'Unable to load reminder preferences.');
-    }).finally(() => {
-      if (active) setPreferencesLoading(false);
-    });
-    return () => { active = false; };
-  }, []);
+  const globalEnabled = preferences?.global !== false;
+  const noticesEnabled = preferences?.categories?.notices !== false;
+  const mealRemindersEnabled = preferences?.categories?.mealReminders !== false;
 
-  const savePreferences = async (patch: Parameters<typeof saveNotificationPreferences>[0], successMessage = 'Notification preferences saved.') => {
+  useEffect(() => {
+    if (preferences?.reminderTime) setReminderTime(preferences.reminderTime);
+  }, [preferences?.reminderTime]);
+
+  const savePreferences = async (patch: Partial<NotificationPreferences>, successMessage = 'Notification preferences saved.') => {
     setPreferencesSaving(true);
     setPreferencesMessage(null);
     setPreferencesError(null);
     try {
-      const saved = await saveNotificationPreferences(patch);
+      const saved = await savePreferencesToServer(patch);
       setReminderTime(saved.reminderTime || reminderTime);
-      if (saved.global !== undefined) setGlobalEnabled(saved.global !== false);
-      if (saved.categories?.notices !== undefined) setNoticesEnabled(saved.categories.notices !== false);
-      if (saved.categories?.mealReminders !== undefined) setMealRemindersEnabled(saved.categories.mealReminders !== false);
       setPreferencesMessage(successMessage);
     } catch (saveError) {
       setPreferencesError(saveError instanceof Error ? saveError.message : 'Unable to save reminder preferences.');
@@ -67,7 +54,7 @@ export function NotificationSettingsCard() {
   const handleCheckPermission = async () => {
     setCheckingPermission(true);
     try {
-      await refreshSubscriptionState();
+      await refreshSubscriptionState(true);
       if (Notification.permission === 'granted') {
         await subscribe();
         setShowUnblockDialog(false);
@@ -99,9 +86,6 @@ export function NotificationSettingsCard() {
   })();
 
   const handlePreferenceToggle = (key: 'global' | 'notices' | 'mealReminders', checked: boolean) => {
-    if (key === 'global') setGlobalEnabled(checked);
-    if (key === 'notices') setNoticesEnabled(checked);
-    if (key === 'mealReminders') setMealRemindersEnabled(checked);
     const patch = key === 'global' ? { global: checked } : { categories: { [key]: checked } };
     void savePreferences(patch, 'Notification preference saved.');
   };

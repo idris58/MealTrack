@@ -13,7 +13,7 @@ import { NoticeProvider } from "@/lib/notice-context";
 import { OfflineToastManager } from "@/components/offline-toast";
 import { supabase } from "@/lib/supabase";
 import { usePushNotifications } from "@/lib/push-notifications";
-import { getNotificationPreferences } from "@/lib/notification-preferences";
+import { NotificationPreferencesProvider, useNotificationPreferences } from "@/lib/notification-preferences-context";
 import { ErrorBoundary } from "@/components/error-boundary";
 const AuthPage = lazy(() => import("@/pages/auth"));
 const ChangelogPage = lazy(() => import("@/pages/changelog"));
@@ -118,41 +118,29 @@ function Router() {
 function NotificationOnboardingToast() {
   const { supported, permission, hasSubscription, working, subscribe } = usePushNotifications({ mode: "main" });
   const { user } = useAuth();
+  const { preferences, loading: preferencesLoading } = useNotificationPreferences();
   const toastId = useRef<string | number | null>(null);
   const autoSubscribeAttemptedFor = useRef<string | null>(null);
-  const [preferencesReady, setPreferencesReady] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [toastDismissed, setToastDismissed] = useState(false);
   const dismissalKey = user ? `mealtrack:notification-onboarding-dismissed:${user.id}` : null;
+  const notificationsEnabled = preferences?.global !== false &&
+    (preferences?.categories?.notices !== false || preferences?.categories?.mealReminders !== false);
 
-  useEffect(() => {
-    let active = true;
-    setPreferencesReady(false);
-    setToastDismissed(false);
-    void getNotificationPreferences().then((preferences) => {
-      if (!active) return;
-      setNotificationsEnabled(
-        preferences.global !== false &&
-        (preferences.categories?.notices !== false || preferences.categories?.mealReminders !== false),
-      );
-      setPreferencesReady(true);
-    }).catch(() => { if (active) setPreferencesReady(true); });
-    return () => { active = false; };
-  }, [user?.id]);
+  useEffect(() => { setToastDismissed(false); }, [user?.id]);
 
   useEffect(() => {
     setToastDismissed(dismissalKey ? window.sessionStorage.getItem(dismissalKey) === "true" : false);
   }, [dismissalKey]);
 
   useEffect(() => {
-    const canAutoSubscribe = supported && permission === "granted" && !hasSubscription && preferencesReady && notificationsEnabled && !working;
+    const canAutoSubscribe = supported && permission === "granted" && !hasSubscription && !preferencesLoading && notificationsEnabled && !working;
     if (!canAutoSubscribe || !user || autoSubscribeAttemptedFor.current === user.id) return;
     autoSubscribeAttemptedFor.current = user.id;
     void subscribe();
-  }, [hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, user, working]);
+  }, [hasSubscription, notificationsEnabled, permission, preferencesLoading, subscribe, supported, user, working]);
 
   useEffect(() => {
-    const shouldShow = supported && permission === "default" && !hasSubscription && preferencesReady && notificationsEnabled && !toastDismissed;
+    const shouldShow = supported && permission === "default" && !hasSubscription && !preferencesLoading && notificationsEnabled && !toastDismissed;
     if (shouldShow && toastId.current === null) {
       const handleDismiss = () => {
         if (dismissalKey) window.sessionStorage.setItem(dismissalKey, "true");
@@ -228,7 +216,7 @@ function NotificationOnboardingToast() {
         toastId.current = null;
       }
     };
-  }, [dismissalKey, hasSubscription, notificationsEnabled, permission, preferencesReady, subscribe, supported, toastDismissed]);
+  }, [dismissalKey, hasSubscription, notificationsEnabled, permission, preferencesLoading, subscribe, supported, toastDismissed]);
 
   return null;
 }
@@ -613,11 +601,13 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <PwaUpdateNotifier />
-        <Suspense fallback={<AppLoadingSkeleton message="Loading MealTrack..." />}>
-          <AppShell />
-        </Suspense>
-        <Toaster />
+        <NotificationPreferencesProvider>
+          <PwaUpdateNotifier />
+          <Suspense fallback={<AppLoadingSkeleton message="Loading MealTrack..." />}>
+            <AppShell />
+          </Suspense>
+          <Toaster />
+        </NotificationPreferencesProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

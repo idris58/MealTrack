@@ -64,6 +64,9 @@ function getSubscriptionEndpoint(subscription: PushSubscription | null) {
   return subscription?.endpoint ?? "";
 }
 
+const subscriptionStatusCache = new Map<string, { value: boolean; expiresAt: number }>();
+const subscriptionStatusRequests = new Map<string, Promise<boolean>>();
+
 export async function cleanupPushSubscriptionOnLogout(accessToken?: string | null) {
   if (!isPushSupported()) return;
   try {
@@ -92,10 +95,12 @@ async function getServerSubscriptionStatus({
   mode,
   shareToken,
   endpoint,
+  force = false,
 }: {
   mode: PushMode;
   shareToken?: string;
   endpoint: string;
+  force?: boolean;
 }) {
   const statusEndpoint =
     mode === "main"
@@ -109,14 +114,29 @@ async function getServerSubscriptionStatus({
         }
       : { "Content-Type": "application/json" };
 
-  const response = await fetch(statusEndpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ endpoint }),
-  });
-  const body = await response.json().catch(() => null);
+  const cacheKey = JSON.stringify([mode, shareToken ?? "", endpoint, "Authorization" in headers ? headers.Authorization : ""]);
+  const cached = subscriptionStatusCache.get(cacheKey);
+  if (!force && cached && cached.expiresAt > Date.now()) return cached.value;
+  const pending = !force ? subscriptionStatusRequests.get(cacheKey) : undefined;
+  if (pending) return pending;
 
-  return Boolean(response.ok && body?.subscribed);
+  const request = (async () => {
+    const response = await fetch(statusEndpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ endpoint }),
+    });
+    const body = await response.json().catch(() => null);
+    const subscribed = Boolean(response.ok && body?.subscribed);
+    if (response.ok) subscriptionStatusCache.set(cacheKey, { value: subscribed, expiresAt: Date.now() + 15_000 });
+    return subscribed;
+  })();
+  if (!force) subscriptionStatusRequests.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    if (subscriptionStatusRequests.get(cacheKey) === request) subscriptionStatusRequests.delete(cacheKey);
+  }
 }
 
 async function syncSubscription({ mode, shareToken, subscription }: { mode: PushMode; shareToken?: string; subscription: PushSubscription }) {
@@ -152,7 +172,7 @@ export function usePushNotifications({
     return "default";
   }, [hasSubscription, permission, supported, working]);
 
-  const refreshSubscriptionState = useCallback(async () => {
+  const refreshSubscriptionState = useCallback(async (force = false) => {
     if (!isPushSupported()) {
       setPermission("unsupported");
       setHasSubscription(false);
@@ -176,6 +196,7 @@ export function usePushNotifications({
           mode,
           shareToken,
           endpoint,
+          force,
         }),
       );
     } catch {

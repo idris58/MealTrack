@@ -76,10 +76,8 @@ export function useMembers(options: Options) {
     const next = memberIds.map((id) => byId.get(id)).filter((member): member is Member => Boolean(member));
     if (next.length !== members.length) return;
     setMembers(next);
-    const results = await Promise.all(memberIds.map((id, sortOrder) =>
-      supabase.from('members').update({ sort_order: sortOrder }).eq('id', id).eq('mess_id', messId),
-    ));
-    if (results.some((result) => result.error)) {
+    const { error } = await supabase.rpc('reorder_mess_members', { member_ids_input: memberIds });
+    if (error) {
       setMembers(members);
       throw new Error('Could not save member order.');
     }

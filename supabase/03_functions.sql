@@ -416,6 +416,43 @@ begin
 end;
 $$;
 
+create or replace function public.reorder_mess_members(member_ids_input uuid[])
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  current_mess uuid := public.current_mess_id();
+  active_member_count integer;
+begin
+  if auth.uid() is null then raise exception 'Authentication is required'; end if;
+  if current_mess is null or not public.has_mess_role(array['manager']) then
+    raise exception 'Only a mess manager can reorder members';
+  end if;
+  perform 1 from public.messes where id = current_mess for update;
+  if not found then raise exception 'Mess not found'; end if;
+
+  select count(*) into active_member_count
+  from public.members where mess_id = current_mess and deleted_at is null;
+  if member_ids_input is null
+     or cardinality(member_ids_input) <> active_member_count
+     or cardinality(member_ids_input) <> (select count(distinct input.member_id) from unnest(member_ids_input) as input(member_id)) then
+    raise exception 'Member order must contain every active member exactly once';
+  end if;
+  if exists (
+    select 1
+    from unnest(member_ids_input) as input(member_id)
+    left join public.members m on m.id = input.member_id and m.mess_id = current_mess and m.deleted_at is null
+    where m.id is null
+  ) then
+    raise exception 'Member order contains a member outside your mess';
+  end if;
+
+  update public.members m
+  set sort_order = ordered.ordinality - 1
+  from unnest(member_ids_input) with ordinality as ordered(member_id, ordinality)
+  where m.id = ordered.member_id and m.mess_id = current_mess and m.deleted_at is null;
+end;
+$$;
+
 -- The old code-based join path was retired by the latest migration.
 drop function if exists public.join_mess(text);
 
@@ -427,3 +464,5 @@ revoke all on function public.get_member_invite_preview(text) from public;
 grant execute on function public.get_member_invite_preview(text) to anon, authenticated;
 revoke all on function public.start_new_cycle(text, timestamptz, uuid, jsonb), public.post_notice(text, timestamptz, text), public.mark_cycle_closed(uuid) from public;
 grant execute on function public.start_new_cycle(text, timestamptz, uuid, jsonb), public.post_notice(text, timestamptz, text), public.mark_cycle_closed(uuid) to authenticated;
+revoke all on function public.reorder_mess_members(uuid[]) from public;
+grant execute on function public.reorder_mess_members(uuid[]) to authenticated;
