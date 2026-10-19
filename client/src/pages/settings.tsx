@@ -37,7 +37,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/auth-context';
-import { useMeal } from '@/lib/meal-context';
+import { useMealActions, useMealData } from '@/lib/meal-context';
 import { NotificationSettingsCard } from '@/components/settings/notification-settings-card';
 import { useNotice } from '@/lib/notice-context';
 import { NoticeDialog } from '@/components/notice-dialog';
@@ -101,9 +101,9 @@ function SettingsNavigation({ canManageCycles, canViewSharing }: { canManageCycl
 function CycleManagementCard() {
   const {
     activeCycle, pendingCycle, stats, members,
-    closeActiveCycle, renameActiveCycle, startNewCycle, suggestCycleName,
-    getCycleDetails, loadCycleDetails,
-  } = useMeal();
+    getCycleDetails,
+  } = useMealData();
+  const { closeActiveCycle, renameActiveCycle, startNewCycle, suggestCycleName, loadCycleDetails } = useMealActions();
   const { canManageCycles } = useAuth();
   const { isOnline } = useNetworkStatus();
 

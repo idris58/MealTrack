@@ -584,7 +584,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, messId, fetchCycleRowsForCycles]);
+  }, [userId, messId, fetchCycleRowsForCycles, setAllChangelogEntries]);
 
   React.useEffect(() => {
     if (!userId || !messId || !hasLoadedDataRef.current) return;
@@ -610,6 +610,10 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const requestDataLoad = useCallback(() => {
     void loadData();
   }, [loadData]);
+
+  const broadcastUpdate = useCallback(() => {
+    void broadcastSharedUpdate();
+  }, []);
 
   useMealScopeLoader({
     userId,
@@ -644,13 +648,17 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setMembers: setMemberRoster,
     setArchivedMembers: setArchivedMemberRoster,
     recordChange: recordChangelog,
-    reload: () => void loadData(),
-    broadcast: () => void broadcastSharedUpdate(),
+    reload: requestDataLoad,
+    broadcast: broadcastUpdate,
   });
 
   const saveMealLogsForReplayRef = useRef<MealActionsContextType["saveMealLogs"]>(async () => {});
+  const setPendingSyncIdsRef = useRef<React.Dispatch<React.SetStateAction<Set<string>>>>(() => {});
+  const replayOptionsRef = useRef({ userId, messId, recordChangelog, getMemberName });
+  replayOptionsRef.current = { userId, messId, recordChangelog, getMemberName };
 
   const replayOp = useCallback(async (op: OfflineOp) => {
+    const { userId, messId, recordChangelog, getMemberName } = replayOptionsRef.current;
     if (!userId || !messId) throw new Error('Not authenticated');
     if (op.payload.userId !== userId || op.payload.messId !== messId) {
       throw new Error('This offline change belongs to a different account or mess. Sign in with its original account to sync it.');
@@ -703,7 +711,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       if (!updated) throw new Error('The expense could not be found to update.');
       setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: p.type, paidBy: p.paidBy, date: p.date } : expense));
-      setPendingSyncIds((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
+      setPendingSyncIdsRef.current((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
       await recordChangelog({ cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'update', title: `Updated ${p.type} expense`, changes: p.changes });
       return;
     }
@@ -769,7 +777,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setAllMealLogs((prev) => prev.filter((log) => !log.id.startsWith('offline-')));
       return;
     }
-  }, [userId, messId, recordChangelog, getMemberName]);
+  }, []);
 
   const pendingItemId = useCallback((operation: OfflineOp) => (
     (operation.type === 'UPDATE_EXPENSE' || operation.type === 'DELETE_EXPENSE') &&
@@ -798,6 +806,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     afterSync: afterOfflineSync,
     pendingItemId,
   });
+  setPendingSyncIdsRef.current = setPendingSyncIds;
 
   const depositActions = useDeposits({
     userId,
@@ -808,7 +817,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     getCycleId: getRequiredCycleId,
     getMemberName: (memberId, cycleId) => getMemberName(memberId, cycleId),
     recordChange: recordChangelog,
-    broadcast: () => void broadcastSharedUpdate(),
+    broadcast: broadcastUpdate,
   });
 
   const expenseActions = useExpenses({
@@ -820,7 +829,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     getCycleId: getRequiredCycleId,
     allowsNegativeAmount: allowsNegativeExpenseAmount,
     recordChange: recordChangelog,
-    broadcast: () => void broadcastSharedUpdate(),
+    broadcast: broadcastUpdate,
   });
 
   const mealLogActions = useMealLogs({
@@ -831,7 +840,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     getCycleId: getRequiredCycleId,
     getMemberName,
     recordChange: recordChangelog,
-    broadcast: () => void broadcastSharedUpdate(),
+    broadcast: broadcastUpdate,
   });
   saveMealLogsForReplayRef.current = mealLogActions.saveMealLogs;
 
@@ -849,8 +858,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setExpenses: setAllExpenses,
     setMealLogs: setAllMealLogs,
     setChangelogEntries: setAllChangelogEntries,
-    reload: () => void loadData(),
-    broadcast: () => void broadcastSharedUpdate(),
+    reload: requestDataLoad,
+    broadcast: broadcastUpdate,
   });
 
   const activeDetails = useMemo(

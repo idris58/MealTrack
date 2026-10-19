@@ -1,4 +1,4 @@
-import { useMeal } from '@/lib/meal-context';
+import { useMealData } from '@/lib/meal-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ArrowUpRight,
@@ -28,7 +28,7 @@ function formatCurrency(amount: number) {
 }
 
 export function ManagerDashboard() {
-  const { stats, members, mealLogs } = useMeal();
+  const { stats, members, mealLogs } = useMealData();
   const [openExpense, setOpenExpense] = useState(false);
   const [openMeal, setOpenMeal] = useState(false);
 

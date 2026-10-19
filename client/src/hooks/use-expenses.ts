@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -23,8 +23,12 @@ const dateOnly = (value: string) => /^\d{4}-\d{2}-\d{2}/.test(value) ? value.sli
 const isNetworkError = (error: { message?: string; status?: number }) =>
   error.status === 0 || /fetch|network|connection|offline|load failed/i.test(error.message ?? '');
 
-export function useExpenses({ userId, messId, expenses, setExpenses, setPendingSyncIds, getCycleId, allowsNegativeAmount, recordChange, broadcast }: Options) {
+export function useExpenses(options: Options) {
+  const latest = useRef(options);
+  latest.current = options;
+
   const addExpense = useCallback(async (amount: number, description: string, type: 'meal' | 'fixed', paidBy: string, cycleId?: string, expenseDate?: string) => {
+    const { userId, messId, setExpenses, setPendingSyncIds, getCycleId, allowsNegativeAmount, recordChange, broadcast } = latest.current;
     if (!userId || !messId) return;
     const targetCycleId = getCycleId(cycleId);
     if (!targetCycleId || (amount < 0 && !allowsNegativeAmount(targetCycleId))) return;
@@ -54,9 +58,10 @@ export function useExpenses({ userId, messId, expenses, setExpenses, setPendingS
     setExpenses((previous) => [next, ...previous]);
     await recordChange({ cycleId: targetCycleId, entityType: 'expense', entityId: next.id, action: 'create', title: `Added ${next.type} expense`, changes: [snapshot('description', 'Description', next.description), snapshot('amount', 'Amount', next.amount), snapshot('type', 'Type', next.type)] });
     broadcast();
-  }, [allowsNegativeAmount, broadcast, getCycleId, messId, recordChange, setExpenses, setPendingSyncIds, userId]);
+  }, []);
 
   const updateExpense = useCallback(async (id: string, updates: ExpenseUpdate) => {
+    const { userId, messId, expenses, setExpenses, setPendingSyncIds, recordChange, broadcast } = latest.current;
     if (!userId || !messId) return;
     const existing = expenses.find((expense) => expense.id === id);
     if (!existing) return;
@@ -91,9 +96,10 @@ export function useExpenses({ userId, messId, expenses, setExpenses, setPendingS
     setExpenses((previous) => previous.map((expense) => expense.id === id ? { ...expense, ...updates, date: updates.date ?? expense.date } : expense));
     await recordChange({ cycleId: existing.cycleId, entityType: 'expense', entityId: id, action: 'update', title: `Updated ${updates.type} expense`, changes });
     broadcast();
-  }, [broadcast, expenses, messId, recordChange, setExpenses, setPendingSyncIds, userId]);
+  }, []);
 
   const deleteExpense = useCallback(async (id: string) => {
+    const { userId, messId, expenses, setExpenses, setPendingSyncIds, recordChange, broadcast } = latest.current;
     if (!userId || !messId) return;
     const existing = expenses.find((expense) => expense.id === id);
     if (!existing) return;
@@ -128,15 +134,16 @@ export function useExpenses({ userId, messId, expenses, setExpenses, setPendingS
     setExpenses((previous) => previous.filter((expense) => expense.id !== id));
     await recordChange({ cycleId: existing.cycleId, entityType: 'expense', entityId: id, action: 'delete', title: `Deleted ${existing.type} expense`, changes: [snapshot('description', 'Description', existing.description), snapshot('amount', 'Amount', existing.amount), snapshot('type', 'Type', existing.type), snapshot('paid_by', 'Paid By', existing.paidBy), snapshot('date', 'Date', existing.date)] });
     broadcast();
-  }, [broadcast, expenses, messId, recordChange, setExpenses, setPendingSyncIds, userId]);
+  }, []);
 
   const restoreExpense = useCallback(async (id: string) => {
+    const { userId, messId, setExpenses, broadcast } = latest.current;
     if (!userId || !messId) return;
     const { data, error } = await supabase.from('expenses').update({ deleted_at: null, delete_expires_at: null }).eq('id', id).eq('mess_id', messId).not('deleted_at', 'is', null).select('id, cycle_id, amount, description, type, date, paid_by').maybeSingle();
     if (error) throw new Error('Unable to restore expense. Please try again.');
     if (data?.cycle_id) setExpenses((previous) => previous.some((expense) => expense.id === data.id) ? previous : [{ id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by }, ...previous]);
     broadcast();
-  }, [broadcast, messId, setExpenses, userId]);
+  }, []);
 
   return { addExpense, updateExpense, deleteExpense, restoreExpense };
 }

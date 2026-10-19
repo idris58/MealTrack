@@ -5,7 +5,7 @@
  * deposit modal, and soft-delete / undo.
  */
 
-import { useMeal, type Member } from '@/lib/meal-context';
+import { useMealActions, useMealData, type Member } from '@/lib/meal-context';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -71,7 +71,7 @@ function inviteTime(value: string) {
 
 // ── Sub-forms ─────────────────────────────────────────────────────────────────
 function AddMemberForm({ onClose }: { onClose: () => void }) {
-  const { addMember } = useMeal();
+  const { addMember } = useMealActions();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<z.infer<typeof memberSchema>>({
     resolver: zodResolver(memberSchema),
@@ -95,7 +95,7 @@ function AddMemberForm({ onClose }: { onClose: () => void }) {
 }
 
 function DepositForm({ memberId, onClose }: { memberId: string; onClose: () => void }) {
-  const { addDeposit } = useMeal();
+  const { addDeposit } = useMealActions();
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState<'add' | 'deduct'>('add');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -273,7 +273,8 @@ function SortableMemberCard({
 
 // ── Main Manager Members View ─────────────────────────────────────────────────
 export function ManagerMembersView() {
-  const { members, archivedMembers, removeMember, restoreMember, reorderMembers, getMemberStats, activeCycle } = useMeal();
+  const { members, archivedMembers, getMemberStats, activeCycle } = useMealData();
+  const { removeMember, restoreMember, reorderMembers } = useMealActions();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),

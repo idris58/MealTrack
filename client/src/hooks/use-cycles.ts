@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { supabase } from '@/lib/supabase';
 import { triggerSettlementPendingPush } from '@/lib/push-triggers';
@@ -31,8 +31,12 @@ function defaultCycleName(date: string | Date) {
   return `Meal ${season}-${String(value.getFullYear()).slice(-2)}`;
 }
 
-export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, getCycleMembers, getCycleDetails, setCycles, setLoadedCycleIds, setDeposits, setExpenses, setMealLogs, setChangelogEntries, reload, broadcast }: Options) {
+export function useCycles(options: Options) {
+  const latest = useRef(options);
+  latest.current = options;
+
   const renameActiveCycle = useCallback(async (name: string) => {
+    const { userId, messId, activeCycle, cycles, setCycles, broadcast } = latest.current;
     if (!userId || !messId || !activeCycle) return;
     const trimmed = name.trim();
     if (!trimmed) throw new Error('Cycle name is required.');
@@ -42,9 +46,10 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
     if (error) throw new Error(error.code === '23505' ? 'A cycle with this name already exists.' : 'Unable to rename the current cycle right now.');
     setCycles((previous) => previous.map((cycle) => cycle.id === activeCycle.id ? { ...cycle, name: trimmed } : cycle));
     broadcast();
-  }, [activeCycle, broadcast, cycles, messId, setCycles, userId]);
+  }, []);
 
   const closeActiveCycle = useCallback(async () => {
+    const { userId, messId, activeCycle, pendingCycle, getCycleMembers, getCycleDetails, setCycles, broadcast } = latest.current;
     if (!userId || !messId || !activeCycle) return;
     if (pendingCycle) throw new Error('Finish the pending cycle settlement before closing another cycle.');
     const snapshot: SnapshotMember[] = getCycleMembers(activeCycle.id).map(({ id, name, avatar }) => ({ id, name, avatar }));
@@ -65,9 +70,10 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
     }
 
     broadcast();
-  }, [activeCycle, broadcast, getCycleDetails, getCycleMembers, messId, pendingCycle, setCycles, userId]);
+  }, []);
 
   const startNewCycle = useCallback(async (name: string, startedAt?: string, carryForwards?: Array<{ memberId: string; amount: number }>) => {
+    const { userId, messId, cycles, activeCycle, pendingCycle, setCycles, setLoadedCycleIds, reload, broadcast } = latest.current;
     if (!userId || !messId) return;
     if (activeCycle) throw new Error('Close the current active cycle before starting a new one.');
     const trimmed = name.trim();
@@ -84,18 +90,20 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
     setLoadedCycleIds((previous) => new Set(previous).add(data.id));
     if (carryForwards?.length) reload();
     broadcast();
-  }, [activeCycle, broadcast, cycles, messId, pendingCycle, reload, setCycles, setLoadedCycleIds, userId]);
+  }, []);
 
   const suggestCycleName = useCallback((date?: Date) => {
+    const { cycles } = latest.current;
     const base = defaultCycleName(date ?? new Date());
     const names = new Set(cycles.map((cycle) => cycle.name.trim().toLowerCase()));
     if (!names.has(base.toLowerCase())) return base;
     let suffix = 1;
     while (names.has(`${base}_${suffix}`.toLowerCase())) suffix += 1;
     return `${base}_${suffix}`;
-  }, [cycles]);
+  }, []);
 
   const markCycleClosed = useCallback(async (cycleId: string) => {
+    const { userId, messId, setCycles, setChangelogEntries, broadcast } = latest.current;
     if (!userId || !messId) return;
     const { data, error } = await supabase.rpc('mark_cycle_closed', { cycle_id_input: cycleId });
     if (error || !data) throw new Error(error?.message || 'Unable to finalize the cycle. Please try again.');
@@ -103,9 +111,10 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
     setCycles((previous) => previous.map((cycle) => cycle.id === cycleId ? { ...cycle, status: 'closed', finalizedAt } : cycle));
     setChangelogEntries((previous) => previous.filter((entry) => entry.cycleId !== cycleId));
     broadcast();
-  }, [broadcast, messId, setChangelogEntries, setCycles, userId]);
+  }, []);
 
   const deleteCycle = useCallback(async (cycleId: string) => {
+    const { userId, messId, cycles, setCycles, setLoadedCycleIds, setDeposits, setExpenses, setMealLogs } = latest.current;
     if (!userId || !messId || !cycles.some((cycle) => cycle.id === cycleId && cycle.status === 'closed')) return;
     const now = new Date();
     const { error } = await supabase.from('cycles').update({ deleted_at: now.toISOString(), delete_expires_at: new Date(now.getTime() + DELETE_GRACE_MS).toISOString() }).eq('id', cycleId).eq('mess_id', messId).eq('status', 'closed').is('deleted_at', null);
@@ -115,15 +124,16 @@ export function useCycles({ userId, messId, cycles, activeCycle, pendingCycle, g
     setDeposits((previous) => previous.filter((item) => item.cycleId !== cycleId));
     setExpenses((previous) => previous.filter((item) => item.cycleId !== cycleId));
     setMealLogs((previous) => previous.filter((item) => item.cycleId !== cycleId));
-  }, [cycles, messId, setCycles, setDeposits, setExpenses, setLoadedCycleIds, setMealLogs, userId]);
+  }, []);
 
   const restoreCycle = useCallback(async (cycleId: string) => {
+    const { userId, messId, setCycles, reload } = latest.current;
     if (!userId || !messId) return;
     const { data, error } = await supabase.from('cycles').update({ deleted_at: null, delete_expires_at: null }).eq('id', cycleId).eq('mess_id', messId).eq('status', 'closed').not('deleted_at', 'is', null).select('id, name, status, started_at, closed_at, finalized_at, members_snapshot').maybeSingle();
     if (error) throw new Error('Unable to restore the cycle. Please try again.');
     if (data) setCycles((previous) => previous.some((cycle) => cycle.id === data.id) ? previous : [{ id: data.id, name: data.name ?? defaultCycleName(data.started_at), status: data.status, startedAt: data.started_at, closedAt: data.closed_at, finalizedAt: data.finalized_at, membersSnapshot: data.members_snapshot }, ...previous]);
     reload();
-  }, [messId, reload, setCycles, userId]);
+  }, []);
 
   return { renameActiveCycle, closeActiveCycle, startNewCycle, suggestCycleName, markCycleClosed, deleteCycle, restoreCycle };
 }

@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { supabase } from '@/lib/supabase';
 import type { ChangelogChange, Member } from '@/lib/meal-types';
@@ -36,18 +36,12 @@ const updateChange = (
   to: string | null | undefined,
 ): ChangelogChange | null => from === to ? null : { field, label, from: from ?? null, to: to ?? null };
 
-export function useMembers({
-  userId,
-  messId,
-  activeCycleId,
-  members,
-  setMembers,
-  setArchivedMembers,
-  recordChange,
-  reload,
-  broadcast,
-}: Options) {
+export function useMembers(options: Options) {
+  const latest = useRef(options);
+  latest.current = options;
+
   const addMember = useCallback(async (name: string) => {
+    const { userId, messId, activeCycleId, members, setMembers, recordChange, broadcast } = latest.current;
     if (!userId || !messId) return;
     const { data, error } = await supabase
       .from('members')
@@ -73,9 +67,10 @@ export function useMembers({
       changes: [{ field: 'name', label: 'Name', value: data.name }],
     });
     broadcast();
-  }, [activeCycleId, broadcast, members.length, messId, recordChange, setMembers, userId]);
+  }, []);
 
   const reorderMembers = useCallback(async (memberIds: string[]) => {
+    const { userId, messId, members, setMembers, broadcast } = latest.current;
     if (!userId || !messId || memberIds.length !== members.length) return;
     const byId = new Map(members.map((member) => [member.id, member]));
     const next = memberIds.map((id) => byId.get(id)).filter((member): member is Member => Boolean(member));
@@ -89,9 +84,10 @@ export function useMembers({
       throw new Error('Could not save member order.');
     }
     broadcast();
-  }, [broadcast, members, messId, setMembers, userId]);
+  }, []);
 
   const updateMember = useCallback(async (id: string, updates: Partial<Member>) => {
+    const { userId, messId, activeCycleId, members, setMembers, recordChange, broadcast } = latest.current;
     if (!userId || !messId) return;
     const current = members.find((member) => member.id === id);
     if (!current) return;
@@ -113,9 +109,10 @@ export function useMembers({
       action: 'update', title: `Updated member ${current.name}`, changes,
     });
     broadcast();
-  }, [activeCycleId, broadcast, members, messId, recordChange, setMembers, userId]);
+  }, []);
 
   const removeMember = useCallback(async (id: string) => {
+    const { userId, messId, activeCycleId, members, setMembers, setArchivedMembers, recordChange, broadcast } = latest.current;
     if (!userId || !messId) return;
     const current = members.find((member) => member.id === id);
     if (!current) return;
@@ -140,9 +137,10 @@ export function useMembers({
       changes: [{ field: 'name', label: 'Name', value: current.name }],
     });
     broadcast();
-  }, [activeCycleId, broadcast, members, messId, recordChange, setArchivedMembers, setMembers, userId]);
+  }, []);
 
   const restoreMember = useCallback(async (id: string) => {
+    const { userId, messId, setMembers, setArchivedMembers, reload, broadcast } = latest.current;
     if (!userId || !messId) return;
     const { data, error } = await supabase.from('members')
       .update({ deleted_at: null, delete_expires_at: null })
@@ -158,7 +156,7 @@ export function useMembers({
     }
     reload();
     broadcast();
-  }, [broadcast, messId, reload, setArchivedMembers, setMembers, userId]);
+  }, []);
 
   return { addMember, reorderMembers, updateMember, removeMember, restoreMember };
 }

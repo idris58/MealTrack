@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import type { CycleDeposit, Expense, MealLog } from '@/lib/meal-types';
 
@@ -22,18 +22,21 @@ type Options = {
 export function useCycleLoader({ enabled, isLoaded, fetchRows, setDeposits, setExpenses, setMealLogs, setLoadedCycleIds }: Options) {
   const [loadingById, setLoadingById] = useState<Record<string, boolean>>({});
   const [errorById, setErrorById] = useState<Record<string, string | null>>({});
+  const latest = useRef({ enabled, isLoaded, fetchRows, setDeposits, setExpenses, setMealLogs, setLoadedCycleIds, loadingById, errorById });
+  latest.current = { enabled, isLoaded, fetchRows, setDeposits, setExpenses, setMealLogs, setLoadedCycleIds, loadingById, errorById };
 
   const loadCycleDetails = useCallback(async (cycleId: string, options: { force?: boolean } = {}) => {
-    if (!enabled || loadingById[cycleId] || (!options.force && isLoaded(cycleId))) return;
+    const current = latest.current;
+    if (!current.enabled || current.loadingById[cycleId] || (!options.force && current.isLoaded(cycleId))) return;
     setLoadingById((previous) => ({ ...previous, [cycleId]: true }));
     setErrorById((previous) => ({ ...previous, [cycleId]: null }));
     try {
-      const rows = await fetchRows(cycleId);
+      const rows = await latest.current.fetchRows(cycleId);
       if (!rows) return;
-      setDeposits((previous) => [...previous.filter((item) => item.cycleId !== cycleId), ...rows.deposits]);
-      setExpenses((previous) => [...previous.filter((item) => item.cycleId !== cycleId), ...rows.expenses]);
-      setMealLogs((previous) => [...previous.filter((item) => item.cycleId !== cycleId), ...rows.mealLogs]);
-      setLoadedCycleIds((previous) => new Set(previous).add(cycleId));
+      latest.current.setDeposits((previous) => [...previous.filter((item) => item.cycleId !== cycleId), ...rows.deposits]);
+      latest.current.setExpenses((previous) => [...previous.filter((item) => item.cycleId !== cycleId), ...rows.expenses]);
+      latest.current.setMealLogs((previous) => [...previous.filter((item) => item.cycleId !== cycleId), ...rows.mealLogs]);
+      latest.current.setLoadedCycleIds((previous) => new Set(previous).add(cycleId));
     } catch (caught) {
       console.error('Error loading cycle details:', caught);
       setErrorById((previous) => ({
@@ -43,12 +46,15 @@ export function useCycleLoader({ enabled, isLoaded, fetchRows, setDeposits, setE
     } finally {
       setLoadingById((previous) => ({ ...previous, [cycleId]: false }));
     }
-  }, [enabled, fetchRows, isLoaded, loadingById, setDeposits, setExpenses, setLoadedCycleIds, setMealLogs]);
+  }, []);
+
+  const isLoading = useCallback((cycleId: string) => Boolean(latest.current.loadingById[cycleId]), []);
+  const getError = useCallback((cycleId: string) => latest.current.errorById?.[cycleId] ?? null, []);
 
   return {
     loadCycleDetails,
-    isLoading: (cycleId: string) => Boolean(loadingById[cycleId]),
-    getError: (cycleId: string) => errorById[cycleId] ?? null,
+    isLoading,
+    getError,
     reset: () => {
       setLoadingById({});
       setErrorById({});

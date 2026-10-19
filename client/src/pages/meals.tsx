@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useMeal } from '@/lib/meal-context';
+import { useMealData } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -18,7 +18,7 @@ function formatMealCount(value: number) {
 }
 
 export default function Meals() {
-  const { members, mealLogs, activeCycle } = useMeal();
+  const { members, mealLogs, activeCycle } = useMealData();
   const { canOperateMeals, profile } = useAuth();
   const isMember = profile?.role === 'member';
   const [openMeal, setOpenMeal] = useState(false);

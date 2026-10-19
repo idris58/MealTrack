@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 
-import { useMeal, type MealLog, type Member } from '@/lib/meal-context';
+import { useMealActions, type MealLog, type Member } from '@/lib/meal-context';
 import { runMutation } from '@/lib/run-mutation';
 import { normalizeBengaliDigits } from '@/lib/localized-number';
 
@@ -16,7 +16,7 @@ type MealCountEditorOptions = {
 const validMealCount = /^[0-9\u09E6-\u09EF]*\.?[0-9\u09E6-\u09EF]*$/;
 
 export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, onSave }: MealCountEditorOptions) {
-  const { saveMealLogs } = useMeal();
+  const { saveMealLogs } = useMealActions();
   const [date, setDate] = useState<Date>(initialDate ?? new Date());
   const [mealCounts, setMealCounts] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);

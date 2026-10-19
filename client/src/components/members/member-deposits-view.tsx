@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
-import { useMeal, type CycleDeposit } from '@/lib/meal-context';
+import { useMealData, type CycleDeposit } from '@/lib/meal-context';
 import { computeMemberCosts } from '@shared/cycle-math';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -246,7 +246,7 @@ type Filter = 'all' | Kind;
 
 export function MemberDepositsView() {
   const { profile } = useAuth();
-  const { members, deposits, mealLogs, activeCycle, stats, getMemberStats } = useMeal();
+  const { members, deposits, mealLogs, activeCycle, stats, getMemberStats } = useMealData();
 
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');

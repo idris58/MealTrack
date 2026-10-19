@@ -21,7 +21,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import {
-  useMeal,
+  useMealActions,
+  useMealData,
   type ChangelogAction,
   type ChangelogActor,
   type ChangelogChange,
@@ -469,8 +470,8 @@ export default function ChangelogPage() {
     pendingCycleChangelogEntries,
     hasMoreChangelogEntries,
     changelogLoading,
-    loadMoreChangelogEntries,
-  } = useMeal();
+  } = useMealData();
+  const { loadMoreChangelogEntries } = useMealActions();
 
   const [actionFilter, setActionFilter] = useState<ChangelogAction | 'all'>('all');
   const [entityFilter, setEntityFilter] = useState<ChangelogEntityType | 'all'>('all');

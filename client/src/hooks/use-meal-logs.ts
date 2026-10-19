@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { supabase } from '@/lib/supabase';
@@ -24,8 +24,12 @@ const actionFor = (changes: ChangelogChange[]): 'create' | 'update' | 'delete' =
   return deleted && !created ? 'delete' : created && !deleted ? 'create' : 'update';
 };
 
-export function useMealLogs({ userId, messId, setMealLogs, setPendingSyncIds, getCycleId, getMemberName, recordChange, broadcast }: Options) {
+export function useMealLogs(options: Options) {
+  const latest = useRef(options);
+  latest.current = options;
+
   const saveMealLogs = useCallback(async (entries: Array<{ memberId: string; count: number }>, date: string, cycleId?: string) => {
+    const { userId, messId, setMealLogs, setPendingSyncIds, getCycleId, getMemberName, recordChange, broadcast } = latest.current;
     if (!userId || !messId || !entries.length) return;
     const targetCycleId = getCycleId(cycleId);
     if (!targetCycleId) return;
@@ -63,7 +67,7 @@ export function useMealLogs({ userId, messId, setMealLogs, setPendingSyncIds, ge
     ]);
     await recordChange({ cycleId: targetCycleId, entityType: 'meal_log', entityId: targetCycleId, action: actionFor(changes), title: `Updated meal log for ${changes.length} ${changes.length === 1 ? 'member' : 'members'}`, changes: [{ field: 'date', label: 'Date', value: date }, { field: 'members_changed', label: 'Members Changed', value: changes.length }, ...changes] });
     broadcast();
-  }, [broadcast, getCycleId, getMemberName, messId, recordChange, setMealLogs, setPendingSyncIds, userId]);
+  }, []);
 
   const logMeal = useCallback((memberId: string, count: number, date: string, cycleId?: string) => saveMealLogs([{ memberId, count }], date, cycleId), [saveMealLogs]);
   return { saveMealLogs, logMeal };

@@ -54,7 +54,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
-import { useMeal, type CycleDeposit } from '@/lib/meal-context';
+import { useMealData, type CycleDeposit } from '@/lib/meal-context';
 import { useNotice } from '@/lib/notice-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -248,7 +248,7 @@ function SplitDonut({ meal, fixed }: { meal: number; fixed: number }) {
 
 export function MemberDashboard() {
   const { profile } = useAuth();
-  const { members, mealLogs, deposits, expenses, stats, activeCycle, getMemberStats } = useMeal();
+  const { members, mealLogs, deposits, expenses, stats, activeCycle, getMemberStats } = useMealData();
   const { notice } = useNotice();
 
   const displayName = profile?.full_name?.trim() || 'Member';

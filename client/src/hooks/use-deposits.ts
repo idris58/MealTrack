@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { supabase } from '@/lib/supabase';
@@ -20,8 +20,12 @@ type Options = {
 const isNetworkError = (error: { message?: string; status?: number }) =>
   error.status === 0 || /fetch|network|connection|offline|load failed/i.test(error.message ?? '');
 
-export function useDeposits({ userId, messId, deposits, setDeposits, setPendingSyncIds, getCycleId, getMemberName, recordChange, broadcast }: Options) {
+export function useDeposits(options: Options) {
+  const latest = useRef(options);
+  latest.current = options;
+
   const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string) => {
+    const { userId, messId, deposits, setDeposits, setPendingSyncIds, getCycleId, getMemberName, recordChange, broadcast } = latest.current;
     if (!userId || !messId || amount === 0) return;
     const targetCycleId = getCycleId(cycleId);
     if (!targetCycleId) return;
@@ -76,7 +80,7 @@ export function useDeposits({ userId, messId, deposits, setDeposits, setPendingS
       ],
     });
     broadcast();
-  }, [broadcast, deposits, getCycleId, getMemberName, messId, recordChange, setDeposits, setPendingSyncIds, userId]);
+  }, []);
 
   return { addDeposit };
 }

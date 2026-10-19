@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
-import { useMeal, type Expense } from '@/lib/meal-context';
+import { useMealActions, type Expense } from '@/lib/meal-context';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -40,7 +40,7 @@ type ExpenseFormProps = {
 };
 
 export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = false, onClose, onDeleted }: ExpenseFormProps) {
-  const { addExpense, updateExpense, deleteExpense } = useMeal();
+  const { addExpense, updateExpense, deleteExpense } = useMealActions();
   const [date, setDate] = useState<Date>(expense ? parseISO(expense.date) : new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);

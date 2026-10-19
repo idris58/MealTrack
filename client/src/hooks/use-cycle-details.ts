@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import { computeCycleMath } from '@shared/cycle-math';
 import type { Cycle, CycleDeposit, CycleDetails, Expense, MealLog, Member } from '@/lib/meal-types';
@@ -52,6 +52,7 @@ function sameMembers(previous: Member[], current: Member[]) {
 /** Computes settlement-ready cycle details from the normalized local store. */
 export function useCycleDetails({ cycles, loadedCycleIds, membersForCycle, deposits, expenses, mealLogs }: Options) {
   const cachedDetails = useRef(new Map<string, CachedCycleDetails>());
+  const byIdRef = useRef<Record<string, CycleDetails>>({});
 
   const byId = useMemo(() => {
     const next: Record<string, CycleDetails> = {};
@@ -108,5 +109,8 @@ export function useCycleDetails({ cycles, loadedCycleIds, membersForCycle, depos
     return next;
   }, [cycles, loadedCycleIds, deposits, expenses, mealLogs, membersForCycle]);
 
-  return { cycleDetailsById: byId, getCycleDetails: (cycleId: string) => byId[cycleId] ?? null };
+  byIdRef.current = byId;
+  const getCycleDetails = useCallback((cycleId: string) => byIdRef.current[cycleId] ?? null, []);
+
+  return { cycleDetailsById: byId, getCycleDetails };
 }

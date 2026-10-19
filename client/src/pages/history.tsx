@@ -4,7 +4,7 @@ import { eachDayOfInterval, format, max, min, parseISO, startOfDay } from 'date-
 import { Archive, Check, ChevronDown, History, Lock, Pencil, Plus, ScrollText, ShoppingBag, Trash2, Utensils, Wallet, Zap, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
 
-import { useMeal, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
+import { useMealActions, useMealData, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { cleanCurrencyFloat, computeSettlementSummary } from '@/lib/settlement-math';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -64,7 +64,7 @@ function SettlementForm({
   currentBalance: number;
   onClose: () => void;
 }) {
-  const { addDeposit } = useMeal();
+  const { addDeposit } = useMealActions();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -139,7 +139,7 @@ function SettlementForm({
 }
 
 function PendingCycleCard({ details }: { details: CycleDetails }) {
-  const { markCycleClosed, restoreExpense } = useMeal();
+  const { markCycleClosed, restoreExpense } = useMealActions();
   const { profile } = useAuth();
   const canSettle = profile?.role === 'manager' || profile?.role === 'coordinator';
   const canCorrect = canSettle;
@@ -619,7 +619,8 @@ function ClosedCycleCard({
   isExpanded: boolean;
   onDeleted?: (details: CycleDetails) => void;
 }) {
-  const { getCycleDetails, loadCycleDetails, isCycleDetailsLoading, getCycleDetailsError, deleteCycle } = useMeal();
+  const { getCycleDetails, isCycleDetailsLoading, getCycleDetailsError } = useMealData();
+  const { loadCycleDetails, deleteCycle } = useMealActions();
   const { canManageCycles } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
   const details = getCycleDetails(cycle.id);
@@ -880,7 +881,8 @@ function StatCard({
 }
 
 export default function HistoryPage() {
-  const { cycles, getCycleDetails, restoreCycle } = useMeal();
+  const { cycles, getCycleDetails } = useMealData();
+  const { restoreCycle } = useMealActions();
   const { profile } = useAuth();
 
   const [openClosedCycleId, setOpenClosedCycleId] = useState('');
