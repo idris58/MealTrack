@@ -197,7 +197,7 @@ function MemberCard({
             <span className="font-medium">৳{stats.mealCost.toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Fixed Share</span>
+            <span className="text-muted-foreground">Utility Share</span>
             <span className="font-medium">৳{stats.fixedCost.toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between border-t pt-3">

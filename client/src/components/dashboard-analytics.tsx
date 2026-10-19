@@ -34,7 +34,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 
 const chartConfig: ChartConfig = {
   meal: { label: 'Meal Expenses', theme: { light: 'hsl(160 84% 39%)', dark: 'hsl(158 64% 52%)' } },
-  fixed: { label: 'Fixed Expenses', theme: { light: 'hsl(258 90% 66%)', dark: 'hsl(258 90% 76%)' } },
+  fixed: { label: 'Utility Expenses', theme: { light: 'hsl(258 90% 66%)', dark: 'hsl(258 90% 76%)' } },
   deposits: { label: 'Total Deposits', theme: { light: 'hsl(188 86% 39%)', dark: 'hsl(188 86% 55%)' } },
   expenses: { label: 'Total Expenses', theme: { light: 'hsl(350 89% 60%)', dark: 'hsl(350 89% 70%)' } },
   rate: { label: 'Effective Meal Rate', theme: { light: 'hsl(160 84% 39%)', dark: 'hsl(158 64% 52%)' } },
@@ -292,8 +292,8 @@ function buildInsights(
     const fixedPct = Math.round((stats.totalFixedExpenses / totalExpenses) * 100);
     insights.push({
       icon: PiggyBank,
-      title: `Expense breakdown: ${100 - fixedPct}% meal / ${fixedPct}% fixed`,
-      detail: `Fixed utilities account for ${currency(stats.totalFixedExpenses)} of total spend.`,
+      title: `Expense breakdown: ${100 - fixedPct}% meal / ${fixedPct}% utilities`,
+      detail: `Utility bills account for ${currency(stats.totalFixedExpenses)} of total spend.`,
       tone: fixedPct > 35 ? 'warning' : 'positive',
     });
   }
@@ -336,7 +336,7 @@ export function DashboardAnalytics() {
   const totalCycleExpenses = stats.totalMealExpenses + stats.totalFixedExpenses;
   const pieData = [
     { name: 'Meal Expenses', value: stats.totalMealExpenses, color: 'var(--color-meal)' },
-    { name: 'Fixed Expenses', value: stats.totalFixedExpenses, color: 'var(--color-fixed)' },
+    { name: 'Utility Expenses', value: stats.totalFixedExpenses, color: 'var(--color-fixed)' },
   ].filter((item) => item.value > 0);
 
   let cumulativeDeposits = 0;
@@ -480,7 +480,7 @@ export function DashboardAnalytics() {
                   <BarChart3 className="h-4 w-4 text-violet-500" />
                   Expense Activity
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">Meal vs fixed costs breakdown across timeline</p>
+                <p className="text-xs text-muted-foreground">Meal vs utility costs breakdown across timeline</p>
               </div>
               <span className="rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                 {weekly ? 'Weekly Buckets' : 'Daily'}
@@ -519,7 +519,7 @@ export function DashboardAnalytics() {
                         />
                         <Bar
                           dataKey="fixed"
-                          name="Fixed"
+                          name="Utility"
                           fill="var(--color-fixed)"
                           radius={[4, 4, 0, 0]}
                           maxBarSize={18}
@@ -534,7 +534,7 @@ export function DashboardAnalytics() {
                     </span>
                     <span className="flex items-center gap-1.5 font-medium">
                       <i className="h-2.5 w-2.5 rounded-full bg-violet-500" />
-                      Fixed Costs
+                      Utility Costs
                     </span>
                   </div>
                 </>

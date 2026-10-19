@@ -314,7 +314,7 @@ export default function ReportsPage() {
     doc.setTextColor(...emeraldRgb);
     doc.text(`Meal · ${pdfCurrency(report.totalMealExpenses)} (${report.mealPct}%)`, margin, compBarY + 24);
     doc.setTextColor(...sandRgb);
-    doc.text(`Fixed · ${pdfCurrency(report.totalFixedExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
+    doc.text(`Utility · ${pdfCurrency(report.totalFixedExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
 
     // ── Member table ─────────────────────────────────────────────────────────
     autoTable(doc, {
@@ -405,7 +405,7 @@ export default function ReportsPage() {
     const metricRows = [
       ['Total Expenses (Tk)', report.totalExpenses],
       ['  Meal Expenses (Tk)', report.totalMealExpenses],
-      ['  Fixed Expenses (Tk)', report.totalFixedExpenses],
+      ['  Utility Expenses (Tk)', report.totalFixedExpenses],
       ['Total Meals', report.totalMeals],
       ['Meal Rate (Tk)', Number(report.rate.toFixed(4))],
       ['Total Deposits (Tk)', report.totalDeposits],
@@ -470,7 +470,7 @@ export default function ReportsPage() {
       });
       expenses.forEach((exp, index) => {
         const row = expenseWs.getRow(2 + index);
-        [exp.date, exp.description, exp.type === 'fixed' ? 'Fixed Expense' : 'Meal Expense', exp.amount].forEach((value, colIndex) => {
+        [exp.date, exp.description, exp.type === 'fixed' ? 'Utility Expense' : 'Meal Expense', exp.amount].forEach((value, colIndex) => {
           row.getCell(colIndex + 1).value = value as string | number;
         });
         if (index % 2 === 1) for (let col = 1; col <= 4; col += 1) row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
@@ -632,7 +632,7 @@ export default function ReportsPage() {
                   <Utensils className="h-3 w-3" /> Meal · {currency(report.totalMealExpenses)} ({report.mealPct}%)
                 </span>
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: '#8A6D34' }}>
-                  <ShoppingBag className="h-3 w-3" /> Fixed · {currency(report.totalFixedExpenses)} ({100 - report.mealPct}%)
+                  <ShoppingBag className="h-3 w-3" /> Utility · {currency(report.totalFixedExpenses)} ({100 - report.mealPct}%)
                 </span>
               </div>
             </div>

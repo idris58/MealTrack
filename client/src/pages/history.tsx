@@ -286,7 +286,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
         <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-5">
           <StatCard title="Total Deposits" value={formatCurrency(details.stats.totalDeposits)} icon={Wallet} iconClass="text-emerald-600" iconBgClass="bg-emerald-500/10" />
           <StatCard title="Meal Expense" value={formatCurrency(details.stats.totalMealExpenses)} icon={ShoppingBag} iconClass="text-indigo-600" iconBgClass="bg-indigo-500/10" />
-          <StatCard title="Fixed Expense" value={formatCurrency(details.stats.totalFixedExpenses)} icon={Zap} iconClass="text-amber-600" iconBgClass="bg-amber-500/10" />
+          <StatCard title="Utility Expense" value={formatCurrency(details.stats.totalFixedExpenses)} icon={Zap} iconClass="text-amber-600" iconBgClass="bg-amber-500/10" />
           <StatCard
             title="Remaining Balance"
             value={`${remainingBalance >= 0 ? '' : '-'}${formatCurrency(Math.abs(remainingBalance))}`}
@@ -482,7 +482,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="meal">Meals</TabsTrigger>
-              <TabsTrigger value="fixed">Fixed</TabsTrigger>
+              <TabsTrigger value="fixed">Utility</TabsTrigger>
             </TabsList>
             {(['all', 'meal', 'fixed'] as const).map((tab) => {
               const expenses =
@@ -765,7 +765,7 @@ function ClosedCycleCard({
                 iconBgClass="bg-indigo-500/10"
               />
               <StatCard
-                title="Fixed Expense"
+                title="Utility Expense"
                 value={formatCurrency(details.stats.totalFixedExpenses)}
                 icon={Zap}
                 iconClass="text-amber-600"

@@ -398,7 +398,7 @@ export default function AuthPage() {
               iconClass="text-sky-600 dark:text-sky-400"
               iconBgClass="bg-sky-500/10 dark:bg-sky-500/15"
               title="Transparent Shared Ledger"
-              description="Track deposits, grocery bills, and fixed costs in real time — everyone sees the same numbers."
+              description="Track deposits, grocery and utility bills in real time — everyone sees the same numbers."
             />
             <FeatureCard
               icon={TrendingDown}

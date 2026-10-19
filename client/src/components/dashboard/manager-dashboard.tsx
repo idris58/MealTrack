@@ -108,7 +108,7 @@ export function ManagerDashboard() {
 
               <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Fixed Cost</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Utility Cost</p>
                   <span className="rounded-md bg-purple-400/20 px-1.5 py-0.2 text-[9px] font-bold text-purple-100">
                     {fixedPct}%
                   </span>
@@ -150,7 +150,7 @@ export function ManagerDashboard() {
 
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <ShoppingBag className="h-3.5 w-3.5 text-violet-500" /> Fixed Cost/Member:
+                  <ShoppingBag className="h-3.5 w-3.5 text-violet-500" /> Utility Cost/Member:
                 </span>
                 <span className="font-bold text-foreground">{formatCurrency(stats.fixedCostPerMember)}</span>
               </div>

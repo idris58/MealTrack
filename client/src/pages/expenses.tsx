@@ -51,7 +51,7 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
         <div className="text-right">
           <p className="font-heading text-sm font-bold sm:text-base">৳{expense.amount.toFixed(0)}</p>
           <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
-            {expense.type === 'meal' ? 'Meal' : 'Fixed'}
+            {expense.type === 'meal' ? 'Meal' : 'Utility'}
           </Badge>
         </div>
       </div>
@@ -127,7 +127,7 @@ export default function Expenses() {
     return result;
   }, [filteredExpenses, deletedExpenses, tab]);
 
-  const tabLabels: Record<TabFilter, string> = { all: 'All', meal: 'Meals', fixed: 'Fixed' };
+  const tabLabels: Record<TabFilter, string> = { all: 'All', meal: 'Meals', fixed: 'Utility' };
 
   return (
     <div className="flex h-full flex-col space-y-5">
@@ -188,7 +188,7 @@ export default function Expenses() {
                   <span className="mt-0.5 font-heading text-xl font-bold leading-none sm:text-2xl">৳{totalMeal.toLocaleString('en-US')}</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Fixed</span>
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Utility</span>
                   <span className="mt-0.5 font-heading text-xl font-bold leading-none sm:text-2xl">৳{totalFixed.toLocaleString('en-US')}</span>
                 </div>
               </div>

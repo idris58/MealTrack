@@ -417,7 +417,7 @@ export function MemberDashboard() {
   const insights: Array<{ icon: LucideIcon; text: string }> = [
     { icon: Flame, text: view.streak > 1 ? `${view.streak}-day meal streak.` : view.streak === 1 ? 'You ate in the mess today.' : 'No meals logged recently.' },
     { icon: TrendingUp, text: view.avgMeals > 0 ? `${Math.abs(vsAvg)}% ${vsAvg >= 0 ? 'above' : 'below'} the mess average of ${meals(view.avgMeals)} meals.` : 'The mess average will show once meals are logged.' },
-    { icon: Receipt, text: `You pay ${money(view.dailyMealCost)} a day on meals, plus a ${money(view.fixedCost, 0)} fixed share.` },
+    { icon: Receipt, text: `You pay ${money(view.dailyMealCost)} a day on meals, plus a ${money(view.fixedCost, 0)} utility share.` },
   ];
 
   return (
@@ -451,7 +451,7 @@ export function MemberDashboard() {
             <dl className="space-y-2 text-sm">
               <div><dt className="text-xs text-white/65">Deposited</dt><dd className="font-semibold tabular-nums">{money(view.deposited)}</dd></div>
               <div><dt className="text-xs text-white/65">Meals</dt><dd className="font-semibold tabular-nums">{money(view.mealCost)}</dd></div>
-              <div><dt className="text-xs text-white/65">Fixed share</dt><dd className="font-semibold tabular-nums">{money(view.fixedCost)}</dd></div>
+              <div><dt className="text-xs text-white/65">Utility share</dt><dd className="font-semibold tabular-nums">{money(view.fixedCost)}</dd></div>
             </dl>
           </div>
         </div>
@@ -538,7 +538,7 @@ export function MemberDashboard() {
             <SplitDonut meal={view.mealCost} fixed={view.fixedCost} />
             <ul className="min-w-0 flex-1 space-y-2.5 text-sm">
               <li className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Meals</span><b className="tabular-nums">{money(view.mealCost, 0)}</b></li>
-              <li className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full bg-violet-500" />Fixed share</span><b className="tabular-nums">{money(view.fixedCost, 0)}</b></li>
+              <li className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full bg-violet-500" />Utility share</span><b className="tabular-nums">{money(view.fixedCost, 0)}</b></li>
             </ul>
           </div>
           <ul className="mt-5 space-y-3 border-t pt-4">

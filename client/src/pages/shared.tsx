@@ -227,8 +227,8 @@ function getExpenseEmptyState(tab: "all" | "meal" | "fixed") {
 
   if (tab === "fixed") {
     return {
-      title: "No fixed expenses yet",
-      message: "Shared bills or fixed costs will appear here after the manager adds them.",
+      title: "No utility expenses yet",
+      message: "Shared utility bills will appear here after the manager adds them.",
     };
   }
 
@@ -764,7 +764,7 @@ export default function SharedPage({ token }: { token: string }) {
                 {formatCurrency(data.stats.currentMealRate)}
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Fixed cost/person: {formatCurrency(data.stats.fixedCostPerMember)}
+                Utility cost/person: {formatCurrency(data.stats.fixedCostPerMember)}
               </p>
             </CardContent>
           </Card>
@@ -787,7 +787,7 @@ export default function SharedPage({ token }: { token: string }) {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Fixed Cost</span>
+                <span className="text-muted-foreground">Utility Cost</span>
                 <span className="font-medium">
                   {formatCurrency(data.stats.totalFixedExpenses)}
                 </span>
@@ -871,7 +871,7 @@ export default function SharedPage({ token }: { token: string }) {
                       <p className="font-medium">{formatCurrency(member.deposit)}</p>
                     </div>
                     <div className="rounded-lg bg-secondary/30 px-3 py-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Deposit - Fixed</p>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Deposit - Utility</p>
                       <p className="font-medium">{formatCurrency(member.deposit - member.fixedCost)}</p>
                     </div>
                     <div className="rounded-lg bg-secondary/30 px-3 py-2">
@@ -904,7 +904,7 @@ export default function SharedPage({ token }: { token: string }) {
                   <tr className="border-b">
                     <th className="p-4 text-left font-bold">Member</th>
                     <th className="p-4 text-right font-bold">Deposit</th>
-                    <th className="p-4 text-right font-bold">Deposit - Fixed</th>
+                    <th className="p-4 text-right font-bold">Deposit - Utility</th>
                     <th className="p-4 text-right font-bold">Meal Cost</th>
                     <th className="p-4 text-right font-bold">Balance</th>
                   </tr>
@@ -949,7 +949,7 @@ export default function SharedPage({ token }: { token: string }) {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="meal">Meals</TabsTrigger>
-              <TabsTrigger value="fixed">Fixed</TabsTrigger>
+              <TabsTrigger value="fixed">Utility</TabsTrigger>
             </TabsList>
 
             {(["all", "meal", "fixed"] as const).map((tab) => {

@@ -133,7 +133,7 @@ function FundsBar({ deposited, mealCost, fixedCost }: { deposited: number; mealC
       </div>
       <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-white/70">
         <li className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-400" />Meals {money(mealCost, 0)}</li>
-        <li className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-violet-400" />Fixed share {money(fixedCost, 0)}</li>
+        <li className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-violet-400" />Utility share {money(fixedCost, 0)}</li>
         {due > 0 ? (
           <li className="flex items-center gap-1.5 text-rose-300"><i className="h-2 w-2 rounded-full bg-rose-400" />Not yet covered {money(due, 0)}</li>
         ) : (
@@ -355,7 +355,7 @@ export function MemberDepositsView() {
       '',
       `Deposited: ${money(v.net)}`,
       `Meals: ${money(v.mealCost)}`,
-      `Fixed share: ${money(v.fixedCost)}`,
+      `Utility share: ${money(v.fixedCost)}`,
       `Balance: ${signed(v.balance)} (${v.balance >= 0 ? 'in credit' : 'due'})`,
       '',
       'Transactions',
@@ -561,7 +561,7 @@ export function MemberDepositsView() {
               </div>
               <div className="flex items-start justify-between gap-3">
                 <dt className="flex items-center gap-2 text-muted-foreground"><ShoppingBag className="h-4 w-4 text-violet-500" />
-                  <span>Fixed share<span className="block text-xs">Bills split equally</span></span>
+                  <span>Utility share<span className="block text-xs">Bills split equally</span></span>
                 </dt>
                 <dd className="font-medium tabular-nums">{money(v.fixedCost)}</dd>
               </div>
