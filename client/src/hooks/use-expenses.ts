@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { supabase } from '@/lib/supabase';
 import { dequeueAll, enqueue, removeFromQueue } from '@/lib/offline-queue';
-import type { ChangelogChange, Expense } from '@/lib/meal-types';
+import type { Expense } from '@/lib/meal-types';
 
 const SOFT_DELETE_GRACE_MS = 10_000;
 type ExpenseUpdate = { amount: number; description: string; type: 'meal' | 'utility'; paidBy: string; date?: string };
@@ -14,11 +14,8 @@ type Options = {
   setPendingSyncIds: Dispatch<SetStateAction<Set<string>>>;
   getCycleId: (cycleId?: string) => string | null;
   allowsNegativeAmount: (cycleId: string) => boolean;
-  recordChange: (input: { cycleId: string; entityType: 'expense'; entityId: string; action: 'create' | 'update' | 'delete'; title: string; changes: ChangelogChange[] }) => Promise<void>;
   broadcast: () => void;
 };
-const snapshot = (field: string, label: string, value: string | number): ChangelogChange => ({ field, label, value });
-const changed = (field: string, label: string, from: string | number, to: string | number): ChangelogChange | null => from === to ? null : { field, label, from, to };
 const dateOnly = (value: string) => /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : value;
 const isNetworkError = (error: { message?: string; status?: number }) =>
   error.status === 0 || /fetch|network|connection|offline|load failed/i.test(error.message ?? '');
@@ -28,7 +25,7 @@ export function useExpenses(options: Options) {
   latest.current = options;
 
   const addExpense = useCallback(async (amount: number, description: string, type: 'meal' | 'utility', paidBy: string, cycleId?: string, expenseDate?: string) => {
-    const { userId, messId, setExpenses, setPendingSyncIds, getCycleId, allowsNegativeAmount, recordChange, broadcast } = latest.current;
+    const { userId, messId, setExpenses, setPendingSyncIds, getCycleId, allowsNegativeAmount, broadcast } = latest.current;
     if (!userId || !messId) return;
     const targetCycleId = getCycleId(cycleId);
     if (!targetCycleId || (amount < 0 && !allowsNegativeAmount(targetCycleId))) return;
@@ -56,17 +53,21 @@ export function useExpenses(options: Options) {
     }
     const next = { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by } as Expense;
     setExpenses((previous) => [next, ...previous]);
-    await recordChange({ cycleId: targetCycleId, entityType: 'expense', entityId: next.id, action: 'create', title: `Added ${next.type} expense`, changes: [snapshot('description', 'Description', next.description), snapshot('amount', 'Amount', next.amount), snapshot('type', 'Type', next.type)] });
     broadcast();
   }, []);
 
   const updateExpense = useCallback(async (id: string, updates: ExpenseUpdate) => {
-    const { userId, messId, expenses, setExpenses, setPendingSyncIds, recordChange, broadcast } = latest.current;
+    const { userId, messId, expenses, setExpenses, setPendingSyncIds, broadcast } = latest.current;
     if (!userId || !messId) return;
     const existing = expenses.find((expense) => expense.id === id);
     if (!existing) return;
-    const changes = [changed('description', 'Description', existing.description, updates.description), changed('amount', 'Amount', existing.amount, updates.amount), changed('type', 'Type', existing.type, updates.type), changed('paid_by', 'Paid By', existing.paidBy, updates.paidBy), updates.date ? changed('date', 'Date', dateOnly(existing.date), dateOnly(updates.date)) : null].filter((change): change is ChangelogChange => Boolean(change));
-    if (!changes.length) return;
+    const hasChange =
+      existing.description !== updates.description ||
+      existing.amount !== updates.amount ||
+      existing.type !== updates.type ||
+      existing.paidBy !== updates.paidBy ||
+      (updates.date !== undefined && dateOnly(existing.date) !== dateOnly(updates.date));
+    if (!hasChange) return;
     if (id.startsWith('offline-')) {
       const queued = (await dequeueAll({ userId, messId })).find((operation) => operation.type === 'ADD_EXPENSE' && operation.id === id);
       if (queued) {
@@ -79,7 +80,7 @@ export function useExpenses(options: Options) {
       const operationId = `offline-${uuidv4()}`;
       setExpenses((previous) => previous.map((expense) => expense.id === id ? { ...expense, ...updates, date: updates.date ?? expense.date } : expense));
       setPendingSyncIds((previous) => new Set(previous).add(id));
-      await enqueue({ id: operationId, type: 'UPDATE_EXPENSE', payload: { id, ...updates, date: updates.date ?? existing.date, cycleId: existing.cycleId, userId, messId, changes, expected: { amount: existing.amount, description: existing.description, type: existing.type, paidBy: existing.paidBy, date: existing.date } }, createdAt: Date.now() });
+      await enqueue({ id: operationId, type: 'UPDATE_EXPENSE', payload: { id, ...updates, date: updates.date ?? existing.date, cycleId: existing.cycleId, userId, messId, expected: { amount: existing.amount, description: existing.description, type: existing.type, paidBy: existing.paidBy, date: existing.date } }, createdAt: Date.now() });
       return;
     }
     const { error } = await supabase.from('expenses').update({ amount: updates.amount, description: updates.description, type: updates.type, paid_by: updates.paidBy, ...(updates.date ? { date: updates.date } : {}) }).eq('id', id).eq('mess_id', messId);
@@ -88,18 +89,17 @@ export function useExpenses(options: Options) {
         const operationId = `offline-${uuidv4()}`;
         setExpenses((previous) => previous.map((expense) => expense.id === id ? { ...expense, ...updates, date: updates.date ?? expense.date } : expense));
         setPendingSyncIds((previous) => new Set(previous).add(id));
-        await enqueue({ id: operationId, type: 'UPDATE_EXPENSE', payload: { id, ...updates, date: updates.date ?? existing.date, cycleId: existing.cycleId, userId, messId, changes, expected: { amount: existing.amount, description: existing.description, type: existing.type, paidBy: existing.paidBy, date: existing.date } }, createdAt: Date.now() });
+        await enqueue({ id: operationId, type: 'UPDATE_EXPENSE', payload: { id, ...updates, date: updates.date ?? existing.date, cycleId: existing.cycleId, userId, messId, expected: { amount: existing.amount, description: existing.description, type: existing.type, paidBy: existing.paidBy, date: existing.date } }, createdAt: Date.now() });
         return;
       }
       throw new Error('Unable to update expense. Please try again.');
     }
     setExpenses((previous) => previous.map((expense) => expense.id === id ? { ...expense, ...updates, date: updates.date ?? expense.date } : expense));
-    await recordChange({ cycleId: existing.cycleId, entityType: 'expense', entityId: id, action: 'update', title: `Updated ${updates.type} expense`, changes });
     broadcast();
   }, []);
 
   const deleteExpense = useCallback(async (id: string) => {
-    const { userId, messId, expenses, setExpenses, setPendingSyncIds, recordChange, broadcast } = latest.current;
+    const { userId, messId, expenses, setExpenses, setPendingSyncIds, broadcast } = latest.current;
     if (!userId || !messId) return;
     const existing = expenses.find((expense) => expense.id === id);
     if (!existing) return;
@@ -132,7 +132,6 @@ export function useExpenses(options: Options) {
       throw new Error('Unable to delete expense. Please try again.');
     }
     setExpenses((previous) => previous.filter((expense) => expense.id !== id));
-    await recordChange({ cycleId: existing.cycleId, entityType: 'expense', entityId: id, action: 'delete', title: `Deleted ${existing.type} expense`, changes: [snapshot('description', 'Description', existing.description), snapshot('amount', 'Amount', existing.amount), snapshot('type', 'Type', existing.type), snapshot('paid_by', 'Paid By', existing.paidBy), snapshot('date', 'Date', existing.date)] });
     broadcast();
   }, []);
 

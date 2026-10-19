@@ -144,7 +144,7 @@ create table if not exists public.cycle_deposits (
 create table if not exists public.changelog_entries (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
-  cycle_id uuid not null references public.cycles(id) on delete cascade,
+  cycle_id uuid references public.cycles(id) on delete cascade,
   entity_type text not null check (entity_type in ('member', 'expense', 'meal_log', 'deposit')),
   entity_id uuid not null,
   action text not null check (action in ('create', 'update', 'delete')),
@@ -154,6 +154,8 @@ create table if not exists public.changelog_entries (
   mess_id uuid references public.messes(id) on delete set null,
   profile_id uuid references public.profiles(id) on delete set null
 );
+
+alter table public.changelog_entries alter column cycle_id drop not null;
 
 -- Migrate the stored expense category from `fixed` to `utility` for existing databases.
 do $$

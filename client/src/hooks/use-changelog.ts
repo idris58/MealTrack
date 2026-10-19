@@ -93,40 +93,9 @@ export function useChangelog(
   const requestRef = useRef(0);
   const loadingRef = useRef(false);
 
-  const recordChangelog = useCallback(async ({
-    cycleId,
-    entityType,
-    entityId,
-    action,
-    title,
-    changes,
-  }: RecordChangelogInput) => {
-    if (!userId || !messId || !cycleId) return;
-
-    const { data, error } = await supabase
-      .from('changelog_entries')
-      .insert([{
-        user_id: userId,
-        profile_id: userId,
-        mess_id: messId,
-        cycle_id: cycleId,
-        entity_type: entityType,
-        entity_id: entityId,
-        action,
-        title,
-        changes,
-      }])
-      .select('id, cycle_id, user_id, profile_id, entity_type, entity_id, action, title, changes, created_at, profiles(id, full_name, picture_url, role)')
-      .single();
-
-    if (error) {
-      console.error('Error recording changelog entry:', error);
-      return;
-    }
-
-    const [entry] = mapChangelogRows([data as ChangelogRow], profilesMapRef.current);
-    setEntries((previous) => [entry, ...previous]);
-  }, [messId, profilesMapRef, userId]);
+  // Audit rows are now written atomically by PostgreSQL SECURITY DEFINER triggers
+  // using auth.uid(), preventing forgery and saving client round-trips.
+  const recordChangelog = useCallback(async (_input?: RecordChangelogInput) => {}, []);
 
   const loadMore = useCallback(async (
     cycleIds: string[],

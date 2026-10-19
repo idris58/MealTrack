@@ -23,9 +23,7 @@ import { useAuth } from '@/lib/auth-context';
 
 import type {
   ChangelogActor,
-  ChangelogChange,
   ChangelogEntry,
-  ChangelogValue,
   Cycle,
   CycleDeposit,
   CycleStatus,
@@ -141,15 +139,6 @@ function normalizeSnapshotExpenses(expenses: Array<Omit<Expense, 'type'> & { typ
   return expenses.map((expense) => ({ ...expense, type: normalizeExpenseType(expense.type) }));
 }
 
-function normalizeExpenseChanges(changes: ChangelogChange[]): ChangelogChange[] {
-  return changes.map((change) => change.field === 'type' ? {
-    ...change,
-    ...(change.value === 'fixed' ? { value: 'utility' } : {}),
-    ...(change.from === 'fixed' ? { from: 'utility' } : {}),
-    ...(change.to === 'fixed' ? { to: 'utility' } : {}),
-  } : change);
-}
-
 function mapMealLogRows(rows: MealLogRow[]): MealLog[] {
   return rows
     .filter((log) => Boolean(log.cycle_id))
@@ -192,10 +181,6 @@ function getDefaultCycleBaseName(dateValue: string | Date) {
   return `Meal ${getCycleSeasonName(date)}-${year}`;
 }
 
-function buildSnapshotChange(field: string, label: string, value: ChangelogValue): ChangelogChange {
-  return { field, label, value };
-}
-
 export function MealProvider({ children }: { children: ReactNode }) {
   const { user, profile } = useAuth();
   const [memberRoster, setMemberRoster] = useState<Member[]>([]);
@@ -228,7 +213,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setEntries: setAllChangelogEntries,
     hasMore: hasMoreChangelogEntries,
     loading: changelogLoading,
-    recordChangelog,
     loadMore: loadMoreChangelogEntries,
   } = useChangelog(userId, messId, profilesMapRef);
 
@@ -291,11 +275,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
       .map((member) => ({ ...member, deposit: 0, mealsEaten: 0 }));
     return [...snapshotMembers, ...archivedHistoryMembers];
   }, [cycles, memberRoster, archivedMemberRoster, historyMemberIdsByCycle]);
-
-  const getMemberName = useCallback((memberId: string, cycleId?: string) => {
-    const scopedMembers = cycleId ? getCycleMembers(cycleId) : memberRoster;
-    return scopedMembers.find((member) => member.id === memberId)?.name ?? 'Unknown member';
-  }, [getCycleMembers, memberRoster]);
 
   const computedCycleDetails = useCycleDetails({
     cycles,
@@ -655,18 +634,17 @@ export function MealProvider({ children }: { children: ReactNode }) {
     members: memberRoster,
     setMembers: setMemberRoster,
     setArchivedMembers: setArchivedMemberRoster,
-    recordChange: recordChangelog,
     reload: requestDataLoad,
     broadcast: broadcastUpdate,
   });
 
   const saveMealLogsForReplayRef = useRef<MealActionsContextType["saveMealLogs"]>(async () => {});
   const setPendingSyncIdsRef = useRef<React.Dispatch<React.SetStateAction<Set<string>>>>(() => {});
-  const replayOptionsRef = useRef({ userId, messId, recordChangelog, getMemberName });
-  replayOptionsRef.current = { userId, messId, recordChangelog, getMemberName };
+  const replayOptionsRef = useRef({ userId, messId });
+  replayOptionsRef.current = { userId, messId };
 
   const replayOp = useCallback(async (op: OfflineOp) => {
-    const { userId, messId, recordChangelog, getMemberName } = replayOptionsRef.current;
+    const { userId, messId } = replayOptionsRef.current;
     if (!userId || !messId) throw new Error('Not authenticated');
     if (op.payload.userId !== userId || op.payload.messId !== messId) {
       throw new Error('This offline change belongs to a different account or mess. Sign in with its original account to sync it.');
@@ -698,16 +676,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
         { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by },
         ...prev.filter((e) => e.id !== op.id),
       ]);
-      await recordChangelog({
-        cycleId: p.cycleId, entityType: 'expense', entityId: data.id, action: 'create',
-        title: `Added ${data.type} expense`,
-        changes: [buildSnapshotChange('description', 'Description', data.description), buildSnapshotChange('amount', 'Amount', Number(data.amount)), buildSnapshotChange('type', 'Type', data.type)],
-      });
       return;
     }
 
     if (op.type === 'UPDATE_EXPENSE') {
-      const p = op.payload as { id: string; amount: number; description: string; type: string; paidBy: string; date: string; cycleId: string; changes: ChangelogChange[]; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const p = op.payload as { id: string; amount: number; description: string; type: string; paidBy: string; date: string; cycleId: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
       const expenseType = normalizeExpenseType(p.type);
       const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
       if (readError) throw readError;
@@ -722,13 +695,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (!updated) throw new Error('The expense could not be found to update.');
       setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: expenseType, paidBy: p.paidBy, date: p.date } : expense));
       setPendingSyncIdsRef.current((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
-      await recordChangelog({ cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'update', title: `Updated ${expenseType} expense`, changes: normalizeExpenseChanges(p.changes) });
       return;
     }
 
     if (op.type === 'DELETE_EXPENSE') {
       const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: string; paidBy: string; date: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
-      const expenseType = normalizeExpenseType(p.type);
       const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
       if (readError) throw readError;
       if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline deletion.');
@@ -741,10 +712,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const { data: deleted, error } = await supabase.from('expenses').update({ deleted_at: now.toISOString(), delete_expires_at: new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString() }).eq('id', p.id).eq('mess_id', messId).is('deleted_at', null).select('id').maybeSingle();
       if (error) throw error;
       if (!deleted) throw new Error('The expense could not be found to delete.');
-      await recordChangelog({
-        cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'delete', title: `Deleted ${expenseType} expense`,
-        changes: [buildSnapshotChange('description', 'Description', p.description), buildSnapshotChange('amount', 'Amount', p.amount), buildSnapshotChange('type', 'Type', expenseType), buildSnapshotChange('paid_by', 'Paid By', p.paidBy), buildSnapshotChange('date', 'Date', p.date)],
-      });
       return;
     }
 
@@ -771,11 +738,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
         { id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount), note: data.note ?? undefined, createdAt: data.created_at },
       ]);
       void triggerDepositPush({ depositId: data.id });
-      await recordChangelog({
-        cycleId: p.cycleId, entityType: 'deposit', entityId: data.id, action: 'update',
-        title: `Updated deposit for ${getMemberName(p.memberId, p.cycleId)}`,
-        changes: [buildSnapshotChange('member', 'Member', getMemberName(p.memberId, p.cycleId)), buildSnapshotChange('transaction_amount', 'Transaction', Number(data.amount)), ...(data.note ? [buildSnapshotChange('note', 'Note', data.note)] : [])],
-      });
       return;
     }
 
@@ -826,8 +788,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setDeposits: setAllDeposits,
     setPendingSyncIds,
     getCycleId: getRequiredCycleId,
-    getMemberName: (memberId, cycleId) => getMemberName(memberId, cycleId),
-    recordChange: recordChangelog,
     broadcast: broadcastUpdate,
   });
 
@@ -839,7 +799,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setPendingSyncIds,
     getCycleId: getRequiredCycleId,
     allowsNegativeAmount: allowsNegativeExpenseAmount,
-    recordChange: recordChangelog,
     broadcast: broadcastUpdate,
   });
 
@@ -849,8 +808,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setMealLogs: setAllMealLogs,
     setPendingSyncIds,
     getCycleId: getRequiredCycleId,
-    getMemberName,
-    recordChange: recordChangelog,
     broadcast: broadcastUpdate,
   });
   saveMealLogsForReplayRef.current = mealLogActions.saveMealLogs;

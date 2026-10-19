@@ -103,8 +103,8 @@ drop policy if exists changelog_read on public.changelog_entries;
 drop policy if exists changelog_operate on public.changelog_entries;
 drop policy if exists changelog_delete on public.changelog_entries;
 create policy changelog_read on public.changelog_entries for select to authenticated using (mess_id = (select public.current_mess_id()));
-create policy changelog_operate on public.changelog_entries for insert to authenticated with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager','coordinator'])));
 create policy changelog_delete on public.changelog_entries for delete to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager'])));
+revoke insert on public.changelog_entries from authenticated, anon;
 
 drop policy if exists "owner can manage notices" on public.notices;
 drop policy if exists mess_notices on public.notices;

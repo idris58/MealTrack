@@ -322,32 +322,11 @@ begin
     values (auth.uid(), auth.uid(), current_mess, pending_cycle.id, carry_member_id, -carry_amount,
       'Carry-forward correction — balance moved to next cycle')
     returning id into deposit_id;
-    insert into public.changelog_entries (user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes)
-    values (auth.uid(), auth.uid(), current_mess, pending_cycle.id, 'deposit', deposit_id, 'update',
-      'Updated deposit for ' || carry_member_name,
-      jsonb_build_array(
-        jsonb_build_object('field', 'member', 'label', 'Member', 'value', carry_member_name),
-        jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', previous_balance, 'to', previous_balance - carry_amount),
-        jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', -carry_amount),
-        jsonb_build_object('field', 'note', 'label', 'Note', 'value', 'Carry-forward correction — balance moved to next cycle')
-      ));
 
-    select coalesce(sum(amount), 0) into previous_balance
-    from public.cycle_deposits
-    where mess_id = current_mess and cycle_id = new_cycle.id and member_id = carry_member_id;
     insert into public.cycle_deposits (user_id, profile_id, mess_id, cycle_id, member_id, amount, note)
     values (auth.uid(), auth.uid(), current_mess, new_cycle.id, carry_member_id, carry_amount,
       'Carry-forward from ' || pending_cycle.name)
     returning id into deposit_id;
-    insert into public.changelog_entries (user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes)
-    values (auth.uid(), auth.uid(), current_mess, new_cycle.id, 'deposit', deposit_id, 'update',
-      'Updated deposit for ' || carry_member_name,
-      jsonb_build_array(
-        jsonb_build_object('field', 'member', 'label', 'Member', 'value', carry_member_name),
-        jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', previous_balance, 'to', previous_balance + carry_amount),
-        jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', carry_amount),
-        jsonb_build_object('field', 'note', 'label', 'Note', 'value', 'Carry-forward from ' || pending_cycle.name)
-      ));
   end loop;
 
   return new_cycle;
@@ -679,6 +658,327 @@ begin
 
   -- Delete from auth.users (cascades to public.profiles)
   delete from auth.users where id = caller_uid;
+end;
+$$;
+
+-- ── Audit Log Triggers ────────────────────────────────────────────────────────
+-- Record audit rows atomically from mutations inside the database.
+-- Uses auth.uid() directly to prevent client forgery of profile_id/user_id.
+
+create or replace function public.audit_expenses()
+returns trigger language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_mess_id uuid;
+  v_cycle_id uuid;
+  v_action text;
+  v_title text;
+  v_changes jsonb := '[]'::jsonb;
+begin
+  if v_actor is null then
+    v_actor := coalesce(NEW.profile_id, NEW.user_id, OLD.profile_id, OLD.user_id);
+  end if;
+
+  v_mess_id := coalesce(NEW.mess_id, OLD.mess_id);
+  v_cycle_id := coalesce(NEW.cycle_id, OLD.cycle_id);
+
+  if TG_OP = 'INSERT' then
+    if NEW.deleted_at is not null then return NEW; end if;
+    v_action := 'create';
+    v_title := 'Added ' || NEW.type || ' expense';
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'description', 'label', 'Description', 'value', NEW.description),
+      jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', NEW.amount),
+      jsonb_build_object('field', 'type', 'label', 'Type', 'value', NEW.type),
+      jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', NEW.paid_by),
+      jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text)
+    );
+  elsif TG_OP = 'UPDATE' then
+    if OLD.deleted_at is null and NEW.deleted_at is not null then
+      v_action := 'delete';
+      v_title := 'Deleted ' || OLD.type || ' expense';
+      v_changes := jsonb_build_array(
+        jsonb_build_object('field', 'description', 'label', 'Description', 'value', OLD.description),
+        jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', OLD.amount),
+        jsonb_build_object('field', 'type', 'label', 'Type', 'value', OLD.type),
+        jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', OLD.paid_by),
+        jsonb_build_object('field', 'date', 'label', 'Date', 'value', OLD.date::text)
+      );
+    elsif OLD.deleted_at is not null and NEW.deleted_at is null then
+      v_action := 'create';
+      v_title := 'Restored ' || NEW.type || ' expense';
+      v_changes := jsonb_build_array(
+        jsonb_build_object('field', 'description', 'label', 'Description', 'value', NEW.description),
+        jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', NEW.amount),
+        jsonb_build_object('field', 'type', 'label', 'Type', 'value', NEW.type),
+        jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', NEW.paid_by),
+        jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text)
+      );
+    else
+      if OLD.description <> NEW.description then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'description', 'label', 'Description', 'from', OLD.description, 'to', NEW.description));
+      end if;
+      if OLD.amount <> NEW.amount then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'amount', 'label', 'Amount', 'from', OLD.amount, 'to', NEW.amount));
+      end if;
+      if OLD.type <> NEW.type then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'type', 'label', 'Type', 'from', OLD.type, 'to', NEW.type));
+      end if;
+      if OLD.paid_by <> NEW.paid_by then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'from', OLD.paid_by, 'to', NEW.paid_by));
+      end if;
+      if OLD.date <> NEW.date then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'date', 'label', 'Date', 'from', OLD.date::text, 'to', NEW.date::text));
+      end if;
+
+      if jsonb_array_length(v_changes) = 0 then
+        return NEW;
+      end if;
+
+      v_action := 'update';
+      v_title := 'Updated ' || NEW.type || ' expense';
+    end if;
+  elsif TG_OP = 'DELETE' then
+    v_action := 'delete';
+    v_title := 'Deleted ' || OLD.type || ' expense';
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'description', 'label', 'Description', 'value', OLD.description),
+      jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', OLD.amount),
+      jsonb_build_object('field', 'type', 'label', 'Type', 'value', OLD.type),
+      jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', OLD.paid_by),
+      jsonb_build_object('field', 'date', 'label', 'Date', 'value', OLD.date::text)
+    );
+  end if;
+
+  if v_mess_id is not null and v_cycle_id is not null then
+    insert into public.changelog_entries (
+      user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes, created_at
+    ) values (
+      v_actor, v_actor, v_mess_id, v_cycle_id, 'expense', coalesce(NEW.id, OLD.id), v_action, v_title, v_changes, now()
+    );
+  end if;
+
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+create or replace function public.audit_cycle_deposits()
+returns trigger language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_mess_id uuid;
+  v_cycle_id uuid;
+  v_member_name text;
+  v_prev_balance numeric;
+  v_action text;
+  v_title text;
+  v_changes jsonb := '[]'::jsonb;
+begin
+  if v_actor is null then
+    v_actor := coalesce(NEW.profile_id, NEW.user_id, OLD.profile_id, OLD.user_id);
+  end if;
+
+  v_mess_id := coalesce(NEW.mess_id, OLD.mess_id);
+  v_cycle_id := coalesce(NEW.cycle_id, OLD.cycle_id);
+
+  select name into v_member_name
+  from public.members
+  where id = coalesce(NEW.member_id, OLD.member_id);
+
+  if TG_OP = 'INSERT' then
+    select coalesce(sum(amount), 0) into v_prev_balance
+    from public.cycle_deposits
+    where cycle_id = NEW.cycle_id and member_id = NEW.member_id and id <> NEW.id;
+
+    v_action := 'update';
+    v_title := 'Updated deposit for ' || coalesce(v_member_name, 'member');
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'member', 'label', 'Member', 'value', coalesce(v_member_name, 'member')),
+      jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', v_prev_balance, 'to', v_prev_balance + NEW.amount),
+      jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', NEW.amount)
+    );
+    if NEW.note is not null and trim(NEW.note) <> '' then
+      v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'note', 'label', 'Note', 'value', NEW.note));
+    end if;
+  elsif TG_OP = 'UPDATE' then
+    if OLD.amount = NEW.amount and OLD.note is not distinct from NEW.note then
+      return NEW;
+    end if;
+
+    select coalesce(sum(amount), 0) into v_prev_balance
+    from public.cycle_deposits
+    where cycle_id = NEW.cycle_id and member_id = NEW.member_id and id <> NEW.id;
+
+    v_action := 'update';
+    v_title := 'Updated deposit for ' || coalesce(v_member_name, 'member');
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'member', 'label', 'Member', 'value', coalesce(v_member_name, 'member')),
+      jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', v_prev_balance + OLD.amount, 'to', v_prev_balance + NEW.amount),
+      jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', NEW.amount)
+    );
+    if NEW.note is not null and trim(NEW.note) <> '' then
+      v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'note', 'label', 'Note', 'value', NEW.note));
+    end if;
+  elsif TG_OP = 'DELETE' then
+    v_action := 'delete';
+    v_title := 'Removed deposit for ' || coalesce(v_member_name, 'member');
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'member', 'label', 'Member', 'value', coalesce(v_member_name, 'member')),
+      jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', OLD.amount)
+    );
+    if OLD.note is not null and trim(OLD.note) <> '' then
+      v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'note', 'label', 'Note', 'value', OLD.note));
+    end if;
+  end if;
+
+  if v_mess_id is not null and v_cycle_id is not null then
+    insert into public.changelog_entries (
+      user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes, created_at
+    ) values (
+      v_actor, v_actor, v_mess_id, v_cycle_id, 'deposit', coalesce(NEW.id, OLD.id), v_action, v_title, v_changes, now()
+    );
+  end if;
+
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+create or replace function public.audit_meal_logs()
+returns trigger language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_mess_id uuid;
+  v_cycle_id uuid;
+  v_member_name text;
+  v_action text;
+  v_title text;
+  v_changes jsonb;
+begin
+  if v_actor is null then
+    v_actor := coalesce(NEW.profile_id, NEW.user_id, OLD.profile_id, OLD.user_id);
+  end if;
+
+  v_mess_id := coalesce(NEW.mess_id, OLD.mess_id);
+  v_cycle_id := coalesce(NEW.cycle_id, OLD.cycle_id);
+
+  select name into v_member_name
+  from public.members
+  where id = coalesce(NEW.member_id, OLD.member_id);
+
+  if TG_OP = 'INSERT' then
+    if NEW.count = 0 then return NEW; end if;
+    v_action := 'create';
+    v_title := 'Updated meal log for ' || coalesce(v_member_name, 'member');
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text),
+      jsonb_build_object('field', 'member:' || NEW.member_id::text, 'label', coalesce(v_member_name, 'Member'), 'from', 0, 'to', NEW.count)
+    );
+  elsif TG_OP = 'UPDATE' then
+    if OLD.count = NEW.count then return NEW; end if;
+    v_action := case when NEW.count = 0 then 'delete' when OLD.count = 0 then 'create' else 'update' end;
+    v_title := 'Updated meal log for ' || coalesce(v_member_name, 'member');
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text),
+      jsonb_build_object('field', 'member:' || NEW.member_id::text, 'label', coalesce(v_member_name, 'Member'), 'from', OLD.count, 'to', NEW.count)
+    );
+  elsif TG_OP = 'DELETE' then
+    if OLD.count = 0 then return OLD; end if;
+    v_action := 'delete';
+    v_title := 'Updated meal log for ' || coalesce(v_member_name, 'member');
+    v_changes := jsonb_build_array(
+      jsonb_build_object('field', 'date', 'label', 'Date', 'value', OLD.date::text),
+      jsonb_build_object('field', 'member:' || OLD.member_id::text, 'label', coalesce(v_member_name, 'Member'), 'from', OLD.count, 'to', 0)
+    );
+  end if;
+
+  if v_mess_id is not null and v_cycle_id is not null then
+    insert into public.changelog_entries (
+      user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes, created_at
+    ) values (
+      v_actor, v_actor, v_mess_id, v_cycle_id, 'meal_log', coalesce(NEW.id, OLD.id), v_action, v_title, v_changes, now()
+    );
+  end if;
+
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+create or replace function public.audit_members()
+returns trigger language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_mess_id uuid;
+  v_cycle_id uuid;
+  v_action text;
+  v_title text;
+  v_changes jsonb := '[]'::jsonb;
+begin
+  if v_actor is null then
+    v_actor := coalesce(NEW.profile_id, NEW.user_id, OLD.profile_id, OLD.user_id);
+  end if;
+
+  v_mess_id := coalesce(NEW.mess_id, OLD.mess_id);
+
+  select id into v_cycle_id
+  from public.cycles
+  where mess_id = v_mess_id and status = 'active'
+  order by started_at desc limit 1;
+
+  if v_cycle_id is null then
+    select id into v_cycle_id
+    from public.cycles
+    where mess_id = v_mess_id
+    order by started_at desc limit 1;
+  end if;
+
+  if TG_OP = 'INSERT' then
+    if NEW.deleted_at is not null then return NEW; end if;
+    v_action := 'create';
+    v_title := 'Added member ' || NEW.name;
+    v_changes := jsonb_build_array(jsonb_build_object('field', 'name', 'label', 'Name', 'value', NEW.name));
+  elsif TG_OP = 'UPDATE' then
+    if OLD.deleted_at is null and NEW.deleted_at is not null then
+      v_action := 'delete';
+      v_title := 'Archived member ' || OLD.name;
+      v_changes := jsonb_build_array(jsonb_build_object('field', 'name', 'label', 'Name', 'value', OLD.name));
+    elsif OLD.deleted_at is not null and NEW.deleted_at is null then
+      v_action := 'create';
+      v_title := 'Restored member ' || NEW.name;
+      v_changes := jsonb_build_array(jsonb_build_object('field', 'name', 'label', 'Name', 'value', NEW.name));
+    else
+      if OLD.name <> NEW.name then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'name', 'label', 'Name', 'from', OLD.name, 'to', NEW.name));
+      end if;
+      if OLD.avatar is distinct from NEW.avatar then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'avatar', 'label', 'Avatar', 'from', OLD.avatar, 'to', NEW.avatar));
+      end if;
+
+      if jsonb_array_length(v_changes) = 0 then
+        return NEW;
+      end if;
+
+      v_action := 'update';
+      v_title := 'Updated member ' || NEW.name;
+    end if;
+  elsif TG_OP = 'DELETE' then
+    v_action := 'delete';
+    v_title := 'Deleted member ' || OLD.name;
+    v_changes := jsonb_build_array(jsonb_build_object('field', 'name', 'label', 'Name', 'value', OLD.name));
+  end if;
+
+  if v_mess_id is not null then
+    insert into public.changelog_entries (
+      user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes, created_at
+    ) values (
+      v_actor, v_actor, v_mess_id, v_cycle_id, 'member', coalesce(NEW.id, OLD.id), v_action, v_title, v_changes, now()
+    );
+  end if;
+
+  return coalesce(NEW, OLD);
 end;
 $$;
 

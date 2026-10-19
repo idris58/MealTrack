@@ -1,17 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { supabase } from '@/lib/supabase';
-import type { ChangelogChange, Member } from '@/lib/meal-types';
-
-
-type RecordChange = (entry: {
-  cycleId: string | null;
-  entityType: 'member';
-  entityId: string;
-  action: 'create' | 'update' | 'delete';
-  title: string;
-  changes: ChangelogChange[];
-}) => Promise<void>;
+import type { Member } from '@/lib/meal-types';
 
 type Options = {
   userId: string | null;
@@ -20,7 +10,6 @@ type Options = {
   members: Member[];
   setMembers: Dispatch<SetStateAction<Member[]>>;
   setArchivedMembers: Dispatch<SetStateAction<Member[]>>;
-  recordChange: RecordChange;
   reload: () => void;
   broadcast: () => void;
 };
@@ -28,19 +17,12 @@ type Options = {
 const avatarFor = (name: string, avatar?: string | null) =>
   avatar || name.substring(0, 2).toUpperCase();
 
-const updateChange = (
-  field: string,
-  label: string,
-  from: string | null | undefined,
-  to: string | null | undefined,
-): ChangelogChange | null => from === to ? null : { field, label, from: from ?? null, to: to ?? null };
-
 export function useMembers(options: Options) {
   const latest = useRef(options);
   latest.current = options;
 
   const addMember = useCallback(async (name: string) => {
-    const { userId, messId, activeCycleId, members, setMembers, recordChange, broadcast } = latest.current;
+    const { userId, messId, members, setMembers, broadcast } = latest.current;
     if (!userId || !messId) return;
     const { data, error } = await supabase
       .from('members')
@@ -60,11 +42,6 @@ export function useMembers(options: Options) {
       id: data.id, name: data.name, deposit: 0, mealsEaten: 0,
       avatar: avatarFor(data.name, data.avatar),
     }]);
-    await recordChange({
-      cycleId: activeCycleId, entityType: 'member', entityId: data.id,
-      action: 'create', title: `Added member ${data.name}`,
-      changes: [{ field: 'name', label: 'Name', value: data.name }],
-    });
     broadcast();
   }, []);
 
@@ -84,15 +61,13 @@ export function useMembers(options: Options) {
   }, []);
 
   const updateMember = useCallback(async (id: string, updates: Partial<Member>) => {
-    const { userId, messId, activeCycleId, members, setMembers, recordChange, broadcast } = latest.current;
+    const { userId, messId, members, setMembers, broadcast } = latest.current;
     if (!userId || !messId) return;
     const current = members.find((member) => member.id === id);
     if (!current) return;
-    const changes = [
-      updateChange('name', 'Name', current.name, updates.name ?? current.name),
-      updateChange('avatar', 'Avatar', current.avatar, updates.avatar ?? current.avatar),
-    ].filter((change): change is ChangelogChange => Boolean(change));
-    if (!changes.length) return;
+    const hasNameChange = updates.name !== undefined && updates.name !== current.name;
+    const hasAvatarChange = updates.avatar !== undefined && updates.avatar !== current.avatar;
+    if (!hasNameChange && !hasAvatarChange) return;
     const update: Record<string, unknown> = {};
     if (updates.name !== undefined) update.name = updates.name;
     if (updates.avatar !== undefined) update.avatar = updates.avatar;
@@ -101,15 +76,11 @@ export function useMembers(options: Options) {
     setMembers((previous) => previous.map((member) => member.id === id
       ? { ...member, ...updates, deposit: member.deposit, mealsEaten: member.mealsEaten }
       : member));
-    await recordChange({
-      cycleId: activeCycleId, entityType: 'member', entityId: id,
-      action: 'update', title: `Updated member ${current.name}`, changes,
-    });
     broadcast();
   }, []);
 
   const removeMember = useCallback(async (id: string) => {
-    const { userId, messId, activeCycleId, members, setMembers, setArchivedMembers, recordChange, broadcast } = latest.current;
+    const { userId, messId, members, setMembers, setArchivedMembers, broadcast } = latest.current;
     if (!userId || !messId) return;
     const current = members.find((member) => member.id === id);
     if (!current) return;
@@ -126,11 +97,6 @@ export function useMembers(options: Options) {
     setMembers((previous) => previous.filter((member) => member.id !== id));
     if (hasHistory) setArchivedMembers((previous) => previous.some((member) => member.id === id)
       ? previous : [...previous, { ...current, archived: true }]);
-    await recordChange({
-      cycleId: activeCycleId, entityType: 'member', entityId: id,
-      action: 'delete', title: `${hasHistory ? 'Archived' : 'Deleted'} member ${current.name}`,
-      changes: [{ field: 'name', label: 'Name', value: current.name }],
-    });
     broadcast();
   }, []);
 
