@@ -24,7 +24,7 @@ const expenseFields = z.object({
     z.coerce.number({ invalid_type_error: 'Amount is required' }),
   ),
   description: z.string().min(2, 'Description is required'),
-  type: z.enum(['meal', 'fixed']),
+  type: z.enum(['meal', 'utility']),
   paidBy: z.string().min(2, 'Shopper name is required'),
 });
 
@@ -111,7 +111,7 @@ export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = fals
             <FormLabel>Expense Type</FormLabel>
             <FormControl>
               <div role="radiogroup" aria-label="Expense type" className="grid grid-cols-2 rounded-xl border bg-muted/40 p-1">
-                {([['meal', ShoppingBag, 'Meal', 'Food'], ['fixed', Zap, 'Utility', 'Bills']] as const).map(([value, Icon, label, hint]) => (
+                {([['meal', ShoppingBag, 'Meal', 'Food'], ['utility', Zap, 'Utility', 'Bills']] as const).map(([value, Icon, label, hint]) => (
                   <button key={value} type="button" role="radio" aria-checked={field.value === value} onClick={() => field.onChange(value)} className={cn('rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors', field.value === value ? value === 'meal' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-700 text-white shadow-sm' : 'text-muted-foreground hover:bg-background hover:text-foreground')}>
                     <Icon className="mr-1.5 inline-block h-4 w-4" />{label}<span className="ml-1 hidden text-xs font-normal opacity-80 sm:inline">({hint})</span>
                   </button>

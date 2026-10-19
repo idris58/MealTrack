@@ -59,7 +59,7 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
   );
 }
 
-type TabFilter = 'all' | 'meal' | 'fixed';
+type TabFilter = 'all' | 'meal' | 'utility';
 
 export default function Expenses() {
   const { expenses, activeCycle } = useMealData();
@@ -80,7 +80,7 @@ export default function Expenses() {
 
   const totalExpenses = useMemo(() => allExpenses.reduce((s, e) => s + e.amount, 0), [allExpenses]);
   const totalMeal = useMemo(() => allExpenses.filter(e => e.type === 'meal').reduce((s, e) => s + e.amount, 0), [allExpenses]);
-  const totalFixed = useMemo(() => allExpenses.filter(e => e.type === 'fixed').reduce((s, e) => s + e.amount, 0), [allExpenses]);
+  const totalUtility = useMemo(() => allExpenses.filter(e => e.type === 'utility').reduce((s, e) => s + e.amount, 0), [allExpenses]);
 
   const handleExpenseDeleted = (expense: Expense) => {
     const sorted = [...expenses].sort((a, b) => b.date.localeCompare(a.date));
@@ -127,7 +127,7 @@ export default function Expenses() {
     return result;
   }, [filteredExpenses, deletedExpenses, tab]);
 
-  const tabLabels: Record<TabFilter, string> = { all: 'All', meal: 'Meals', fixed: 'Utility' };
+  const tabLabels: Record<TabFilter, string> = { all: 'All', meal: 'Meals', utility: 'Utility' };
 
   return (
     <div className="flex h-full flex-col space-y-5">
@@ -189,7 +189,7 @@ export default function Expenses() {
                 </div>
                 <div className="flex flex-col">
                   <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Utility</span>
-                  <span className="mt-0.5 font-heading text-xl font-bold leading-none sm:text-2xl">৳{totalFixed.toLocaleString('en-US')}</span>
+                  <span className="mt-0.5 font-heading text-xl font-bold leading-none sm:text-2xl">৳{totalUtility.toLocaleString('en-US')}</span>
                 </div>
               </div>
             </div>
@@ -212,7 +212,7 @@ export default function Expenses() {
 
           {/* Tab Buttons — full width on mobile, 50% width on tablet/desktop */}
           <div className="flex w-full rounded-lg border bg-muted p-0.5 sm:w-1/2">
-            {(['all', 'meal', 'fixed'] as TabFilter[]).map((t) => (
+            {(['all', 'meal', 'utility'] as TabFilter[]).map((t) => (
               <button
                 key={t}
                 type="button"

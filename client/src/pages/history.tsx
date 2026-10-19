@@ -482,9 +482,9 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="meal">Meals</TabsTrigger>
-              <TabsTrigger value="fixed">Utility</TabsTrigger>
+              <TabsTrigger value="utility">Utility</TabsTrigger>
             </TabsList>
-            {(['all', 'meal', 'fixed'] as const).map((tab) => {
+            {(['all', 'meal', 'utility'] as const).map((tab) => {
               const expenses =
                 tab === 'all'
                   ? [...details.expenses]

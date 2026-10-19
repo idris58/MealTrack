@@ -7,7 +7,7 @@ import { dequeueAll, enqueue, removeFromQueue } from '@/lib/offline-queue';
 import type { ChangelogChange, Expense } from '@/lib/meal-types';
 
 const SOFT_DELETE_GRACE_MS = 10_000;
-type ExpenseUpdate = { amount: number; description: string; type: 'meal' | 'fixed'; paidBy: string; date?: string };
+type ExpenseUpdate = { amount: number; description: string; type: 'meal' | 'utility'; paidBy: string; date?: string };
 type Options = {
   userId: string | null; messId: string | null; expenses: Expense[];
   setExpenses: Dispatch<SetStateAction<Expense[]>>;
@@ -27,7 +27,7 @@ export function useExpenses(options: Options) {
   const latest = useRef(options);
   latest.current = options;
 
-  const addExpense = useCallback(async (amount: number, description: string, type: 'meal' | 'fixed', paidBy: string, cycleId?: string, expenseDate?: string) => {
+  const addExpense = useCallback(async (amount: number, description: string, type: 'meal' | 'utility', paidBy: string, cycleId?: string, expenseDate?: string) => {
     const { userId, messId, setExpenses, setPendingSyncIds, getCycleId, allowsNegativeAmount, recordChange, broadcast } = latest.current;
     if (!userId || !messId) return;
     const targetCycleId = getCycleId(cycleId);

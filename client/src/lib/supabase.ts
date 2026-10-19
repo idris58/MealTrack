@@ -37,7 +37,7 @@ export interface Database {
           id: string;
           amount: number;
           description: string;
-          type: 'meal' | 'fixed';
+          type: 'meal' | 'utility';
           paid_by: string;
           date: string;
           created_at: string;
@@ -46,7 +46,7 @@ export interface Database {
           id?: string;
           amount: number;
           description: string;
-          type: 'meal' | 'fixed';
+          type: 'meal' | 'utility';
           paid_by: string;
           date?: string;
         };

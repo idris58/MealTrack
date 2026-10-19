@@ -84,7 +84,7 @@ type ExpenseRow = {
   cycle_id: string;
   amount: number | string;
   description: string;
-  type: 'meal' | 'fixed';
+  type: 'meal' | 'utility';
   date: string;
   paid_by: string;
 };
@@ -129,6 +129,25 @@ function mapExpenseRows(rows: ExpenseRow[]): Expense[] {
       date: expense.date,
       paidBy: expense.paid_by,
     }));
+}
+
+function normalizeExpenseType(type: string): Expense['type'] {
+  if (type === 'meal') return 'meal';
+  if (type === 'utility' || type === 'fixed') return 'utility';
+  throw new Error(`Unknown expense type: ${type}`);
+}
+
+function normalizeSnapshotExpenses(expenses: Array<Omit<Expense, 'type'> & { type: string }>): Expense[] {
+  return expenses.map((expense) => ({ ...expense, type: normalizeExpenseType(expense.type) }));
+}
+
+function normalizeExpenseChanges(changes: ChangelogChange[]): ChangelogChange[] {
+  return changes.map((change) => change.field === 'type' ? {
+    ...change,
+    ...(change.value === 'fixed' ? { value: 'utility' } : {}),
+    ...(change.from === 'fixed' ? { from: 'utility' } : {}),
+    ...(change.to === 'fixed' ? { to: 'utility' } : {}),
+  } : change);
 }
 
 function mapMealLogRows(rows: MealLogRow[]): MealLog[] {
@@ -400,7 +419,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         setArchivedMemberRoster(snapshot.archivedMembers ?? []);
         setCycles(snapshot.cycles);
         setAllDeposits(snapshot.deposits);
-        setAllExpenses(snapshot.expenses);
+        setAllExpenses(normalizeSnapshotExpenses(snapshot.expenses));
         setAllMealLogs(snapshot.mealLogs);
         setAllChangelogEntries(snapshot.changelog ?? []);
         setLoadedCycleIds(new Set(snapshot.loadedCycleIds ?? []));
@@ -428,7 +447,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           setArchivedMemberRoster(snap.archivedMembers ?? []);
           setCycles(snap.cycles);
           setAllDeposits(snap.deposits);
-          setAllExpenses(snap.expenses);
+          setAllExpenses(normalizeSnapshotExpenses(snap.expenses));
           setAllMealLogs(snap.mealLogs);
           setAllChangelogEntries(snap.changelog ?? []);
           setLoadedCycleIds(new Set(snap.loadedCycleIds));
@@ -546,7 +565,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
             setArchivedMemberRoster(snap.archivedMembers ?? []);
             setCycles(snap.cycles);
             setAllDeposits(snap.deposits);
-            setAllExpenses(snap.expenses);
+            setAllExpenses(normalizeSnapshotExpenses(snap.expenses));
             setAllMealLogs(snap.mealLogs);
             setAllChangelogEntries(snap.changelog ?? []);
             setLoadedCycleIds(new Set(snap.loadedCycleIds));
@@ -655,16 +674,17 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     if (op.type === 'ADD_EXPENSE') {
       const p = op.payload as {
-        amount: number; description: string; type: 'meal' | 'fixed';
+        amount: number; description: string; type: string;
         recordId?: string; paidBy: string; date: string; userId: string; messId: string; cycleId: string;
       };
+      const expenseType = normalizeExpenseType(p.type);
       const { data, error } = await supabase
         .from('expenses')
         .upsert([{
           id: p.recordId ?? op.id.slice('offline-'.length),
           amount: p.amount,
           description: p.description,
-          type: p.type,
+          type: expenseType,
           paid_by: p.paidBy,
           date: p.date,
           user_id: userId,
@@ -687,30 +707,32 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     if (op.type === 'UPDATE_EXPENSE') {
-      const p = op.payload as { id: string; amount: number; description: string; type: 'meal' | 'fixed'; paidBy: string; date: string; cycleId: string; changes: ChangelogChange[]; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const p = op.payload as { id: string; amount: number; description: string; type: string; paidBy: string; date: string; cycleId: string; changes: ChangelogChange[]; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const expenseType = normalizeExpenseType(p.type);
       const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
       if (readError) throw readError;
       if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline change.');
-      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== p.expected.type || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
+      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
         const conflict = new Error('This expense changed on another device. Review it before applying your offline edit.') as Error & { code?: string };
         conflict.code = 'OFFLINE_CONFLICT';
         throw conflict;
       }
-      const { data: updated, error } = await supabase.from('expenses').update({ amount: p.amount, description: p.description, type: p.type, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId).select('id').maybeSingle();
+      const { data: updated, error } = await supabase.from('expenses').update({ amount: p.amount, description: p.description, type: expenseType, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId).select('id').maybeSingle();
       if (error) throw error;
       if (!updated) throw new Error('The expense could not be found to update.');
-      setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: p.type, paidBy: p.paidBy, date: p.date } : expense));
+      setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: expenseType, paidBy: p.paidBy, date: p.date } : expense));
       setPendingSyncIdsRef.current((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
-      await recordChangelog({ cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'update', title: `Updated ${p.type} expense`, changes: p.changes });
+      await recordChangelog({ cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'update', title: `Updated ${expenseType} expense`, changes: normalizeExpenseChanges(p.changes) });
       return;
     }
 
     if (op.type === 'DELETE_EXPENSE') {
-      const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: 'meal' | 'fixed'; paidBy: string; date: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: string; paidBy: string; date: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const expenseType = normalizeExpenseType(p.type);
       const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
       if (readError) throw readError;
       if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline deletion.');
-      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== p.expected.type || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
+      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
         const conflict = new Error('This expense changed on another device. Review it before applying your offline deletion.') as Error & { code?: string };
         conflict.code = 'OFFLINE_CONFLICT';
         throw conflict;
@@ -720,8 +742,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       if (!deleted) throw new Error('The expense could not be found to delete.');
       await recordChangelog({
-        cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'delete', title: `Deleted ${p.type} expense`,
-        changes: [buildSnapshotChange('description', 'Description', p.description), buildSnapshotChange('amount', 'Amount', p.amount), buildSnapshotChange('type', 'Type', p.type), buildSnapshotChange('paid_by', 'Paid By', p.paidBy), buildSnapshotChange('date', 'Date', p.date)],
+        cycleId: p.cycleId, entityType: 'expense', entityId: p.id, action: 'delete', title: `Deleted ${expenseType} expense`,
+        changes: [buildSnapshotChange('description', 'Description', p.description), buildSnapshotChange('amount', 'Amount', p.amount), buildSnapshotChange('type', 'Type', expenseType), buildSnapshotChange('paid_by', 'Paid By', p.paidBy), buildSnapshotChange('date', 'Date', p.date)],
       });
       return;
     }

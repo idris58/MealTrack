@@ -13,7 +13,7 @@ describe("cycle math", () => {
     const result = computeCycleMath({
       members,
       deposits: [],
-      expenses: [{ amount: 40, type: "fixed" }],
+      expenses: [{ amount: 40, type: "utility" }],
       mealLogs: [],
     });
 
@@ -34,7 +34,7 @@ describe("cycle math", () => {
       ],
       expenses: [
         { amount: 30, type: "meal" },
-        { amount: 10, type: "fixed" },
+        { amount: 10, type: "utility" },
       ],
       mealLogs: [
         { memberId: "second", count: 2 },

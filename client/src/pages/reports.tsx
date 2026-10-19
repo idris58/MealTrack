@@ -470,7 +470,7 @@ export default function ReportsPage() {
       });
       expenses.forEach((exp, index) => {
         const row = expenseWs.getRow(2 + index);
-        [exp.date, exp.description, exp.type === 'fixed' ? 'Utility Expense' : 'Meal Expense', exp.amount].forEach((value, colIndex) => {
+        [exp.date, exp.description, exp.type === 'utility' ? 'Utility Expense' : 'Meal Expense', exp.amount].forEach((value, colIndex) => {
           row.getCell(colIndex + 1).value = value as string | number;
         });
         if (index % 2 === 1) for (let col = 1; col <= 4; col += 1) row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };

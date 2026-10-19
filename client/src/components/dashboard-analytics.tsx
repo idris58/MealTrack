@@ -34,7 +34,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 
 const chartConfig: ChartConfig = {
   meal: { label: 'Meal Expenses', theme: { light: 'hsl(160 84% 39%)', dark: 'hsl(158 64% 52%)' } },
-  fixed: { label: 'Utility Expenses', theme: { light: 'hsl(258 90% 66%)', dark: 'hsl(258 90% 76%)' } },
+  utility: { label: 'Utility Expenses', theme: { light: 'hsl(258 90% 66%)', dark: 'hsl(258 90% 76%)' } },
   deposits: { label: 'Total Deposits', theme: { light: 'hsl(188 86% 39%)', dark: 'hsl(188 86% 55%)' } },
   expenses: { label: 'Total Expenses', theme: { light: 'hsl(350 89% 60%)', dark: 'hsl(350 89% 70%)' } },
   rate: { label: 'Effective Meal Rate', theme: { light: 'hsl(160 84% 39%)', dark: 'hsl(158 64% 52%)' } },
@@ -59,7 +59,7 @@ type PeriodRow = {
   key: string;
   label: string;
   meal: number;
-  fixed: number;
+  utility: number;
   deposits: number;
   expenses: number;
   meals: number;
@@ -115,7 +115,7 @@ function aggregatePeriods(dateKeys: string[], expenses: Expense[], deposits: Cyc
         key: bucket,
         label: periodLabel(bucket),
         meal: 0,
-        fixed: 0,
+        utility: 0,
         deposits: 0,
         expenses: 0,
         meals: 0,
@@ -336,7 +336,7 @@ export function DashboardAnalytics() {
   const totalCycleExpenses = stats.totalMealExpenses + stats.totalFixedExpenses;
   const pieData = [
     { name: 'Meal Expenses', value: stats.totalMealExpenses, color: 'var(--color-meal)' },
-    { name: 'Utility Expenses', value: stats.totalFixedExpenses, color: 'var(--color-fixed)' },
+    { name: 'Utility Expenses', value: stats.totalFixedExpenses, color: 'var(--color-utility)' },
   ].filter((item) => item.value > 0);
 
   let cumulativeDeposits = 0;
@@ -518,9 +518,9 @@ export function DashboardAnalytics() {
                           maxBarSize={18}
                         />
                         <Bar
-                          dataKey="fixed"
+                          dataKey="utility"
                           name="Utility"
-                          fill="var(--color-fixed)"
+                          fill="var(--color-utility)"
                           radius={[4, 4, 0, 0]}
                           maxBarSize={18}
                         />

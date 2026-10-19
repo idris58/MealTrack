@@ -6,7 +6,7 @@ export type CycleMathMember = {
 };
 
 export type CycleMathDeposit = { memberId: string; amount: number };
-export type CycleMathExpense = { amount: number; type: "meal" | "fixed" };
+export type CycleMathExpense = { amount: number; type: "meal" | "utility" };
 export type CycleMathMealLog = { memberId: string; count: number };
 
 export type CycleMathMemberResult<TMember extends CycleMathMember> = TMember & {
@@ -79,7 +79,7 @@ export function computeCycleMath<TMember extends CycleMathMember>({
     .filter((expense) => expense.type === "meal")
     .reduce((sum, expense) => sum + expense.amount, 0);
   const totalFixedExpenses = expenses
-    .filter((expense) => expense.type === "fixed")
+    .filter((expense) => expense.type === "utility")
     .reduce((sum, expense) => sum + expense.amount, 0);
   const totalMealsConsumed = cycleMealLogs.reduce((sum, log) => sum + log.count, 0);
   const totalDeposits = cycleDeposits.reduce((sum, deposit) => sum + deposit.amount, 0);

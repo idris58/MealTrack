@@ -69,7 +69,7 @@ create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   amount decimal(10, 2) not null,
   description text not null,
-  type text not null check (type in ('meal', 'fixed')),
+  type text not null check (type in ('meal', 'utility')),
   paid_by text not null,
   date date default current_date,
   created_at timestamptz default now(),
@@ -154,6 +154,53 @@ create table if not exists public.changelog_entries (
   mess_id uuid references public.messes(id) on delete set null,
   profile_id uuid references public.profiles(id) on delete set null
 );
+
+-- Migrate the stored expense category from `fixed` to `utility` for existing databases.
+do $$
+declare
+  old_type_constraint text;
+begin
+  for old_type_constraint in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.expenses'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%type%'
+      and pg_get_constraintdef(oid) ilike '%fixed%'
+  loop
+    execute format('alter table public.expenses drop constraint %I', old_type_constraint);
+  end loop;
+
+  update public.expenses set type = 'utility' where type = 'fixed';
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.expenses'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%type%'
+      and pg_get_constraintdef(oid) ilike '%utility%'
+  ) then
+    alter table public.expenses
+      add constraint expenses_type_check check (type in ('meal', 'utility'));
+  end if;
+end $$;
+
+update public.changelog_entries
+set title = replace(title, 'fixed expense', 'utility expense'),
+    changes = (
+      select coalesce(jsonb_agg(
+        case when change->>'field' = 'type' then
+          change
+          || case when change->>'value' = 'fixed' then jsonb_build_object('value', 'utility') else '{}'::jsonb end
+          || case when change->>'from' = 'fixed' then jsonb_build_object('from', 'utility') else '{}'::jsonb end
+          || case when change->>'to' = 'fixed' then jsonb_build_object('to', 'utility') else '{}'::jsonb end
+        else change end
+        order by ordinal
+      ), '[]'::jsonb)
+      from jsonb_array_elements(public.changelog_entries.changes) with ordinality as item(change, ordinal)
+    )
+where entity_type = 'expense'
+  and (title like '%fixed expense%' or changes::text ilike '%fixed%');
 
 create table if not exists public.notices (
   id uuid primary key default gen_random_uuid(),

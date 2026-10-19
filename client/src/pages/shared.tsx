@@ -51,7 +51,7 @@ type SharedExpense = {
   id: string;
   amount: number;
   description: string;
-  type: "meal" | "fixed";
+  type: "meal" | "utility";
   date: string;
   paidBy: string;
 };
@@ -217,7 +217,7 @@ function SharedNoticeNotificationButton({ token }: { token: string }) {
   );
 }
 
-function getExpenseEmptyState(tab: "all" | "meal" | "fixed") {
+function getExpenseEmptyState(tab: "all" | "meal" | "utility") {
   if (tab === "meal") {
     return {
       title: "No meal expenses yet",
@@ -225,7 +225,7 @@ function getExpenseEmptyState(tab: "all" | "meal" | "fixed") {
     };
   }
 
-  if (tab === "fixed") {
+  if (tab === "utility") {
     return {
       title: "No utility expenses yet",
       message: "Shared utility bills will appear here after the manager adds them.",
@@ -949,10 +949,10 @@ export default function SharedPage({ token }: { token: string }) {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="meal">Meals</TabsTrigger>
-              <TabsTrigger value="fixed">Utility</TabsTrigger>
+              <TabsTrigger value="utility">Utility</TabsTrigger>
             </TabsList>
 
-            {(["all", "meal", "fixed"] as const).map((tab) => {
+            {(["all", "meal", "utility"] as const).map((tab) => {
               const expenses =
                 tab === "all"
                   ? [...data.expenses]

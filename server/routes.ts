@@ -122,7 +122,7 @@ type ExpenseRow = {
   cycle_id: string;
   amount: number | string;
   description: string;
-  type: "meal" | "fixed";
+  type: "meal" | "utility";
   date: string;
   paid_by: string;
 };
@@ -822,7 +822,7 @@ export async function registerRoutes(
         .order("id", { ascending: true })
         .range(from, to),
     );
-    const expensesPromise = fetchAllPages<{ amount: number | string; type: "meal" | "fixed" }>(async (from, to) =>
+    const expensesPromise = fetchAllPages<{ amount: number | string; type: "meal" | "utility" }>(async (from, to) =>
       await supabaseAdmin
         .from("expenses")
         .select("amount, type")
