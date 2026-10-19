@@ -187,6 +187,10 @@ The shared view includes:
 - Cycle-specific money movement is stored in `cycle_deposits`.
 - The app now relies on `cycles` + `cycle_deposits` + `cycle_id` on expenses and meal logs.
 
+## Server Scaling
+
+The current server is designed to run as one instance. Shared-page SSE clients and their broadcast timers are stored in process memory, and cron jobs start inside the web process. Running multiple instances would split SSE subscribers and start duplicate schedulers. Before scaling horizontally, move event fanout to Redis Pub/Sub or Postgres `LISTEN`/`NOTIFY`, and run scheduled jobs through a single worker or a distributed lock.
+
 ## Scripts
 
 - `npm run dev` - start the Express + Vite development server

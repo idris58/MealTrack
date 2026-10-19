@@ -266,6 +266,9 @@ function scopeFilter(scope: Scope): ["mess_id" | "user_id", string] {
   return scope.messId ? ["mess_id", scope.messId] : ["user_id", scope.userId];
 }
 
+// This registry and its debounce timers are process-local. Before running more
+// than one web instance, fan out scope updates through Redis Pub/Sub or
+// Postgres LISTEN/NOTIFY so every instance with connected SSE clients receives them.
 const shareEventClients = new Map<string, Set<Response>>();
 const sharedBroadcastTimers = new Map<string, ReturnType<typeof setTimeout>>();
 

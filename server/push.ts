@@ -882,6 +882,22 @@ export async function sendMealLogReminders() {
   }
   const loggedCycleIds = new Set((mealLogs || []).map((row: { cycle_id: string }) => row.cycle_id));
 
+  const reminderDedupeKeys = Array.from(new Set(
+    cycles.filter((cycle) => !loggedCycleIds.has(cycle.id)).map((cycle) => `${local.date}:${cycle.id}`),
+  ));
+  if (reminderDedupeKeys.length === 0) return;
+  const { data: existingDeliveries, error: deliveryLookupError } = await supabase
+    .from("notification_deliveries")
+    .select("user_id, dedupe_key")
+    .in("user_id", profileIds)
+    .eq("type", "meal_log_reminder")
+    .in("dedupe_key", reminderDedupeKeys);
+  if (deliveryLookupError) {
+    console.error("Error checking existing meal reminder deliveries:", deliveryLookupError);
+    return;
+  }
+  const deliveredPairs = new Set((existingDeliveries || []).map((row: { user_id: string; dedupe_key: string }) => `${row.user_id}:${row.dedupe_key}`));
+
   for (const cycle of cycles) {
     if (loggedCycleIds.has(cycle.id)) continue;
     const cycleProfiles = profiles.filter((profile) =>
@@ -891,6 +907,7 @@ export async function sendMealLogReminders() {
       const rows = subscriptionsByUser.get(profile.id) || [];
       if (rows.length === 0) continue;
       const dedupeKey = `${local.date}:${cycle.id}`;
+      if (deliveredPairs.has(`${profile.id}:${dedupeKey}`)) continue;
       const deliveryRecorded = await recordDelivery(profile.id, "meal_log_reminder", dedupeKey).catch((error) => {
         console.error("Error recording meal reminder delivery:", error);
         return false;
@@ -1036,7 +1053,7 @@ export function startSoftDeleteCleanupScheduler() {
 
   void cleanupExpiredSoftDeletes();
 
-  cron.schedule("* * * * *", () => {
+  cron.schedule("*/10 * * * *", () => {
     void cleanupExpiredSoftDeletes();
   });
 }
