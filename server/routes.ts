@@ -72,13 +72,6 @@ const notificationPreferencesBodySchema = z.object({
 const uuidBodySchema = (key: string, label: string) => z.object({
   [key]: z.string().uuid(`${label} must be a valid ID.`),
 });
-const mealOffSubmissionBodySchema = z.object({
-  requestId: z.string().min(1),
-  memberName: z.string().trim().min(1).max(160),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  mealPeriod: z.string().trim().min(1).max(40),
-});
 
 import { assertSupabaseAdmin } from "./supabase-admin";
 import {
@@ -881,18 +874,41 @@ export async function registerRoutes(
     if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
     const messId = await requireMessMember(userId);
 
-    const body = parseRequestBody(mealOffSubmissionBodySchema, req.body, res);
+    const body = parseRequestBody(uuidBodySchema("requestId", "Request ID"), req.body, res);
     if (!body) return;
-    const { requestId, memberName, startDate, endDate, mealPeriod } = body;
+    const requestId = body.requestId;
+
+    const supabaseAdmin = assertSupabaseAdmin();
+    const { data: request, error: requestError } = await supabaseAdmin
+      .from("meal_off_requests")
+      .select("id, status, member_id, requested_by_profile_id, start_date, end_date, meal_period")
+      .eq("id", requestId)
+      .eq("mess_id", messId)
+      .eq("status", "pending")
+      .maybeSingle();
+    if (requestError) throw requestError;
+    if (!request) return res.status(404).json({ message: "Pending request not found in your mess." });
+
+    if (request.requested_by_profile_id !== userId) {
+      return res.status(403).json({ message: "You can only notify for your own requests." });
+    }
+
+    const { data: member } = await supabaseAdmin
+      .from("members")
+      .select("name")
+      .eq("id", request.member_id)
+      .maybeSingle();
+
+    const memberName = member?.name?.trim() || "A member";
 
     void sendMealOffRequestSubmittedPush({
       messId,
       actorUserId: userId,
-      requestId: String(requestId),
-      memberName: String(memberName),
-      startDate: String(startDate),
-      endDate: String(endDate),
-      mealPeriod: String(mealPeriod),
+      requestId: request.id,
+      memberName,
+      startDate: request.start_date,
+      endDate: request.end_date,
+      mealPeriod: request.meal_period,
     });
 
     return res.json({ success: true });

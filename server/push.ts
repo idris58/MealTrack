@@ -690,10 +690,11 @@ export async function sendMealOffRequestSubmittedPush({
     allowsNotification(p.notification_preferences, "mealOff"),
   );
 
+  const periodLabel = mealPeriod === "all_day" ? "all meals" : mealPeriod;
   const periodText =
     startDate === endDate
-      ? `${startDate} (${mealPeriod})`
-      : `${startDate} to ${endDate} (${mealPeriod})`;
+      ? `${startDate} (${periodLabel})`
+      : `${startDate} to ${endDate} (${periodLabel})`;
 
   for (const staff of eligibleStaff) {
     await sendPushToUser(
@@ -743,10 +744,11 @@ export async function sendMealOffRequestDecidedPush({
   if (profileError || !targetProfile) return;
   if (!allowsNotification(targetProfile.notification_preferences, "mealOff")) return;
 
+  const periodLabel = mealPeriod === "all_day" ? "all meals" : mealPeriod;
   const periodText =
     startDate === endDate
-      ? `${startDate} (${mealPeriod})`
-      : `${startDate} to ${endDate} (${mealPeriod})`;
+      ? `${startDate} (${periodLabel})`
+      : `${startDate} to ${endDate} (${periodLabel})`;
 
   const isApproved = status === "approved";
   const title = isApproved ? "Meal-Off Approved" : "Meal-Off Declined";

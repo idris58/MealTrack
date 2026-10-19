@@ -218,10 +218,6 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
     if (inserted?.id) {
       void triggerMealOffSubmitPush({
         requestId: inserted.id,
-        memberName: linkedMember.name,
-        startDate,
-        endDate,
-        mealPeriod,
       });
     }
     setDialogOpen(false);

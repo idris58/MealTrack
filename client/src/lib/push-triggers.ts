@@ -40,10 +40,6 @@ export async function triggerSettlementPendingPush(payload: { cycleId: string })
 
 export async function triggerMealOffSubmitPush(payload: {
   requestId: string;
-  memberName: string;
-  startDate: string;
-  endDate: string;
-  mealPeriod: string;
 }) {
   try {
     const headers = await getAuthHeader();
