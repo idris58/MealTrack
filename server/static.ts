@@ -12,9 +12,13 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath, {
     setHeaders(res, filePath) {
-      if (path.basename(filePath) === "index.html") {
+      const basename = path.basename(filePath).toLowerCase();
+      if (basename === "index.html" || basename === "sw.js" || basename.endsWith("manifest.webmanifest") || basename === "manifest.json") {
         res.setHeader("Cache-Control", "no-cache");
-      } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      } else if (
+        filePath.includes(`${path.sep}assets${path.sep}`) &&
+        /-[a-z0-9_-]{8,}\.[^.]+$/i.test(basename)
+      ) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       } else {
         res.setHeader("Cache-Control", "public, max-age=3600");

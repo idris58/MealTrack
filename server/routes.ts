@@ -271,6 +271,17 @@ function scopeFilter(scope: Scope): ["mess_id" | "user_id", string] {
 // Postgres LISTEN/NOTIFY so every instance with connected SSE clients receives them.
 const shareEventClients = new Map<string, Set<Response>>();
 const sharedBroadcastTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const SHARED_PAYLOAD_CACHE_MS = 3_000;
+const sharedPayloadCache = new Map<string, { payload: SharedPayload | null; expiresAt: number }>();
+const sharedPayloadLoads = new Map<string, Promise<SharedPayload | null>>();
+const sharedPayloadVersions = new Map<string, number>();
+
+function invalidateSharedPayload(scope: Scope) {
+  const key = scopeKey(scope);
+  sharedPayloadCache.delete(key);
+  sharedPayloadVersions.set(key, (sharedPayloadVersions.get(key) ?? 0) + 1);
+  sharedPayloadLoads.delete(key);
+}
 
 function addShareEventClient(key: string, res: Response) {
   const clients = shareEventClients.get(key) ?? new Set<Response>();
@@ -348,6 +359,7 @@ async function getActiveNoticeForScope(scope: Scope): Promise<ActiveNotice> {
 
 function scheduleSharedBroadcast(scope: Scope) {
   const key = scopeKey(scope);
+  invalidateSharedPayload(scope);
   if (!shareEventClients.has(key) || sharedBroadcastTimers.has(key)) return;
 
   const timer = setTimeout(() => {
@@ -361,6 +373,28 @@ function scheduleSharedBroadcast(scope: Scope) {
 }
 
 async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | null> {
+  const key = scopeKey(scope);
+  const cached = sharedPayloadCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.payload;
+
+  const pending = sharedPayloadLoads.get(key);
+  if (pending) return pending;
+
+  const version = sharedPayloadVersions.get(key) ?? 0;
+  const load = loadSharedPayloadForScope(scope);
+  sharedPayloadLoads.set(key, load);
+  try {
+    const payload = await load;
+    if ((sharedPayloadVersions.get(key) ?? 0) === version) {
+      sharedPayloadCache.set(key, { payload, expiresAt: Date.now() + SHARED_PAYLOAD_CACHE_MS });
+    }
+    return payload;
+  } finally {
+    if (sharedPayloadLoads.get(key) === load) sharedPayloadLoads.delete(key);
+  }
+}
+
+async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | null> {
   const supabaseAdmin = assertSupabaseAdmin();
 
   const { data: cycle, error: cycleError } = await supabaseAdmin
@@ -1074,6 +1108,7 @@ export async function registerRoutes(
 
     const scope = await resolveScopeForUserId(userId);
     const activeNotice = await getActiveNoticeForScope(scope);
+    invalidateSharedPayload(scope);
     broadcastNoticeUpdate(scopeKey(scope), activeNotice);
     // Push to shared-view visitors
     void sendNoticePushToSharedSubscribers(scope.messId, activeNotice);

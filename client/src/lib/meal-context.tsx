@@ -525,20 +525,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setDataError(null);
       hasLoadedDataRef.current = true;
 
-      // Persist the potentially large snapshot in IndexedDB, not localStorage.
-      try {
-        await writeOfflineSnapshot(cacheKey, {
-          members: nextMembers,
-          archivedMembers: nextArchivedMembers,
-          cycles: nextCycles,
-          deposits: nextDeposits,
-          expenses: nextExpenses,
-          mealLogs: nextMealLogs,
-          loadedCycleIds: initialCycleIds,
-        });
-      } catch {
-        // Quota exceeded or private browsing — non-fatal
-      }
     } catch (error) {
       console.error('Error loading data:', error);
 
@@ -587,20 +573,23 @@ export function MealProvider({ children }: { children: ReactNode }) {
   }, [userId, messId, fetchCycleRowsForCycles, setAllChangelogEntries]);
 
   React.useEffect(() => {
-    if (!userId || !messId || !hasLoadedDataRef.current) return;
+    if (!userId || !messId || !hasLoadedDataRef.current || loadedScopeRef.current !== `${userId}:${messId}`) return;
     const cacheKey = `mealtrack-data-cache-${userId}-${messId}`;
-    void writeOfflineSnapshot(cacheKey, {
-      members: memberRoster,
-      archivedMembers: archivedMemberRoster,
-      cycles,
-      deposits: allDeposits,
-      expenses: allExpenses,
-      mealLogs: allMealLogs,
-      changelog: allChangelogEntries,
-      loadedCycleIds: Array.from(loadedCycleIds),
-    }).catch(() => {
-      // Snapshot persistence is best effort; live app state remains available.
-    });
+    const timeoutId = window.setTimeout(() => {
+      void writeOfflineSnapshot(cacheKey, {
+        members: memberRoster,
+        archivedMembers: archivedMemberRoster,
+        cycles,
+        deposits: allDeposits,
+        expenses: allExpenses,
+        mealLogs: allMealLogs,
+        changelog: allChangelogEntries,
+        loadedCycleIds: Array.from(loadedCycleIds),
+      }).catch(() => {
+        // Quota exceeded or private browsing — non-fatal.
+      });
+    }, 300);
+    return () => window.clearTimeout(timeoutId);
   }, [userId, messId, memberRoster, archivedMemberRoster, cycles, allDeposits, allExpenses, allMealLogs, allChangelogEntries, loadedCycleIds]);
 
   const clearDataError = useCallback(() => {
