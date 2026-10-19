@@ -135,6 +135,7 @@ type MealLogRow = {
 const sharedTokenRateLimit = rateLimit({
   windowMs: 60 * 1000,
   limit: 60,
+  skipSuccessfulRequests: true,
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { message: "Too many shared-view requests. Please try again shortly." },
@@ -966,7 +967,7 @@ export async function registerRoutes(
     const { data: shareLink, error } = await supabaseAdmin
       .from("share_links")
       .select("user_id, mess_id, is_enabled")
-      .ilike("token", token)
+      .eq("token", token)
       .maybeSingle();
 
     if (error) {
@@ -1003,7 +1004,7 @@ export async function registerRoutes(
     const { data: shareLink, error: shareLinkError } = await supabaseAdmin
       .from("share_links")
       .select("user_id, mess_id, is_enabled")
-      .ilike("token", token)
+      .eq("token", token)
       .maybeSingle();
 
     if (shareLinkError) {
@@ -1044,7 +1045,7 @@ export async function registerRoutes(
     const { data: shareLink, error } = await supabaseAdmin
       .from("share_links")
       .select("user_id, mess_id")
-      .ilike("token", token)
+      .eq("token", token)
       .maybeSingle();
 
     if (error) {
@@ -1076,7 +1077,7 @@ export async function registerRoutes(
     const { data: shareLink, error: shareLinkError } = await supabaseAdmin
       .from("share_links")
       .select("user_id, is_enabled, mess_id")
-      .ilike("token", token)
+      .eq("token", token)
       .maybeSingle();
 
     if (shareLinkError) {
@@ -1161,7 +1162,7 @@ export async function registerRoutes(
     const { data: shareLink, error: shareLinkError } = await supabaseAdmin
       .from("share_links")
       .select("user_id, is_enabled, mess_id")
-      .ilike("token", token)
+      .eq("token", token)
       .maybeSingle();
 
     if (shareLinkError) {
