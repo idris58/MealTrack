@@ -456,6 +456,141 @@ $$;
 -- The old code-based join path was retired by the latest migration.
 drop function if exists public.join_mess(text);
 
+-- ── remove_mess_member ─────────────────────────────────────────────────────────
+-- Called by the manager when removing a member from the roster.
+-- Soft-deletes the member row AND clears the linked profile's mess_id/role
+-- so RLS immediately revokes access.
+create or replace function public.remove_mess_member(member_id_input uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  current_mess uuid := public.current_mess_id();
+  target_profile_id uuid;
+  has_history boolean;
+begin
+  if auth.uid() is null then raise exception 'Authentication is required'; end if;
+  if current_mess is null or not public.has_mess_role(array['manager']) then
+    raise exception 'Only a mess manager can remove members';
+  end if;
+
+  -- Look up the member and lock the row.
+  select m.profile_id into target_profile_id
+  from public.members m
+  where m.id = member_id_input and m.mess_id = current_mess and m.deleted_at is null
+  for update;
+  if not found then raise exception 'Member was not found in your mess'; end if;
+
+  -- A manager cannot remove themselves through this RPC.
+  if target_profile_id = auth.uid() then
+    raise exception 'You cannot remove yourself. Use "Leave Mess" or "Transfer Manager" instead.';
+  end if;
+
+  -- Check for meal or deposit history.
+  has_history := exists (select 1 from public.meal_logs where member_id = member_id_input)
+              or exists (select 1 from public.cycle_deposits where member_id = member_id_input);
+
+  -- Soft-delete the member roster row.
+  update public.members
+  set deleted_at = now(),
+      delete_expires_at = case when has_history then null else now() + interval '10 seconds' end
+  where id = member_id_input and mess_id = current_mess and deleted_at is null;
+
+  -- Clear the linked profile's mess association so RLS cuts off access.
+  if target_profile_id is not null then
+    update public.profiles
+    set mess_id = null, role = 'member', updated_at = now()
+    where id = target_profile_id and mess_id = current_mess;
+  end if;
+end;
+$$;
+
+-- ── leave_mess ─────────────────────────────────────────────────────────────────
+-- Allows a non-manager member to voluntarily leave the mess.
+-- Soft-deletes their member row and clears their profile's mess_id.
+create or replace function public.leave_mess()
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  current_mess uuid;
+  caller_role text;
+  member_row public.members;
+  has_history boolean;
+begin
+  if auth.uid() is null then raise exception 'Authentication is required'; end if;
+
+  select mess_id, role into current_mess, caller_role
+  from public.profiles where id = auth.uid() for update;
+  if current_mess is null then raise exception 'You are not in a mess'; end if;
+  if caller_role = 'manager' then
+    raise exception 'Managers must transfer management before leaving. Use "Transfer Manager" first.';
+  end if;
+
+  -- Soft-delete the member roster row linked to this profile.
+  select * into member_row
+  from public.members
+  where profile_id = auth.uid() and mess_id = current_mess and deleted_at is null
+  for update;
+
+  if found then
+    has_history := exists (select 1 from public.meal_logs where member_id = member_row.id)
+                or exists (select 1 from public.cycle_deposits where member_id = member_row.id);
+
+    update public.members
+    set deleted_at = now(),
+        delete_expires_at = case when has_history then null else now() + interval '10 seconds' end
+    where id = member_row.id;
+  end if;
+
+  -- Clear profile association.
+  update public.profiles
+  set mess_id = null, role = 'member', updated_at = now()
+  where id = auth.uid();
+end;
+$$;
+
+-- ── transfer_manager ───────────────────────────────────────────────────────────
+-- Transfers the manager role to another linked profile in the same mess.
+-- The caller is demoted to a regular member and their profile stays in the mess.
+create or replace function public.transfer_manager(new_manager_profile_id uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  current_mess uuid := public.current_mess_id();
+begin
+  if auth.uid() is null then raise exception 'Authentication is required'; end if;
+  if current_mess is null or not public.has_mess_role(array['manager']) then
+    raise exception 'Only the current manager can transfer management';
+  end if;
+  if new_manager_profile_id = auth.uid() then
+    raise exception 'You are already the manager';
+  end if;
+
+  -- Verify the target profile belongs to this mess and has a linked member row.
+  if not exists (
+    select 1 from public.profiles p
+    join public.members m on m.profile_id = p.id and m.mess_id = current_mess and m.deleted_at is null
+    where p.id = new_manager_profile_id and p.mess_id = current_mess
+  ) then
+    raise exception 'The target profile is not a linked member of this mess';
+  end if;
+
+  -- Promote the new manager.
+  update public.profiles
+  set role = 'manager', updated_at = now()
+  where id = new_manager_profile_id and mess_id = current_mess;
+
+  -- Update mess creator_id to the new manager.
+  update public.messes
+  set creator_id = new_manager_profile_id, updated_at = now()
+  where id = current_mess;
+
+  -- Demote the current manager to a regular member.
+  update public.profiles
+  set role = 'member', updated_at = now()
+  where id = auth.uid();
+end;
+$$;
+
 revoke all on function public.create_mess(text), public.set_mess_role(uuid, text), public.update_mess_settings(text), public.delete_current_mess(), public.update_user_profile(text, text) from public;
 grant execute on function public.create_mess(text), public.set_mess_role(uuid, text), public.update_mess_settings(text), public.delete_current_mess(), public.update_user_profile(text, text) to authenticated;
 revoke all on function public.link_member_profile(uuid, uuid), public.create_member_invite(uuid), public.list_member_invites(), public.revoke_member_invite(uuid), public.accept_member_invite(uuid) from public;
@@ -466,3 +601,5 @@ revoke all on function public.start_new_cycle(text, timestamptz, uuid, jsonb), p
 grant execute on function public.start_new_cycle(text, timestamptz, uuid, jsonb), public.post_notice(text, timestamptz, text), public.mark_cycle_closed(uuid) to authenticated;
 revoke all on function public.reorder_mess_members(uuid[]) from public;
 grant execute on function public.reorder_mess_members(uuid[]) to authenticated;
+revoke all on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid) from public;
+grant execute on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid) to authenticated;

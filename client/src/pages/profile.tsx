@@ -16,6 +16,8 @@ import {
   AlertCircle,
   Lock,
   Check,
+  LogOut,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,6 +27,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/lib/auth-context';
 import { RoleBadge } from '@/components/role-badge';
 import { supabase } from '@/lib/supabase';
@@ -287,8 +294,10 @@ function UserProfileCard() {
 
 // ─── Mess Info Card ───────────────────────────────────────────────────────────
 
+type LinkedProfile = { id: string; full_name: string; role: string };
+
 function MessInfoCard() {
-  const { profile, canManageMess } = useAuth();
+  const { profile, canManageMess, refreshProfile } = useAuth();
   const isManager = profile?.role === 'manager';
 
   const [mess, setMess] = useState<MessInfo | null>(null);
@@ -299,6 +308,15 @@ function MessInfoCard() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Leave mess state
+  const [leaving, setLeaving] = useState(false);
+
+  // Transfer manager state
+  const [linkedProfiles, setLinkedProfiles] = useState<LinkedProfile[]>([]);
+  const [transferTargetId, setTransferTargetId] = useState<string>('');
+  const [transferring, setTransferring] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   // Load mess data
   useEffect(() => {
@@ -319,6 +337,39 @@ function MessInfoCard() {
 
     return () => { active = false; };
   }, [profile?.mess_id]);
+
+  // Load linked profiles for transfer manager (only managers)
+  useEffect(() => {
+    if (!isManager || !profile?.mess_id) return;
+    let active = true;
+    void supabase
+      .from('profiles')
+      .select('id, full_name, role')
+      .eq('mess_id', profile.mess_id)
+      .neq('id', profile.id)
+      .order('full_name')
+      .then(({ data }) => {
+        if (!active) return;
+        // Only show profiles that have a linked (non-deleted) member row
+        const profiles = (data ?? []) as LinkedProfile[];
+        if (profiles.length > 0) {
+          void supabase
+            .from('members')
+            .select('profile_id')
+            .eq('mess_id', profile.mess_id!)
+            .is('deleted_at', null)
+            .not('profile_id', 'is', null)
+            .then(({ data: memberData }) => {
+              if (!active) return;
+              const linkedIds = new Set((memberData ?? []).map((m: any) => m.profile_id));
+              setLinkedProfiles(profiles.filter((p) => linkedIds.has(p.id)));
+            });
+        } else {
+          setLinkedProfiles([]);
+        }
+      });
+    return () => { active = false; };
+  }, [isManager, profile?.mess_id, profile?.id]);
 
   if (!profile?.mess_id) return null;
 
@@ -354,6 +405,47 @@ function MessInfoCard() {
       setError(err instanceof Error ? err.message : 'Unable to update mess name.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleLeaveMess = async () => {
+    if (leaving) return;
+    setLeaving(true);
+    setError(null);
+    try {
+      const { error: rpcErr } = await supabase.rpc('leave_mess');
+      if (rpcErr) throw rpcErr;
+      toast.success('You have left the mess.');
+      // Clear the local profile cache so the app redirects to onboarding.
+      try { localStorage.removeItem(`mealtrack-profile-${profile!.id}`); } catch { /* ignore */ }
+      await refreshProfile();
+      window.location.href = '/app/onboarding';
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to leave the mess.');
+      toast.error('Could not leave the mess', { description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+  const handleTransferManager = async () => {
+    if (transferring || !transferTargetId) return;
+    setTransferring(true);
+    setError(null);
+    try {
+      const { error: rpcErr } = await supabase.rpc('transfer_manager', { new_manager_profile_id: transferTargetId });
+      if (rpcErr) throw rpcErr;
+      const targetName = linkedProfiles.find((p) => p.id === transferTargetId)?.full_name ?? 'the new manager';
+      toast.success(`Management transferred to ${targetName}.`);
+      setTransferOpen(false);
+      // Clear the local profile cache and refresh.
+      try { localStorage.removeItem(`mealtrack-profile-${profile!.id}`); } catch { /* ignore */ }
+      await refreshProfile();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to transfer management.');
+      toast.error('Could not transfer management', { description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setTransferring(false);
     }
   };
 
@@ -445,6 +537,100 @@ function MessInfoCard() {
                 {error}
               </p>
             )}
+
+            {/* ─── Mess membership actions ─────────────────────────── */}
+            <div className="space-y-2 border-t pt-4">
+              {isManager ? (
+                /* Transfer Manager – only for managers */
+                <>
+                  <AlertDialog open={transferOpen} onOpenChange={(open) => { setTransferOpen(open); if (!open) { setTransferTargetId(''); setError(null); } }}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        id="transfer-manager-btn"
+                        variant="outline"
+                        className="w-full gap-2"
+                        disabled={linkedProfiles.length === 0}
+                      >
+                        <ArrowRightLeft className="h-4 w-4" />
+                        Transfer Manager Role
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Transfer management?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          You will be demoted to a regular member. The new manager will have full control over this mess, including deleting it. This action cannot be undone by you.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+
+                      <div className="space-y-1.5 py-2">
+                        <Label className="text-sm font-medium">New manager</Label>
+                        <Select value={transferTargetId} onValueChange={setTransferTargetId}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a linked member" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {linkedProfiles.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.full_name}{p.role === 'coordinator' ? ' (Coordinator)' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={!transferTargetId || transferring}
+                          onClick={(e) => { e.preventDefault(); void handleTransferManager(); }}
+                        >
+                          {transferring ? 'Transferring…' : 'Transfer Management'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+
+                  {linkedProfiles.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No linked members to transfer to. Invite and link at least one member first.
+                    </p>
+                  )}
+                </>
+              ) : (
+                /* Leave Mess – for non-managers */
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      id="leave-mess-btn"
+                      variant="outline"
+                      className="w-full gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Leave Mess
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Leave this mess?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You will lose access to all mess data including meals, deposits, and history. Your existing records will be preserved for the manager. You can rejoin later if invited.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        disabled={leaving}
+                        onClick={(e) => { e.preventDefault(); void handleLeaveMess(); }}
+                      >
+                        {leaving ? 'Leaving…' : 'Yes, Leave Mess'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </>
         ) : (
           <p className="text-sm text-muted-foreground">No mess information found.</p>

@@ -3,7 +3,6 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { ChangelogChange, Member } from '@/lib/meal-types';
 
-const SOFT_DELETE_GRACE_MS = 10_000;
 
 type RecordChange = (entry: {
   cycleId: string | null;
@@ -118,14 +117,12 @@ export function useMembers(options: Options) {
       supabase.from('meal_logs').select('id', { head: true, count: 'exact' }).eq('member_id', id),
       supabase.from('cycle_deposits').select('id', { head: true, count: 'exact' }).eq('member_id', id),
     ]);
-    if (meals.error || deposits.error) throw new Error('Unable to verify this member’s history. Please try again.');
+    if (meals.error || deposits.error) throw new Error('Unable to verify this member\u2019s history. Please try again.');
     const hasHistory = (meals.count ?? 0) > 0 || (deposits.count ?? 0) > 0;
-    const now = new Date();
-    const { error } = await supabase.from('members').update({
-      deleted_at: now.toISOString(),
-      delete_expires_at: hasHistory ? null : new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString(),
-    }).eq('id', id).eq('mess_id', messId).is('deleted_at', null);
-    if (error) throw new Error('Unable to remove member. Please try again.');
+    // Use the RPC which atomically soft-deletes the member AND clears the
+    // linked profile's mess_id so RLS immediately revokes access.
+    const { error } = await supabase.rpc('remove_mess_member', { member_id_input: id });
+    if (error) throw new Error(error.message || 'Unable to remove member. Please try again.');
     setMembers((previous) => previous.filter((member) => member.id !== id));
     if (hasHistory) setArchivedMembers((previous) => previous.some((member) => member.id === id)
       ? previous : [...previous, { ...current, archived: true }]);
