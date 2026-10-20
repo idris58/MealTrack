@@ -77,6 +77,13 @@ type RecordChangelogInput = {
   changes: ChangelogChange[];
 };
 
+type ChangelogSearchRow = ChangelogRow & {
+  actor_profile_id: string | null;
+  actor_full_name: string | null;
+  actor_picture_url: string | null;
+  actor_role: string | null;
+};
+
 /**
  * Owns changelog state and persistence. Keeping it independent of meal data
  * lets member, expense, and meal-log actions record audit entries uniformly.
@@ -100,6 +107,8 @@ export function useChangelog(
   const loadMore = useCallback(async (
     cycleIds: string[],
     entityType: ChangelogEntityType | 'all',
+    action: ChangelogAction | 'all',
+    search: string,
     reset = false,
   ) => {
     if (!userId || !messId || cycleIds.length === 0 || (loadingRef.current && !reset)) return;
@@ -109,21 +118,31 @@ export function useChangelog(
     loadingRef.current = true;
     setLoading(true);
     try {
-      let query = supabase
-        .from('changelog_entries')
-        .select('id, cycle_id, user_id, profile_id, entity_type, entity_id, action, title, changes, created_at, profiles(id, full_name, picture_url, role)')
-        .eq('mess_id', messId)
-        .in('cycle_id', cycleIds);
-      if (entityType !== 'all') query = query.eq('entity_type', entityType);
-      const { data, error } = await query
-        .order('created_at', { ascending: false })
-        .range(from, from + CHANGELOG_PAGE_SIZE - 1);
+      const { data, error } = await supabase.rpc('search_changelog_entries', {
+        cycle_ids_input: cycleIds,
+        entity_type_input: entityType,
+        action_input: action,
+        search_input: search,
+        offset_input: from,
+        limit_input: CHANGELOG_PAGE_SIZE,
+      });
 
       if (error) throw error;
       if (requestId !== requestRef.current) return;
 
+      const rpcRows = (data ?? []) as ChangelogSearchRow[];
       const next = mapChangelogRows(
-        (data ?? []) as ChangelogRow[],
+        rpcRows.map((row) => ({
+          ...row,
+          profiles: row.actor_profile_id && row.actor_full_name
+            ? {
+                id: row.actor_profile_id,
+                full_name: row.actor_full_name,
+                picture_url: row.actor_picture_url,
+                role: row.actor_role,
+              }
+            : null,
+        })),
         profilesMapRef.current,
       );
       setEntries((previous) => {

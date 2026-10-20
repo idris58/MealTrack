@@ -294,7 +294,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex">
         {/* Desktop Sidebar */}
-        <aside className="hidden h-[calc(100vh-4rem)] w-64 shrink-0 flex-col border-r bg-card md:sticky md:top-16 md:flex">
+        <aside className="hidden h-[calc(100dvh-4rem)] w-64 shrink-0 flex-col border-r bg-card md:sticky md:top-16 md:flex">
           <nav className="flex-1 space-y-2 p-4 pt-6">
             {sidebarNavItems.map((item) => (
               <Link key={item.href} href={item.href}>

@@ -1076,3 +1076,66 @@ begin
 end;
 $$;
 
+create or replace function public.search_changelog_entries(
+  cycle_ids_input uuid[],
+  entity_type_input text,
+  action_input text,
+  search_input text,
+  offset_input integer,
+  limit_input integer
+)
+returns table (
+  id uuid,
+  cycle_id uuid,
+  user_id uuid,
+  profile_id uuid,
+  entity_type text,
+  entity_id uuid,
+  action text,
+  title text,
+  changes jsonb,
+  created_at timestamptz,
+  actor_profile_id uuid,
+  actor_full_name text,
+  actor_picture_url text,
+  actor_role text
+)
+language sql stable security invoker set search_path = public
+as $$
+  select entry.id,
+    entry.cycle_id,
+    entry.user_id,
+    entry.profile_id,
+    entry.entity_type,
+    entry.entity_id,
+    entry.action,
+    entry.title,
+    entry.changes,
+    entry.created_at,
+    actor.id as actor_profile_id,
+    actor.full_name as actor_full_name,
+    actor.picture_url as actor_picture_url,
+    actor.role::text as actor_role
+  from public.changelog_entries entry
+  left join public.profiles actor on actor.id = coalesce(entry.profile_id, entry.user_id)
+  where entry.mess_id = (select public.current_mess_id())
+    and entry.cycle_id = any(cycle_ids_input)
+    and (entity_type_input = 'all' or entry.entity_type = entity_type_input)
+    and (
+      action_input = 'all'
+      or (case when entry.entity_type = 'deposit' then 'update' else entry.action end) = action_input
+    )
+    and (
+      nullif(trim(search_input), '') is null
+      or position(
+        lower(trim(search_input)) in lower(concat_ws(' ', entry.title, entry.changes::text, actor.full_name))
+      ) > 0
+    )
+  order by entry.created_at desc
+  offset greatest(coalesce(offset_input, 0), 0)
+  limit least(greatest(coalesce(limit_input, 50), 1), 100);
+$$;
+
+revoke all on function public.search_changelog_entries(uuid[], text, text, text, integer, integer) from public;
+grant execute on function public.search_changelog_entries(uuid[], text, text, text, integer, integer) to authenticated;
+

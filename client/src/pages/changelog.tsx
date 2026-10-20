@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { format, formatDistanceToNow, isValid, parseISO } from 'date-fns';
 import {
   ArrowLeft,
@@ -167,26 +167,6 @@ function getDetailedChanges(entry: ChangelogEntry): ChangelogChange[] {
     ];
   }
   return entry.changes.filter((c) => c.field !== 'members_changed');
-}
-
-function filterEntries(
-  entries: ChangelogEntry[],
-  actionFilter: ChangelogAction | 'all',
-  entityFilter: ChangelogEntityType | 'all',
-  search: string,
-) {
-  const term = search.toLowerCase().trim();
-  return entries.filter((entry) => {
-    if (actionFilter !== 'all' && getDisplayAction(entry) !== actionFilter) return false;
-    if (entityFilter !== 'all' && entry.entityType !== entityFilter) return false;
-    if (term) {
-      const titleMatch = getDisplayTitle(entry).toLowerCase().includes(term);
-      const authorMatch = entry.actor?.name.toLowerCase().includes(term) ?? false;
-      const summaryMatch = getEntrySummary(entry).toLowerCase().includes(term);
-      if (!titleMatch && !authorMatch && !summaryMatch) return false;
-    }
-    return true;
-  });
 }
 
 function getInitials(name: string) {
@@ -480,22 +460,12 @@ export default function ChangelogPage() {
 
   useEffect(() => {
     const scopedCycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
-    if (scopedCycleIds.length) void loadMoreChangelogEntries(scopedCycleIds, entityFilter, true);
-  }, [activeCycle?.id, pendingCycle?.id, entityFilter, loadMoreChangelogEntries]);
+    if (scopedCycleIds.length) void loadMoreChangelogEntries(scopedCycleIds, entityFilter, actionFilter, search, true);
+  }, [activeCycle?.id, pendingCycle?.id, actionFilter, entityFilter, search, loadMoreChangelogEntries]);
 
   useEffect(() => {
     if (profile?.role === 'member') setLocation('/app');
   }, [profile?.role, setLocation]);
-
-  const filteredPending = useMemo(
-    () => filterEntries(pendingCycleChangelogEntries, actionFilter, entityFilter, search),
-    [actionFilter, entityFilter, pendingCycleChangelogEntries, search],
-  );
-
-  const filteredActive = useMemo(
-    () => filterEntries(activeCycleChangelogEntries, actionFilter, entityFilter, search),
-    [actionFilter, activeCycleChangelogEntries, entityFilter, search],
-  );
 
   const hasCycleSections = Boolean(pendingCycle || activeCycle);
 
@@ -627,8 +597,8 @@ export default function ChangelogPage() {
             <ChangelogSection
               title="Active Cycle"
               description="Changes happening in the current running cycle."
-              entries={filteredActive}
-              cycleStat={computeStats(filteredActive)}
+              entries={activeCycleChangelogEntries}
+              cycleStat={computeStats(activeCycleChangelogEntries)}
             />
           )}
 
@@ -636,8 +606,8 @@ export default function ChangelogPage() {
             <ChangelogSection
               title="Pending Cycle"
               description="Settlement and correction activity for the cycle awaiting finalization."
-              entries={filteredPending}
-              cycleStat={computeStats(filteredPending)}
+              entries={pendingCycleChangelogEntries}
+              cycleStat={computeStats(pendingCycleChangelogEntries)}
             />
           )}
 
@@ -647,7 +617,7 @@ export default function ChangelogPage() {
                 id="changelog-load-more"
                 type="button"
                 variant="outline"
-                onClick={() => void loadMoreChangelogEntries(cycleIds, entityFilter)}
+                onClick={() => void loadMoreChangelogEntries(cycleIds, entityFilter, actionFilter, search)}
                 disabled={changelogLoading}
                 className="gap-2"
               >

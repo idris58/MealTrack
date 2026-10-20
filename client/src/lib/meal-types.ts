@@ -172,7 +172,13 @@ export interface MealActionsContextType {
   deleteCycle: (cycleId: string) => Promise<void>;
   restoreCycle: (cycleId: string) => Promise<void>;
   loadCycleDetails: (cycleId: string, options?: { force?: boolean }) => Promise<void>;
-  loadMoreChangelogEntries: (cycleIds: string[], entityType: ChangelogEntityType | 'all', reset?: boolean) => Promise<void>;
+  loadMoreChangelogEntries: (
+    cycleIds: string[],
+    entityType: ChangelogEntityType | 'all',
+    action: ChangelogAction | 'all',
+    search: string,
+    reset?: boolean,
+  ) => Promise<void>;
   triggerSync: () => Promise<void>;
   retryFailedSync: () => Promise<void>;
   discardFailedSync: (id: string) => Promise<void>;

@@ -78,7 +78,7 @@ function Router() {
   if (dataError) {
     return (
       <Layout>
-        <div className="flex h-[calc(100vh-4rem)] items-center justify-center p-4">
+        <div className="flex h-[calc(100dvh-4rem)] items-center justify-center p-4">
           <div className="mx-auto max-w-md text-center space-y-4">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
               <AlertTriangle className="h-6 w-6" />
