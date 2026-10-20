@@ -256,11 +256,7 @@ export function MemberDepositsView() {
 
   const me = useMemo(() => {
     if (!profile) return null;
-    return (
-      members.find((m) => m.profileId === profile.id) ??
-      members.find((m) => m.name.toLowerCase().trim() === profile.full_name.toLowerCase().trim()) ??
-      null
-    );
+    return members.find((m) => m.profileId === profile.id) ?? null;
   }, [members, profile]);
 
   const v = useMemo(() => {
