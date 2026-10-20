@@ -23,6 +23,8 @@ export default defineConfig({
         "icon-maskable-512.png",
         "badge-96.png",
         "opengraph.jpg",
+        "screenshot-mobile.jpg",
+        "screenshot-desktop.jpg",
         "manifest.webmanifest",
         "shared-manifest.webmanifest",
       ],

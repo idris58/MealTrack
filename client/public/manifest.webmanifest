@@ -36,5 +36,62 @@
       "sizes": "180x180",
       "type": "image/png"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log Today's Meals",
+      "short_name": "Meals",
+      "description": "Open the meal log for today",
+      "url": "/app/meals",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Add Expense",
+      "short_name": "Expense",
+      "description": "Record a new meal or utility expense",
+      "url": "/app/expenses",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Members & Deposits",
+      "short_name": "Members",
+      "description": "View member balances and record deposits",
+      "url": "/app/members",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.jpg",
+      "sizes": "768x1376",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "MealTrack dashboard on mobile — meal stats, deposits, and member balances at a glance"
+    },
+    {
+      "src": "/screenshot-desktop.jpg",
+      "sizes": "1376x768",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "MealTrack desktop view — full sidebar navigation with member table and meal log"
+    }
   ]
 }

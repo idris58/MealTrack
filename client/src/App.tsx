@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { MealProvider, useMealActions, useMealData } from "@/lib/meal-context";
 import { NoticeProvider } from "@/lib/notice-context";
 import { OfflineToastManager } from "@/components/offline-toast";
+import { AppBadgeManager } from "@/components/app-badge-manager";
 import { supabase } from "@/lib/supabase";
 import { usePushNotifications } from "@/lib/push-notifications";
 import { NotificationPreferencesProvider, useNotificationPreferences } from "@/lib/notification-preferences-context";
@@ -446,6 +447,7 @@ function AppShell() {
   return (
     <MealProvider>
       <NoticeProvider>
+        <AppBadgeManager />
         <OfflineToastManager />
         <NotificationOnboardingToast />
         <Router />
