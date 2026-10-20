@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
+import { Link } from 'wouter';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -257,7 +258,7 @@ function CycleManagementCard() {
               <div className="flex items-center gap-2 border-t bg-amber-500/5 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 Pending settlement —{' '}
-                <a href="/app/history" className="font-semibold underline underline-offset-2">go to History to finalize</a>
+                <Link href="/app/history" className="font-semibold underline underline-offset-2">go to History to finalize</Link>
               </div>
             )}
             {/* Actions */}
@@ -289,7 +290,7 @@ function CycleManagementCard() {
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 <span>
                   Settle pending cycle balances in{' '}
-                  <a href="/app/history" className="font-semibold underline underline-offset-2">History</a>{' '}
+                  <Link href="/app/history" className="font-semibold underline underline-offset-2">History</Link>{' '}
                   first for clean accounts.
                 </span>
               </div>

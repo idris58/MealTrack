@@ -11,6 +11,7 @@ export function serveStatic(app: Express) {
   }
 
   app.use(express.static(distPath, {
+    index: false,
     setHeaders(res, filePath) {
       const basename = path.basename(filePath).toLowerCase();
       if (basename === "index.html" || basename === "sw.js" || basename.endsWith("manifest.webmanifest") || basename === "manifest.json") {
@@ -26,9 +27,18 @@ export function serveStatic(app: Express) {
     },
   }));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  const indexHtml = fs.readFileSync(path.resolve(distPath, "index.html"), "utf8");
+
+  // Serve the manifest matching the initial URL. Browsers may not reread a
+  // manifest when a client-side route changes after the document has loaded.
+  app.use("*", (req, res) => {
+    const isSharedPath = req.path === "/shared" || req.path.startsWith("/shared/");
+    const manifestHref = isSharedPath ? "/shared-manifest.webmanifest" : "/manifest.webmanifest";
+    const html = indexHtml.replace(
+      /<link\s+rel=["']manifest["'][^>]*>/i,
+      `<link rel="manifest" href="${manifestHref}" />`,
+    );
     res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(path.resolve(distPath, "index.html"));
+    res.type("html").send(html);
   });
 }

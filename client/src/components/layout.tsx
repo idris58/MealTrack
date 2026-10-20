@@ -117,7 +117,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const runQuickAction = (href: string) => {
     setIsCommandOpen(false);
-    setLocation(href);
+    const [path, hash] = href.split('#', 2);
+    setLocation(path);
+    if (hash) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          document.getElementById(decodeURIComponent(hash))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+    }
   };
 
   const handleLogout = async () => {

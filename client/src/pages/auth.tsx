@@ -31,14 +31,7 @@ type AuthMode = "login" | "signup" | "forgot-password" | "reset-password";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getAuthRedirectUrl() {
-  const origin = window.location.origin;
-  const hostname = window.location.hostname.toLowerCase();
-  const isLocalHost =
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1";
-
-  return isLocalHost ? `${origin}/` : `${origin}/auth`;
+  return `${window.location.origin}/app/auth`;
 }
 
 function mapAuthError(error: unknown, mode: AuthMode) {
@@ -191,8 +184,8 @@ export default function AuthPage() {
   }, [isRecoveryLink, requestedMode]);
 
   const authRedirectUrl = inviteToken
-    ? `${window.location.origin}/invite/${encodeURIComponent(inviteToken)}`
-    : `${window.location.origin}/`;
+    ? `${getAuthRedirectUrl()}?invite=${encodeURIComponent(inviteToken)}`
+    : getAuthRedirectUrl();
 
   const switchMode = (next: AuthMode) => {
     if (mode === "reset-password" && next !== "reset-password") {

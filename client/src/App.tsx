@@ -313,14 +313,9 @@ function AppShell() {
   const isRecoveryFlow = isAuthRoute && hasRecoveryContext;
 
   useEffect(() => {
-    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
     const isSharedExperience = isSharedLandingRoute || isSharedRoute || isInviteRoute;
 
-    manifestLink?.setAttribute(
-      "href",
-      isSharedExperience ? "/shared-manifest.webmanifest" : "/manifest.webmanifest",
-    );
     appleTitle?.setAttribute("content", isSharedExperience ? "MealTrack Shared" : "MealTrack");
   }, [isInviteRoute, isSharedLandingRoute, isSharedRoute]);
 
