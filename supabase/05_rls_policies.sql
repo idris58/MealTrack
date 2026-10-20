@@ -121,3 +121,21 @@ create policy share_links_read on public.share_links for select to authenticated
 create policy share_links_manage on public.share_links for all to authenticated using (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager']))) with check (mess_id = (select public.current_mess_id()) and (select public.has_mess_role(array['manager'])));
 
 revoke all on table public.member_invites from anon, authenticated;
+
+-- Publish the main app's shared data tables for tenant-authorized Realtime updates.
+do $$
+declare table_name text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach table_name in array array['members', 'cycles', 'cycle_deposits', 'expenses', 'meal_logs'] loop
+      if not exists (
+        select 1 from pg_publication_tables
+        where pubname = 'supabase_realtime'
+          and schemaname = 'public'
+          and tablename = table_name
+      ) then
+        execute format('alter publication supabase_realtime add table public.%I', table_name);
+      end if;
+    end loop;
+  end if;
+end $$;

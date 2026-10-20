@@ -22,6 +22,8 @@ export interface OfflineOp {
   payload: Record<string, unknown>;
   createdAt: number;    // Date.now()
   attempts?: number;
+  retryCount?: number;
+  nextAttemptAt?: number;
   status?: 'pending' | 'failed' | 'conflict';
   lastError?: string;
 }

@@ -7,6 +7,7 @@ import {
 import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
 import { broadcastSharedUpdate } from './shared-update';
 import { triggerDepositPush } from './push-triggers';
+import { withRequestTimeout } from './request-retry';
 import {
   useChangelog,
 } from '@/hooks/use-changelog';
@@ -87,6 +88,7 @@ type ExpenseRow = {
   type: 'meal' | 'utility';
   date: string;
   paid_by: string;
+  updated_at: string;
 };
 
 type MealLogRow = {
@@ -95,6 +97,7 @@ type MealLogRow = {
   member_id: string;
   date: string;
   count: number | string;
+  updated_at: string;
 };
 
 type CycleDepositRow = {
@@ -128,6 +131,7 @@ function mapExpenseRows(rows: ExpenseRow[]): Expense[] {
       type: expense.type,
       date: expense.date,
       paidBy: expense.paid_by,
+      updatedAt: expense.updated_at,
     }));
 }
 
@@ -150,6 +154,7 @@ function mapMealLogRows(rows: MealLogRow[]): MealLog[] {
       memberId: log.member_id,
       date: log.date,
       count: Number(log.count),
+      updatedAt: log.updated_at,
     }));
 }
 
@@ -301,7 +306,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: true }),
       supabase
         .from('expenses')
-        .select('id, cycle_id, amount, description, type, date, paid_by')
+        .select('id, cycle_id, amount, description, type, date, paid_by, updated_at')
         .eq('mess_id', messId)
         .eq('cycle_id', cycleId)
         .is('deleted_at', null)
@@ -315,7 +320,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     for (let offset = 0; ; offset += mealLogPageSize) {
       const { data, error } = await supabase
         .from('meal_logs')
-        .select('id, cycle_id, member_id, date, count')
+        .select('id, cycle_id, member_id, date, count, updated_at')
         .eq('mess_id', messId)
         .eq('cycle_id', cycleId)
         .order('date', { ascending: false })
@@ -341,7 +346,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     const [depositsResult, expensesResult] = await Promise.all([
       supabase.from('cycle_deposits').select('id, cycle_id, member_id, amount, note, created_at').eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
-      supabase.from('expenses').select('id, cycle_id, amount, description, type, date, paid_by').eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
+      supabase.from('expenses').select('id, cycle_id, amount, description, type, date, paid_by, updated_at').eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
     ]);
     if (depositsResult.error) throw depositsResult.error;
     if (expensesResult.error) throw expensesResult.error;
@@ -351,7 +356,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     for (let offset = 0; ; offset += mealLogPageSize) {
       const { data, error } = await supabase
         .from('meal_logs')
-        .select('id, cycle_id, member_id, date, count')
+        .select('id, cycle_id, member_id, date, count, updated_at')
         .eq('mess_id', messId)
         .in('cycle_id', cycleIds)
         .order('date', { ascending: false })
@@ -615,6 +620,59 @@ export function MealProvider({ children }: { children: ReactNode }) {
     load: requestDataLoad,
   });
 
+  React.useEffect(() => {
+    if (!userId || !messId) return;
+
+    let refreshTimer: number | null = null;
+    let hasSubscribed = false;
+    const scheduleRefresh = () => {
+      if (!navigator.onLine || document.visibilityState !== 'visible') return;
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void loadData();
+      }, 150);
+    };
+
+    const channel = supabase.channel(`meal-data-${userId}-${messId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'members', filter: `mess_id=eq.${messId}`,
+      }, scheduleRefresh)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'cycles', filter: `mess_id=eq.${messId}`,
+      }, scheduleRefresh);
+
+    const cycleIds = [activeCycle?.id, pendingCycle?.id].filter((id): id is string => Boolean(id));
+    for (const cycleId of cycleIds) {
+      for (const table of ['cycle_deposits', 'expenses', 'meal_logs'] as const) {
+        channel.on('postgres_changes', {
+          event: '*', schema: 'public', table, filter: `cycle_id=eq.${cycleId}`,
+        }, scheduleRefresh);
+      }
+    }
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        if (hasSubscribed) scheduleRefresh();
+        hasSubscribed = true;
+      }
+    });
+
+    const handleOnline = () => scheduleRefresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') scheduleRefresh();
+    };
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData]);
+
   const retryLoadData = useCallback(() => {
     if (userId && messId) {
       setDataError(null);
@@ -659,7 +717,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         recordId?: string; paidBy: string; date: string; userId: string; messId: string; cycleId: string;
       };
       const expenseType = normalizeExpenseType(p.type);
-      const { data, error } = await supabase
+      const { data, error } = await withRequestTimeout((signal) => supabase
         .from('expenses')
         .upsert([{
           id: p.recordId ?? op.id.slice('offline-'.length),
@@ -672,49 +730,61 @@ export function MealProvider({ children }: { children: ReactNode }) {
           mess_id: messId,
           cycle_id: p.cycleId,
         }], { onConflict: 'id' })
+        .abortSignal(signal)
         .select()
-        .single();
+        .single());
       if (error) throw error;
       setAllExpenses((prev) => [
-        { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by },
+        { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by, updatedAt: data.updated_at },
         ...prev.filter((e) => e.id !== op.id),
       ]);
       return;
     }
 
     if (op.type === 'UPDATE_EXPENSE') {
-      const p = op.payload as { id: string; amount: number; description: string; type: string; paidBy: string; date: string; cycleId: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
+      const p = op.payload as { id: string; amount: number; description: string; type: string; paidBy: string; date: string; cycleId: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string; updatedAt?: string } };
       const expenseType = normalizeExpenseType(p.type);
-      const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
+      const { data: current, error: readError } = await withRequestTimeout((signal) => supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at,updated_at').eq('id', p.id).eq('mess_id', messId).abortSignal(signal).maybeSingle());
       if (readError) throw readError;
       if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline change.');
-      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
+      const alreadyApplied = Number(current.amount) === p.amount && current.description === p.description && current.type === expenseType && current.paid_by === p.paidBy && current.date === p.date;
+      if (alreadyApplied) return;
+      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date || (p.expected.updatedAt && current.updated_at !== p.expected.updatedAt))) {
         const conflict = new Error('This expense changed on another device. Review it before applying your offline edit.') as Error & { code?: string };
         conflict.code = 'OFFLINE_CONFLICT';
         throw conflict;
       }
-      const { data: updated, error } = await supabase.from('expenses').update({ amount: p.amount, description: p.description, type: expenseType, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId).select('id').maybeSingle();
+      const { data: updated, error } = await withRequestTimeout((signal) => supabase.from('expenses').update({ amount: p.amount, description: p.description, type: expenseType, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId).eq('updated_at', current.updated_at).abortSignal(signal).select('id, updated_at').maybeSingle());
       if (error) throw error;
-      if (!updated) throw new Error('The expense could not be found to update.');
-      setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: expenseType, paidBy: p.paidBy, date: p.date } : expense));
+      if (!updated) {
+        const conflict = new Error('This expense changed on another device. Review it before applying this offline edit.') as Error & { code?: string };
+        conflict.code = 'OFFLINE_CONFLICT';
+        throw conflict;
+      }
+      setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: expenseType, paidBy: p.paidBy, date: p.date, updatedAt: updated.updated_at } : expense));
       setPendingSyncIdsRef.current((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
       return;
     }
 
     if (op.type === 'DELETE_EXPENSE') {
-      const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: string; paidBy: string; date: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string } };
-      const { data: current, error: readError } = await supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at').eq('id', p.id).eq('mess_id', messId).maybeSingle();
+      const p = op.payload as { id: string; cycleId: string; description: string; amount: number; type: string; paidBy: string; date: string; updatedAt?: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string; updatedAt?: string } };
+      const { data: current, error: readError } = await withRequestTimeout((signal) => supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at,updated_at').eq('id', p.id).eq('mess_id', messId).abortSignal(signal).maybeSingle());
       if (readError) throw readError;
-      if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline deletion.');
-      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date)) {
+      if (!current) throw new Error('The expense no longer exists. Review or discard this offline deletion.');
+      if (current.deleted_at) return;
+      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date || (p.expected.updatedAt && current.updated_at !== p.expected.updatedAt))) {
         const conflict = new Error('This expense changed on another device. Review it before applying your offline deletion.') as Error & { code?: string };
         conflict.code = 'OFFLINE_CONFLICT';
         throw conflict;
       }
       const now = new Date();
-      const { data: deleted, error } = await supabase.from('expenses').update({ deleted_at: now.toISOString(), delete_expires_at: new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString() }).eq('id', p.id).eq('mess_id', messId).is('deleted_at', null).select('id').maybeSingle();
+      const { data: deleted, error } = await withRequestTimeout((signal) => supabase.from('expenses').update({ deleted_at: now.toISOString(), delete_expires_at: new Date(now.getTime() + SOFT_DELETE_GRACE_MS).toISOString() }).eq('id', p.id).eq('mess_id', messId).eq('updated_at', current.updated_at).is('deleted_at', null).abortSignal(signal).select('id').maybeSingle());
       if (error) throw error;
-      if (!deleted) throw new Error('The expense could not be found to delete.');
+      if (!deleted) {
+        const conflict = new Error('This expense changed on another device. Review it before applying this offline deletion.') as Error & { code?: string };
+        conflict.code = 'OFFLINE_CONFLICT';
+        throw conflict;
+      }
       return;
     }
 
@@ -722,7 +792,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const p = op.payload as {
         recordId?: string; memberId: string; amount: number; cycleId: string; note: string | null; userId: string; messId: string;
       };
-      const { data, error } = await supabase
+      const { data, error } = await withRequestTimeout((signal) => supabase
         .from('cycle_deposits')
         .upsert([{
           id: p.recordId ?? op.id.slice('offline-'.length),
@@ -733,8 +803,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
           user_id: userId,
           mess_id: messId,
         }], { onConflict: 'id' })
+        .abortSignal(signal)
         .select()
-        .single();
+        .single());
       if (error) throw error;
       setAllDeposits((prev) => [
         ...prev.filter((d) => d.id !== op.id),
@@ -747,9 +818,10 @@ export function MealProvider({ children }: { children: ReactNode }) {
     if (op.type === 'ADD_MEAL_LOG') {
       const p = op.payload as {
         entries: Array<{ memberId: string; count: number }>;
+        expected?: Array<{ memberId: string; count: number; updatedAt?: string; exists: boolean }>;
         dateStr: string; cycleId: string; userId: string; messId: string;
       };
-      await saveMealLogsForReplayRef.current(p.entries, p.dateStr, p.cycleId);
+      await saveMealLogsForReplayRef.current(p.entries, p.dateStr, p.cycleId, p.expected);
       setAllMealLogs((prev) => prev.filter((log) => !log.id.startsWith('offline-')));
       return;
     }
@@ -808,6 +880,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const mealLogActions = useMealLogs({
     userId,
     messId,
+    mealLogs: allMealLogs,
     setMealLogs: setAllMealLogs,
     setPendingSyncIds,
     getCycleId: getRequiredCycleId,
@@ -908,6 +981,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     getCycleDetails: computedCycleDetails.getCycleDetails,
     isCycleDetailsLoading: cycleLoader.isLoading,
     getCycleDetailsError: cycleLoader.getError,
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- map identity must invalidate this context; its stable getter reads a ref.
   }), [
     members,
     expenses,

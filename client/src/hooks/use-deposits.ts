@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { supabase } from '@/lib/supabase';
 import { enqueue } from '@/lib/offline-queue';
+import { isTransientRequestError, withRequestTimeout } from '@/lib/request-retry';
 import { triggerDepositPush } from '@/lib/push-triggers';
 import type { CycleDeposit } from '@/lib/meal-types';
 
@@ -15,9 +16,6 @@ type Options = {
   getCycleId: (cycleId?: string) => string | null;
   broadcast: () => void;
 };
-const isNetworkError = (error: { message?: string; status?: number }) =>
-  error.status === 0 || /fetch|network|connection|offline|load failed/i.test(error.message ?? '');
-
 export function useDeposits(options: Options) {
   const latest = useRef(options);
   latest.current = options;
@@ -29,7 +27,7 @@ export function useDeposits(options: Options) {
     if (!targetCycleId) return;
 
     const recordId = uuidv4();
-    if (!navigator.onLine) {
+    const queueDeposit = async () => {
       const id = `offline-${uuidv4()}`;
       setDeposits((previous) => [...previous, {
         id, cycleId: targetCycleId, memberId, amount, note: note ?? undefined, createdAt: new Date().toISOString(),
@@ -41,21 +39,29 @@ export function useDeposits(options: Options) {
         payload: { recordId, memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId },
         createdAt: Date.now(),
       });
+    };
+    if (!navigator.onLine) {
+      await queueDeposit();
       return;
     }
 
-    const { data, error } = await supabase.from('cycle_deposits').upsert([{
-      id: recordId, member_id: memberId, cycle_id: targetCycleId, amount, note: note ?? null, user_id: userId, mess_id: messId,
-    }], { onConflict: 'id' }).select().single();
-    if (error) {
-      if (isNetworkError(error)) {
-        const id = `offline-${uuidv4()}`;
-        setDeposits((previous) => [...previous, { id, cycleId: targetCycleId, memberId, amount, note: note ?? undefined, createdAt: new Date().toISOString() }]);
-        setPendingSyncIds((previous) => new Set(previous).add(id));
-        await enqueue({ id, type: 'ADD_DEPOSIT', payload: { recordId, memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId }, createdAt: Date.now() });
-        return;
+    let data;
+    try {
+      const result = await withRequestTimeout((signal) => supabase.from('cycle_deposits').upsert([{
+        id: recordId, member_id: memberId, cycle_id: targetCycleId, amount, note: note ?? null, user_id: userId, mess_id: messId,
+      }], { onConflict: 'id' }).abortSignal(signal).select().single());
+      if (result.error) {
+        if (isTransientRequestError(result.error)) {
+          await queueDeposit();
+          return;
+        }
+        throw new Error('Unable to add deposit. Please try again.');
       }
-      throw new Error('Unable to add deposit. Please try again.');
+      data = result.data;
+    } catch (error) {
+      if (!isTransientRequestError(error)) throw error;
+      await queueDeposit();
+      return;
     }
 
     setDeposits((previous) => [...previous, {

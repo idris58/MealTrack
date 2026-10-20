@@ -29,6 +29,16 @@ create trigger audit_meal_logs_trigger
 after insert or update or delete on public.meal_logs
 for each row execute function public.audit_meal_logs();
 
+drop trigger if exists expenses_set_updated_at on public.expenses;
+create trigger expenses_set_updated_at
+before update on public.expenses
+for each row execute function public.set_updated_at();
+
+drop trigger if exists meal_logs_set_updated_at on public.meal_logs;
+create trigger meal_logs_set_updated_at
+before update on public.meal_logs
+for each row execute function public.set_updated_at();
+
 drop trigger if exists audit_members_trigger on public.members;
 create trigger audit_members_trigger
 after insert or update or delete on public.members

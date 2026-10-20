@@ -19,6 +19,7 @@ export interface Expense {
   type: 'meal' | 'utility';
   date: string;
   paidBy: string;
+  updatedAt?: string;
 }
 
 export interface MealLog {
@@ -27,6 +28,14 @@ export interface MealLog {
   date: string;
   memberId: string;
   count: number;
+  updatedAt?: string;
+}
+
+export interface MealLogVersion {
+  memberId: string;
+  count: number;
+  updatedAt?: string;
+  exists: boolean;
 }
 
 export interface CycleDeposit {
@@ -153,7 +162,7 @@ export interface MealActionsContextType {
   deleteExpense: (id: string) => Promise<void>;
   restoreExpense: (id: string) => Promise<void>;
   addDeposit: (memberId: string, amount: number, cycleId?: string, note?: string) => Promise<void>;
-  saveMealLogs: (entries: Array<{ memberId: string; count: number }>, date: string, cycleId?: string) => Promise<void>;
+  saveMealLogs: (entries: Array<{ memberId: string; count: number }>, date: string, cycleId?: string, expected?: MealLogVersion[]) => Promise<void>;
   logMeal: (memberId: string, count: number, date: string, cycleId?: string) => Promise<void>;
   renameActiveCycle: (name: string) => Promise<void>;
   closeActiveCycle: () => Promise<void>;

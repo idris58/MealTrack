@@ -1067,3 +1067,12 @@ set settlement_snapshot = s.settlement_snapshot
 from snapshots s
 where c.id = s.cycle_id and c.settlement_snapshot is null;
 
+create or replace function public.set_updated_at()
+returns trigger language plpgsql set search_path = public
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+

@@ -84,6 +84,9 @@ create table if not exists public.expenses (
   delete_expires_at timestamptz
 );
 
+alter table public.expenses
+  add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists public.meal_logs (
   id uuid primary key default gen_random_uuid(),
   member_id uuid not null references public.members(id) on delete cascade,
@@ -96,6 +99,9 @@ create table if not exists public.meal_logs (
   profile_id uuid references public.profiles(id) on delete set null,
   constraint meal_logs_member_id_date_cycle_key unique (member_id, date, cycle_id)
 );
+
+alter table public.meal_logs
+  add column if not exists updated_at timestamptz not null default now();
 
 do $$
 begin
