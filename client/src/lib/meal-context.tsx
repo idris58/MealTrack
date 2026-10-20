@@ -927,6 +927,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     dataError,
     getMemberStats,
     computedCycleDetails.getCycleDetails,
+    computedCycleDetails.cycleDetailsById,
     cycleLoader.isLoading,
     cycleLoader.getError,
   ]);
