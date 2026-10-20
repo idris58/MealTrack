@@ -78,6 +78,13 @@ export interface Cycle {
   closedAt?: string | null;
   finalizedAt?: string | null;
   membersSnapshot?: SnapshotMember[] | null;
+  settlementSnapshot?: SettlementSnapshotEntry[] | null;
+}
+
+export interface SettlementSnapshotEntry {
+  memberId: string;
+  balance: number;
+  deposited: number;
 }
 
 export interface SnapshotMember {

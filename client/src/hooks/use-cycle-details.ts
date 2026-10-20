@@ -90,6 +90,7 @@ export function useCycleDetails({ cycles, loadedCycleIds, membersForCycle, depos
         deposits: cycleDeposits,
         expenses: cycleExpenses,
         mealLogs: cycleLogs,
+        settlementSnapshot: cycle.settlementSnapshot,
         finalized,
       });
       const pendingDepositMemberIds = new Set(

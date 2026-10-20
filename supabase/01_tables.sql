@@ -65,6 +65,9 @@ create table if not exists public.cycles (
   delete_expires_at timestamptz
 );
 
+alter table public.cycles
+  add column if not exists settlement_snapshot jsonb;
+
 create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
   amount decimal(10, 2) not null,

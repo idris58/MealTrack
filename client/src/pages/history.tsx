@@ -793,8 +793,8 @@ function ClosedCycleCard({
                 </TableHeader>
                 <TableBody>
                   {details.members.map((member) => {
-                    const isSettled = Math.abs(member.balance) <= 1;
-                    const isDue = member.balance < -1;
+                    const isSettled = member.balance === 0;
+                    const isDue = member.balance < 0;
                     return (
                       <TableRow key={member.id} className="hover:bg-muted/30 transition-colors">
                         <TableCell>

@@ -33,6 +33,7 @@ import type {
   MealDataContextType,
   MealLog,
   Member,
+  SettlementSnapshotEntry,
   SnapshotMember,
 } from './meal-types';
 export type {
@@ -75,6 +76,7 @@ type CycleRow = {
   closed_at: string | null;
   finalized_at: string | null;
   members_snapshot: SnapshotMember[] | null;
+  settlement_snapshot: SettlementSnapshotEntry[] | null;
 };
 
 type ExpenseRow = {
@@ -459,7 +461,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           .order('created_at', { ascending: true }),
         supabase
           .from('cycles')
-          .select('id, name, status, started_at, closed_at, finalized_at, members_snapshot')
+          .select('id, name, status, started_at, closed_at, finalized_at, members_snapshot, settlement_snapshot')
           .eq('mess_id', messId)
           .is('deleted_at', null)
           .order('started_at', { ascending: false }),
@@ -503,6 +505,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           closedAt: cycle.closed_at,
           finalizedAt: cycle.finalized_at,
           membersSnapshot: cycle.members_snapshot,
+          settlementSnapshot: cycle.settlement_snapshot,
         }));
 
       const initialCycleIds = nextCycles

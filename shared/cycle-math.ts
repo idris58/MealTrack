@@ -8,6 +8,7 @@ export type CycleMathMember = {
 export type CycleMathDeposit = { memberId: string; amount: number };
 export type CycleMathExpense = { amount: number; type: "meal" | "utility" };
 export type CycleMathMealLog = { memberId: string; count: number };
+export type SettlementSnapshotEntry = { memberId: string; balance: number; deposited: number };
 
 export type CycleMathMemberResult<TMember extends CycleMathMember> = TMember & {
   deposit: number;
@@ -54,12 +55,14 @@ export function computeCycleMath<TMember extends CycleMathMember>({
   deposits,
   expenses,
   mealLogs,
+  settlementSnapshot,
   finalized = false,
 }: {
   members: TMember[];
   deposits: CycleMathDeposit[];
   expenses: CycleMathExpense[];
   mealLogs: CycleMathMealLog[];
+  settlementSnapshot?: SettlementSnapshotEntry[] | null;
   finalized?: boolean;
 }): CycleMathResult<TMember> {
   const memberIds = new Set(members.map((member) => member.id));
@@ -102,12 +105,20 @@ export function computeCycleMath<TMember extends CycleMathMember>({
     };
   });
 
-  const allocatedBalances = finalized && rawMembers.length > 0
+  const snapshotByMember = new Map((settlementSnapshot ?? []).map((entry) => [entry.memberId, entry]));
+  const hasCompleteSnapshot = rawMembers.length > 0 && rawMembers.every((member) => snapshotByMember.has(member.id));
+  const allocatedBalances = finalized && !hasCompleteSnapshot && rawMembers.length > 0
     ? allocateIntegerBalances(rawMembers, Math.round(remainingCash))
     : null;
-  const calculatedMembers = allocatedBalances
-    ? rawMembers.map((member) => ({ ...member, balance: allocatedBalances.get(member.id) ?? member.balance }))
-    : rawMembers;
+  const calculatedMembers = rawMembers.map((member) => {
+    const frozen = snapshotByMember.get(member.id);
+    if (finalized && frozen) {
+      return { ...member, balance: frozen.balance + member.deposit - frozen.deposited };
+    }
+    return allocatedBalances
+      ? { ...member, balance: allocatedBalances.get(member.id) ?? member.balance }
+      : member;
+  });
 
   return {
     stats: {

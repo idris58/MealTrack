@@ -101,6 +101,8 @@ type SnapshotMember = {
   avatar?: string;
 };
 
+type SettlementSnapshotEntry = { memberId: string; balance: number; deposited: number };
+
 type CycleRow = {
   id: string;
   name: string;
@@ -108,6 +110,7 @@ type CycleRow = {
   started_at: string;
   closed_at: string | null;
   members_snapshot: SnapshotMember[] | null;
+  settlement_snapshot: SettlementSnapshotEntry[] | null;
 };
 
 type ExpenseRow = {
@@ -202,6 +205,7 @@ function buildSharedPayload(
     deposits: depositsData.map((deposit) => ({ memberId: deposit.member_id, amount: Number(deposit.amount) })),
     expenses: expenses.map((expense) => ({ amount: expense.amount, type: expense.type })),
     mealLogs,
+    settlementSnapshot: cycle.settlement_snapshot,
     finalized: cycle.status === "pending" || cycle.status === "closed",
   });
 
@@ -393,7 +397,7 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
 
   const { data: cycle, error: cycleError } = await supabaseAdmin
     .from("cycles")
-    .select("id, name, status, started_at, closed_at, members_snapshot")
+    .select("id, name, status, started_at, closed_at, members_snapshot, settlement_snapshot")
     .eq(...scopeFilter(scope))
     .is("deleted_at", null)
     .in("status", ["pending", "active"])
@@ -781,7 +785,7 @@ export async function registerRoutes(
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: cycle, error: cycleError } = await supabaseAdmin
       .from("cycles")
-      .select("id, name, status, members_snapshot")
+      .select("id, name, status, members_snapshot, settlement_snapshot")
       .eq("id", cycleId)
       .eq("mess_id", messId)
       .eq("status", "pending")
@@ -851,6 +855,7 @@ export async function registerRoutes(
       deposits: deposits.map((deposit) => ({ memberId: deposit.member_id, amount: Number(deposit.amount) })),
       expenses: expenses.map((expense) => ({ amount: Number(expense.amount), type: expense.type })),
       mealLogs: mealLogs.map((log) => ({ memberId: log.member_id, count: Number(log.count) })),
+      settlementSnapshot: cycle.settlement_snapshot,
       finalized: true,
     });
     const dueMembers = math.members

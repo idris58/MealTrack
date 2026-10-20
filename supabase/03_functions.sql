@@ -995,3 +995,75 @@ grant execute on function public.reorder_mess_members(uuid[]) to authenticated;
 revoke all on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() from public;
 grant execute on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() to authenticated;
 
+-- Freeze balances for pending cycles created before settlement snapshots existed.
+with eligible_cycles as (
+  select c.id, c.members_snapshot
+  from public.cycles c
+  where c.status in ('pending', 'closed')
+    and c.settlement_snapshot is null
+    and jsonb_typeof(c.members_snapshot) = 'array'
+), roster as (
+  select c.id as cycle_id, (entry.value ->> 'id')::uuid as member_id, entry.ordinality
+  from eligible_cycles c
+  cross join lateral jsonb_array_elements(c.members_snapshot) with ordinality as entry(value, ordinality)
+  where jsonb_typeof(entry.value -> 'id') = 'string'
+), totals as (
+  select c.id as cycle_id,
+    (select coalesce(sum(d.amount), 0) from public.cycle_deposits d join roster r on r.cycle_id = c.id and r.member_id = d.member_id where d.cycle_id = c.id) as deposits,
+    (select coalesce(sum(e.amount), 0) from public.expenses e where e.cycle_id = c.id and e.deleted_at is null and e.type = 'meal') as meal_expenses,
+    (select coalesce(sum(e.amount), 0) from public.expenses e where e.cycle_id = c.id and e.deleted_at is null and e.type = 'utility') as utility_expenses,
+    (select coalesce(sum(l.count), 0) from public.meal_logs l join roster r on r.cycle_id = c.id and r.member_id = l.member_id where l.cycle_id = c.id) as meals,
+    (select count(*) from roster r where r.cycle_id = c.id) as member_count
+  from eligible_cycles c
+), member_inputs as (
+  select r.cycle_id, r.member_id, r.ordinality,
+    t.deposits, t.meal_expenses, t.utility_expenses, t.meals, t.member_count,
+    coalesce((select sum(d.amount) from public.cycle_deposits d where d.cycle_id = r.cycle_id and d.member_id = r.member_id), 0) as deposited,
+    coalesce((select sum(l.count) from public.meal_logs l where l.cycle_id = r.cycle_id and l.member_id = r.member_id), 0) as meals_eaten
+  from roster r
+  join totals t on t.cycle_id = r.cycle_id
+), raw_balances as (
+  select *,
+    deposited
+      - case when meals > 0 then meals_eaten * meal_expenses / meals else 0 end
+      - case when member_count > 0 then utility_expenses / member_count else 0 end as raw_balance
+  from member_inputs
+), cleaned as (
+  select *,
+    case
+      when abs(floor((raw_balance + 0.000000000000001) * 10000 + 0.5) / 10000) < 0.000001 then 0::numeric
+      else floor((raw_balance + 0.000000000000001) * 10000 + 0.5) / 10000
+    end as balance
+  from raw_balances
+), floored as (
+  select *, floor(balance) as base_balance, balance - floor(balance) as remainder
+  from cleaned
+), ranked as (
+  select *,
+    row_number() over (partition by cycle_id order by remainder desc, member_id) as remainder_rank,
+    sum(base_balance) over (partition by cycle_id) as sum_floor,
+    count(*) over (partition by cycle_id) as allocation_count,
+    floor((deposits - meal_expenses - utility_expenses) + 0.5) as target_balance
+  from floored
+), allocated as (
+  select *,
+    base_balance + case
+      when remainder_rank <= greatest(0, least(allocation_count, target_balance - sum_floor)) then 1
+      else 0
+    end as final_balance
+  from ranked
+), snapshots as (
+  select cycle_id,
+    jsonb_agg(jsonb_build_object(
+      'memberId', member_id,
+      'balance', final_balance,
+      'deposited', deposited
+    ) order by ordinality) as settlement_snapshot
+  from allocated
+  group by cycle_id
+)
+update public.cycles c
+set settlement_snapshot = s.settlement_snapshot
+from snapshots s
+where c.id = s.cycle_id and c.settlement_snapshot is null;
+

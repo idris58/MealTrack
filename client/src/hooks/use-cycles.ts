@@ -2,6 +2,7 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { supabase } from '@/lib/supabase';
 import { triggerSettlementPendingPush } from '@/lib/push-triggers';
+import { computeCycleMath } from '@shared/cycle-math';
 import type { ChangelogEntry, Cycle, CycleDeposit, CycleDetails, Expense, MealLog, Member, SnapshotMember } from '@/lib/meal-types';
 
 const DELETE_GRACE_MS = 10_000;
@@ -52,21 +53,31 @@ export function useCycles(options: Options) {
     const { userId, messId, activeCycle, pendingCycle, getCycleMembers, getCycleDetails, setCycles, broadcast } = latest.current;
     if (!userId || !messId || !activeCycle) return;
     if (pendingCycle) throw new Error('Finish the pending cycle settlement before closing another cycle.');
+    const details = getCycleDetails?.(activeCycle.id);
+    if (!details) throw new Error('Load the current cycle details before closing it.');
     const snapshot: SnapshotMember[] = getCycleMembers(activeCycle.id).map(({ id, name, avatar }) => ({ id, name, avatar }));
+    const settlement = computeCycleMath({
+      members: details.members,
+      deposits: details.deposits,
+      expenses: details.expenses,
+      mealLogs: details.mealLogs,
+      finalized: true,
+    });
+    const settlementSnapshot = settlement.members.map((member) => ({
+      memberId: member.id,
+      balance: member.balance,
+      deposited: member.deposit,
+    }));
     const closedAt = new Date().toISOString();
-    const { error } = await supabase.from('cycles').update({ status: 'pending', closed_at: closedAt, members_snapshot: snapshot }).eq('id', activeCycle.id).eq('mess_id', messId);
+    const { error } = await supabase.from('cycles').update({ status: 'pending', closed_at: closedAt, members_snapshot: snapshot, settlement_snapshot: settlementSnapshot }).eq('id', activeCycle.id).eq('mess_id', messId).eq('status', 'active');
     if (error) throw new Error('Unable to close the cycle. Please try again.');
-    setCycles((previous) => previous.map((cycle) => cycle.id === activeCycle.id ? { ...cycle, status: 'pending', closedAt, membersSnapshot: snapshot } : cycle));
+    setCycles((previous) => previous.map((cycle) => cycle.id === activeCycle.id ? { ...cycle, status: 'pending', closedAt, membersSnapshot: snapshot, settlementSnapshot } : cycle));
 
-    if (getCycleDetails) {
-      const details = getCycleDetails(activeCycle.id);
-      const hasDueMembers = (details?.members ?? []).some((member) => member.balance < 0);
-
-      if (hasDueMembers) {
-        void triggerSettlementPendingPush({
-          cycleId: activeCycle.id,
-        });
-      }
+    const hasDueMembers = settlement.members.some((member) => member.balance < 0);
+    if (hasDueMembers) {
+      void triggerSettlementPendingPush({
+        cycleId: activeCycle.id,
+      });
     }
 
     broadcast();
@@ -129,9 +140,9 @@ export function useCycles(options: Options) {
   const restoreCycle = useCallback(async (cycleId: string) => {
     const { userId, messId, setCycles, reload } = latest.current;
     if (!userId || !messId) return;
-    const { data, error } = await supabase.from('cycles').update({ deleted_at: null, delete_expires_at: null }).eq('id', cycleId).eq('mess_id', messId).eq('status', 'closed').not('deleted_at', 'is', null).select('id, name, status, started_at, closed_at, finalized_at, members_snapshot').maybeSingle();
+    const { data, error } = await supabase.from('cycles').update({ deleted_at: null, delete_expires_at: null }).eq('id', cycleId).eq('mess_id', messId).eq('status', 'closed').not('deleted_at', 'is', null).select('id, name, status, started_at, closed_at, finalized_at, members_snapshot, settlement_snapshot').maybeSingle();
     if (error) throw new Error('Unable to restore the cycle. Please try again.');
-    if (data) setCycles((previous) => previous.some((cycle) => cycle.id === data.id) ? previous : [{ id: data.id, name: data.name ?? defaultCycleName(data.started_at), status: data.status, startedAt: data.started_at, closedAt: data.closed_at, finalizedAt: data.finalized_at, membersSnapshot: data.members_snapshot }, ...previous]);
+    if (data) setCycles((previous) => previous.some((cycle) => cycle.id === data.id) ? previous : [{ id: data.id, name: data.name ?? defaultCycleName(data.started_at), status: data.status, startedAt: data.started_at, closedAt: data.closed_at, finalizedAt: data.finalized_at, membersSnapshot: data.members_snapshot, settlementSnapshot: data.settlement_snapshot }, ...previous]);
     reload();
   }, []);
 
