@@ -26,9 +26,13 @@ export function useExpenses(options: Options) {
 
   const addExpense = useCallback(async (amount: number, description: string, type: 'meal' | 'utility', paidBy: string, cycleId?: string, expenseDate?: string) => {
     const { userId, messId, setExpenses, setPendingSyncIds, getCycleId, allowsNegativeAmount, broadcast } = latest.current;
-    if (!userId || !messId) return;
+    if (!userId || !messId) throw new Error('Sign in and join a mess before adding an expense.');
+    if (amount === 0) throw new Error('Expense amount cannot be zero.');
     const targetCycleId = getCycleId(cycleId);
-    if (!targetCycleId || (amount < 0 && !allowsNegativeAmount(targetCycleId))) return;
+    if (!targetCycleId) throw new Error('There is no active or selected cycle for this expense.');
+    if (amount < 0 && !allowsNegativeAmount(targetCycleId)) {
+      throw new Error('Negative expenses can only be added to a pending cycle.');
+    }
     const date = expenseDate ?? format(new Date(), 'yyyy-MM-dd');
     const recordId = uuidv4();
     const queueExpense = async () => {

@@ -22,9 +22,10 @@ export function useDeposits(options: Options) {
 
   const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string) => {
     const { userId, messId, setDeposits, setPendingSyncIds, getCycleId, broadcast } = latest.current;
-    if (!userId || !messId || amount === 0) return;
+    if (!userId || !messId) throw new Error('Sign in and join a mess before recording a deposit.');
+    if (amount === 0) throw new Error('Deposit amount cannot be zero.');
     const targetCycleId = getCycleId(cycleId);
-    if (!targetCycleId) return;
+    if (!targetCycleId) throw new Error('There is no active or selected cycle for this deposit.');
 
     const recordId = uuidv4();
     const queueDeposit = async () => {

@@ -26,9 +26,10 @@ export function useMealLogs(options: Options) {
     replayExpected?: MealLogVersion[],
   ) => {
     const { userId, messId, mealLogs, setMealLogs, setPendingSyncIds, getCycleId, broadcast } = latest.current;
-    if (!userId || !messId || !entries.length) return;
+    if (!userId || !messId) throw new Error('Sign in and join a mess before saving meal logs.');
+    if (!entries.length) throw new Error('There are no meal entries to save.');
     const targetCycleId = getCycleId(cycleId);
-    if (!targetCycleId) return;
+    if (!targetCycleId) throw new Error('There is no active or selected cycle for these meal logs.');
 
     const expected = replayExpected ?? entries.map((entry) => {
       const existing = mealLogs.find((log) => log.memberId === entry.memberId && log.date === date && log.cycleId === targetCycleId);
