@@ -84,7 +84,10 @@ function getDisplayAction(entry: ChangelogEntry): ChangelogAction {
   return entry.action;
 }
 
-type DisplayChangelogEntry = ChangelogEntry & { deletedThenRestored?: boolean };
+type DisplayChangelogEntry = ChangelogEntry & {
+  deletedThenRestored?: boolean;
+  editChain?: ChangelogEntry[];
+};
 
 function numericValue(value: ChangelogChange['value'] | ChangelogChange['from'] | ChangelogChange['to']) {
   if (value === null || value === undefined || value === '') return null;
@@ -103,6 +106,9 @@ function getDepositAmount(entry: ChangelogEntry) {
 }
 
 function getDisplayTitle(entry: DisplayChangelogEntry): string {
+  if (entry.editChain && entry.editChain.length >= 3) {
+    return `${getEditChainLabel(entry.editChain[0])} · ${entry.editChain.length} edits`;
+  }
   if (entry.entityType === 'deposit') {
     const amount = getDepositAmount(entry);
     const member = getChange(entry, 'member')?.value;
@@ -246,6 +252,55 @@ function collapseRestorePairs(entries: ChangelogEntry[]): DisplayChangelogEntry[
   return entries
     .filter((entry) => !pairedDeleteIds.has(entry.id))
     .map((entry) => ({ ...entry, deletedThenRestored: pairedRestoreIds.has(entry.id) }));
+}
+
+function collapseEditChains(entries: DisplayChangelogEntry[]): DisplayChangelogEntry[] {
+  const collapsed: DisplayChangelogEntry[] = [];
+
+  for (let index = 0; index < entries.length;) {
+    const first = entries[index];
+    if (first.action !== 'update' || first.title.startsWith('Restored')) {
+      collapsed.push(first);
+      index++;
+      continue;
+    }
+
+    const chain = [first];
+    let nextIndex = index + 1;
+    while (nextIndex < entries.length) {
+      const next = entries[nextIndex];
+      if (
+        next.action !== 'update'
+        || next.title.startsWith('Restored')
+        || next.entityType !== first.entityType
+        || next.entityId !== first.entityId
+        || next.cycleId !== first.cycleId
+      ) break;
+      chain.push(next);
+      nextIndex++;
+    }
+
+    if (chain.length >= 3) collapsed.push({ ...first, editChain: chain });
+    else collapsed.push(...chain);
+    index = nextIndex;
+  }
+
+  return collapsed;
+}
+
+function getEditChainLabel(entry: ChangelogEntry) {
+  if (entry.entityType === 'member') {
+    const name = getChange(entry, 'name');
+    const latestName = name?.to ?? name?.value;
+    if (typeof latestName === 'string' && latestName) return latestName;
+    return entry.title.replace(/^(Updated|Added|Archived|Restored) member\s+/i, '');
+  }
+  if (entry.entityType === 'expense') {
+    const description = getChange(entry, 'description');
+    const latestDescription = description?.to ?? description?.value;
+    if (typeof latestDescription === 'string' && latestDescription) return latestDescription;
+  }
+  return getDisplayTitle(entry);
 }
 
 function getDetailedChanges(entry: ChangelogEntry): ChangelogChange[] {
@@ -450,6 +505,38 @@ function MealDiff({ changes }: { changes: ChangelogChange[] }) {
   );
 }
 
+function EditChainHistory({ entries }: { entries: ChangelogEntry[] }) {
+  return (
+    <ol className="space-y-2.5">
+      {[...entries].reverse().map((edit) => {
+        const changes = getDetailedChanges(edit);
+        const timestamp = new Date(edit.createdAt);
+        return (
+          <li key={edit.id} className="relative rounded-lg border bg-background px-3 py-2.5">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <span className="text-xs font-medium">{edit.actor?.name ?? 'System'}</span>
+              <time
+                dateTime={edit.createdAt}
+                title={format(timestamp, "MMM d, yyyy 'at' h:mm a")}
+                className="text-[11px] text-muted-foreground"
+              >
+                {formatDistanceToNow(timestamp, { addSuffix: true })}
+              </time>
+            </div>
+            <div className="space-y-2">
+              {edit.entityType === 'meal_log' ? (
+                <MealDiff changes={changes} />
+              ) : changes.map((change, index) => (
+                <ChangeRow key={`${edit.id}-${change.field}-${index}`} change={change} entry={edit} />
+              ))}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
   const [open, setOpen] = useState(false);
 
@@ -561,7 +648,9 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
                 Change Details
               </p>
               <div className="space-y-2">
-                {entry.entityType === 'meal_log' ? (
+                {entry.editChain ? (
+                  <EditChainHistory entries={entry.editChain} />
+                ) : entry.entityType === 'meal_log' ? (
                   <MealDiff changes={detailed} />
                 ) : detailed.map((change, idx) => (
                   <ChangeRow key={`${entry.id}-${change.field}-${idx}`} change={change} entry={entry} />
@@ -671,8 +760,8 @@ export default function ChangelogPage() {
   const [entityFilter, setEntityFilter] = useState<ChangelogEntityType | 'all'>('all');
   const [search, setSearch] = useState('');
   const cycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
-  const displayedActiveEntries = collapseRestorePairs(activeCycleChangelogEntries);
-  const displayedPendingEntries = collapseRestorePairs(pendingCycleChangelogEntries);
+  const displayedActiveEntries = collapseEditChains(collapseRestorePairs(activeCycleChangelogEntries));
+  const displayedPendingEntries = collapseEditChains(collapseRestorePairs(pendingCycleChangelogEntries));
 
   useEffect(() => {
     const scopedCycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
