@@ -107,13 +107,31 @@ export function computeCycleMath<TMember extends CycleMathMember>({
 
   const snapshotByMember = new Map((settlementSnapshot ?? []).map((entry) => [entry.memberId, entry]));
   const hasCompleteSnapshot = rawMembers.length > 0 && rawMembers.every((member) => snapshotByMember.has(member.id));
-  const allocatedBalances = finalized && !hasCompleteSnapshot && rawMembers.length > 0
-    ? allocateIntegerBalances(rawMembers, Math.round(remainingCash))
+  const snapshotDepositDeltas = hasCompleteSnapshot
+    ? rawMembers.map((member) => ({
+      memberId: member.id,
+      amount: member.deposit - (snapshotByMember.get(member.id)?.deposited ?? 0),
+    }))
+    : [];
+  const totalSnapshotDepositDelta = snapshotDepositDeltas.reduce((sum, delta) => sum + delta.amount, 0);
+  const depositDeltaByMember = new Map(snapshotDepositDeltas.map((delta) => [delta.memberId, delta.amount]));
+  // Reallocate the cycle's underlying costs so pending-cycle corrections affect
+  // balances, while keeping post-close installments attached to their member.
+  const settlementBaseMembers = hasCompleteSnapshot
+    ? rawMembers.map((member) => ({
+      ...member,
+      balance: member.balance - (depositDeltaByMember.get(member.id) ?? 0),
+    }))
+    : rawMembers;
+  const settlementBaseRemainingCash = remainingCash - totalSnapshotDepositDelta;
+  const allocatedBalances = finalized && rawMembers.length > 0
+    ? allocateIntegerBalances(settlementBaseMembers, Math.round(settlementBaseRemainingCash))
     : null;
   const calculatedMembers = rawMembers.map((member) => {
     const frozen = snapshotByMember.get(member.id);
-    if (finalized && frozen) {
-      return { ...member, balance: frozen.balance + member.deposit - frozen.deposited };
+    if (finalized && frozen && allocatedBalances) {
+      const depositDelta = depositDeltaByMember.get(member.id) ?? 0;
+      return { ...member, balance: (allocatedBalances.get(member.id) ?? frozen.balance) + depositDelta };
     }
     return allocatedBalances
       ? { ...member, balance: allocatedBalances.get(member.id) ?? member.balance }
