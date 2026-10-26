@@ -2,6 +2,7 @@ import cron from "node-cron";
 import webpush, { type PushSubscription } from "web-push";
 
 import { assertSupabaseAdmin, supabaseAdmin } from "./supabase-admin";
+import { isAllowedPushEndpoint } from "./push-endpoint";
 
 type PushAudience = "main" | "shared";
 type NotificationType =
@@ -171,6 +172,12 @@ async function sendPushToRows(
 
   await Promise.all(
     rows.map(async (row) => {
+      if (!isAllowedPushEndpoint(row.endpoint)) {
+        await deleteSubscription(row.id);
+        staleSubscriptionUserIds.add(row.user_id);
+        return;
+      }
+
       try {
         await webpush.sendNotification(toWebPushSubscription(row), data);
         successfulUserIds.add(row.user_id);

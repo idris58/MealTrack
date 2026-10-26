@@ -3,6 +3,7 @@ import { type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { log } from "./logger";
+import { isAllowedPushEndpoint } from "./push-endpoint";
 import { computeCycleMath, selectCycleMembers } from "@shared/cycle-math";
 
 /**
@@ -46,7 +47,10 @@ function parseRequestBody<TSchema extends z.ZodTypeAny>(
 }
 
 const pushSubscriptionBodySchema = z.object({
-  endpoint: z.string().url().max(4096),
+  endpoint: z.string().url().max(4096).refine(
+    isAllowedPushEndpoint,
+    "Push endpoint must use HTTPS with a supported push service.",
+  ),
   expirationTime: z.number().nullable().optional(),
   keys: z.object({
     p256dh: z.string().min(1),
