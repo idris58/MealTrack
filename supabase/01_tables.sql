@@ -164,6 +164,9 @@ create table if not exists public.changelog_entries (
   profile_id uuid references public.profiles(id) on delete set null
 );
 
+alter table public.changelog_entries
+  add column if not exists batch_key text;
+
 alter table public.changelog_entries alter column cycle_id drop not null;
 
 -- Migrate the stored expense category from `fixed` to `utility` for existing databases.

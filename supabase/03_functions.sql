@@ -856,6 +856,7 @@ declare
   v_action text;
   v_title text;
   v_changes jsonb;
+  v_batch_key text;
 begin
   if v_actor is null then
     v_actor := coalesce(NEW.profile_id, NEW.user_id, OLD.profile_id, OLD.user_id);
@@ -871,7 +872,7 @@ begin
   if TG_OP = 'INSERT' then
     if NEW.count = 0 then return NEW; end if;
     v_action := 'create';
-    v_title := 'Updated meal log for ' || coalesce(v_member_name, 'member');
+    v_title := 'Updated meal logs';
     v_changes := jsonb_build_array(
       jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text),
       jsonb_build_object('field', 'member:' || NEW.member_id::text, 'label', coalesce(v_member_name, 'Member'), 'from', 0, 'to', NEW.count)
@@ -879,7 +880,7 @@ begin
   elsif TG_OP = 'UPDATE' then
     if OLD.count = NEW.count then return NEW; end if;
     v_action := case when NEW.count = 0 then 'delete' when OLD.count = 0 then 'create' else 'update' end;
-    v_title := 'Updated meal log for ' || coalesce(v_member_name, 'member');
+    v_title := 'Updated meal logs';
     v_changes := jsonb_build_array(
       jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text),
       jsonb_build_object('field', 'member:' || NEW.member_id::text, 'label', coalesce(v_member_name, 'Member'), 'from', OLD.count, 'to', NEW.count)
@@ -887,7 +888,7 @@ begin
   elsif TG_OP = 'DELETE' then
     if OLD.count = 0 then return OLD; end if;
     v_action := 'delete';
-    v_title := 'Updated meal log for ' || coalesce(v_member_name, 'member');
+    v_title := 'Updated meal logs';
     v_changes := jsonb_build_array(
       jsonb_build_object('field', 'date', 'label', 'Date', 'value', OLD.date::text),
       jsonb_build_object('field', 'member:' || OLD.member_id::text, 'label', coalesce(v_member_name, 'Member'), 'from', OLD.count, 'to', 0)
@@ -895,11 +896,23 @@ begin
   end if;
 
   if v_mess_id is not null and v_cycle_id is not null then
-    insert into public.changelog_entries (
-      user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes, created_at
+    v_batch_key := format('meal_log:%s:%s:%s', txid_current(), v_cycle_id, coalesce(NEW.date, OLD.date));
+    insert into public.changelog_entries as current_entry (
+      user_id, profile_id, mess_id, cycle_id, entity_type, entity_id, action, title, changes, created_at, batch_key
     ) values (
-      v_actor, v_actor, v_mess_id, v_cycle_id, 'meal_log', coalesce(NEW.id, OLD.id), v_action, v_title, v_changes, now()
-    );
+      v_actor, v_actor, v_mess_id, v_cycle_id, 'meal_log', coalesce(NEW.id, OLD.id), v_action, v_title, v_changes, now(), v_batch_key
+    )
+    on conflict (batch_key) where batch_key is not null do update
+    set action = case
+          when current_entry.action = excluded.action then current_entry.action
+          else 'update'
+        end,
+        title = 'Updated meal logs',
+        changes = current_entry.changes || (
+          select coalesce(jsonb_agg(item.change), '[]'::jsonb)
+          from jsonb_array_elements(excluded.changes) as item(change)
+          where item.change ->> 'field' <> 'date'
+        );
   end if;
 
   return coalesce(NEW, OLD);
@@ -1138,4 +1151,119 @@ $$;
 
 revoke all on function public.search_changelog_entries(uuid[], text, text, text, integer, integer) from public;
 grant execute on function public.search_changelog_entries(uuid[], text, text, text, integer, integer) to authenticated;
+
+create or replace function public.save_meal_logs(
+  cycle_id_input uuid,
+  date_input date,
+  entries_input jsonb,
+  expected_input jsonb
+)
+returns setof public.meal_logs
+language plpgsql security invoker set search_path = public
+as $$
+declare
+  v_entry jsonb;
+  v_expected jsonb;
+  v_current public.meal_logs%rowtype;
+  v_member_id uuid;
+  v_count numeric;
+  v_expected_count numeric;
+  v_expected_updated_at timestamptz;
+  v_expected_exists boolean;
+  v_current_exists boolean;
+  v_mess_id uuid := public.current_mess_id();
+begin
+  if auth.uid() is null or v_mess_id is null then
+    raise exception using errcode = '42501', message = 'Authentication required';
+  end if;
+  if cycle_id_input is null or date_input is null or entries_input is null or expected_input is null
+    or jsonb_typeof(entries_input) <> 'array'
+    or jsonb_typeof(expected_input) <> 'array' then
+    raise exception using errcode = '22023', message = 'Invalid meal log save payload';
+  end if;
+
+  if not exists (
+    select 1 from public.cycles
+    where id = cycle_id_input and mess_id = v_mess_id
+  ) then
+    raise exception using errcode = '42501', message = 'Cycle is not in the current mess';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(entries_input) as item(value)
+    where nullif(value ->> 'memberId', '') is null
+      or nullif(value ->> 'count', '') is null
+      or (value ->> 'count')::numeric < 0
+  ) or (
+    select count(*) <> count(distinct value ->> 'memberId')
+    from jsonb_array_elements(entries_input) as item(value)
+  ) then
+    raise exception using errcode = '22023', message = 'Invalid or duplicate meal log entries';
+  end if;
+
+  for v_entry in
+    select value from jsonb_array_elements(entries_input) as item(value)
+    order by value ->> 'memberId'
+  loop
+    v_member_id := (v_entry ->> 'memberId')::uuid;
+    v_count := (v_entry ->> 'count')::numeric;
+
+    if not exists (
+      select 1 from public.members
+      where id = v_member_id and mess_id = v_mess_id
+    ) then
+      raise exception using errcode = '42501', message = 'Member is not in the current mess';
+    end if;
+
+    select value into v_expected
+    from jsonb_array_elements(expected_input) as item(value)
+    where value ->> 'memberId' = v_member_id::text;
+    if not found then
+      raise exception using errcode = '22023', message = 'Missing expected meal log version';
+    end if;
+    v_expected_exists := coalesce((v_expected ->> 'exists')::boolean, false);
+    v_expected_count := coalesce((v_expected ->> 'count')::numeric, 0);
+    v_expected_updated_at := nullif(v_expected ->> 'updatedAt', '')::timestamptz;
+
+    select * into v_current
+    from public.meal_logs
+    where cycle_id = cycle_id_input
+      and date = date_input
+      and member_id = v_member_id
+    for update;
+    v_current_exists := found;
+
+    if v_expected_exists <> v_current_exists
+      or (v_expected_exists and (
+        v_current.count <> v_expected_count
+        or (v_expected_updated_at is not null and v_current.updated_at <> v_expected_updated_at)
+      )) then
+      raise exception using errcode = 'P0001', message = 'MEAL_LOG_CONFLICT: This meal log changed on another device. Reload it before saving again.';
+    end if;
+
+    if v_current_exists then
+      if v_current.count <> v_count then
+        update public.meal_logs set count = v_count where id = v_current.id;
+      end if;
+    elsif v_count > 0 then
+      insert into public.meal_logs (member_id, cycle_id, date, count, mess_id, user_id)
+      values (v_member_id, cycle_id_input, date_input, v_count, v_mess_id, auth.uid());
+    end if;
+  end loop;
+
+  return query
+  select ml.* from public.meal_logs ml
+  where ml.cycle_id = cycle_id_input
+    and ml.date = date_input
+    and ml.member_id in (
+      select (value ->> 'memberId')::uuid
+      from jsonb_array_elements(entries_input) as item(value)
+    )
+  order by ml.member_id;
+end;
+$$;
+
+revoke all on function public.save_meal_logs(uuid, date, jsonb, jsonb) from public;
+grant execute on function public.save_meal_logs(uuid, date, jsonb, jsonb) to authenticated;
 

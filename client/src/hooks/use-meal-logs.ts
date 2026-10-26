@@ -134,33 +134,34 @@ export function useMealLogs(options: Options) {
     }
 
     try {
-      const savedRows = await Promise.all(changedEntries.map(async (entry) => {
-        const nextCount = Number.isNaN(entry.count) ? 0 : entry.count;
+      const expectedForRpc = changedEntries.map((entry) => {
+        const baseline = expectedByMember.get(entry.memberId);
         const current = existingByMember.get(entry.memberId);
-        if (current) {
-          const result = await withRequestTimeout((signal) => supabase.from('meal_logs')
-            .update({ count: nextCount })
-            .eq('id', current.id).eq('updated_at', current.updated_at).abortSignal(signal)
-            .select('id, cycle_id, member_id, date, count, updated_at').single());
-          if (result.error) throw result.error;
-          return result.data;
-        }
-        const result = await withRequestTimeout((signal) => supabase.from('meal_logs')
-          .insert({ member_id: entry.memberId, cycle_id: targetCycleId, date, count: nextCount, user_id: userId, mess_id: messId })
-          .abortSignal(signal).select('id, cycle_id, member_id, date, count, updated_at').single());
-        if (result.error?.code === '23505') {
-          const retryRead = await withRequestTimeout((signal) => supabase.from('meal_logs')
-            .select('id, cycle_id, member_id, date, count, updated_at')
-            .eq('cycle_id', targetCycleId).eq('date', date).eq('member_id', entry.memberId)
-            .abortSignal(signal));
-          if (!retryRead.error && retryRead.data?.[0] && Number(retryRead.data[0].count) === nextCount) return retryRead.data[0];
-          const conflict = new Error('This meal log changed on another device. Reload it before saving again.') as Error & { code?: string };
-          conflict.code = 'OFFLINE_CONFLICT';
-          throw conflict;
-        }
-        if (result.error) throw result.error;
-        return result.data;
-      }));
+        return {
+          memberId: entry.memberId,
+          exists: baseline?.exists ?? Boolean(current),
+          count: baseline?.count ?? Number(current?.count ?? 0),
+          updatedAt: baseline?.updatedAt ?? current?.updated_at ?? null,
+        };
+      });
+      const { data, error } = await withRequestTimeout((signal) => supabase.rpc('save_meal_logs', {
+        cycle_id_input: targetCycleId,
+        date_input: date,
+        entries_input: changedEntries.map((entry) => ({
+          memberId: entry.memberId,
+          count: Number.isNaN(entry.count) ? 0 : entry.count,
+        })),
+        expected_input: expectedForRpc,
+      }).abortSignal(signal));
+      if (error) throw error;
+      const savedRows = (data ?? []) as Array<{
+        id: string;
+        cycle_id: string;
+        member_id: string;
+        date: string;
+        count: number;
+        updated_at: string;
+      }>;
       setMealLogs((previousLogs) => [
         ...previousLogs.filter((log) => !changedEntries.some((entry) => log.memberId === entry.memberId && log.date === date && log.cycleId === targetCycleId)),
         ...savedRows.map((log) => ({ id: log.id, cycleId: log.cycle_id, memberId: log.member_id, date: log.date, count: Number(log.count), updatedAt: log.updated_at })),
@@ -168,7 +169,7 @@ export function useMealLogs(options: Options) {
     } catch (error) {
       if (!isTransientRequestError(error)) {
         const value = error as { code?: string; status?: number; message?: string };
-        if (value.code === '23505' || value.code === 'PGRST116') {
+        if (value.code === '23505' || value.code === 'PGRST116' || value.message?.startsWith('MEAL_LOG_CONFLICT:')) {
           const conflict = new Error('This meal log changed on another device. Reload it before saving again.') as Error & { code?: string };
           conflict.code = 'OFFLINE_CONFLICT';
           throw conflict;
