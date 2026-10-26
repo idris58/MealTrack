@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { format, formatDistanceToNow, isValid, parseISO } from 'date-fns';
+import { format, formatDistanceToNow, isToday, isValid, isYesterday, parseISO } from 'date-fns';
 import {
   ArrowLeft,
   ChevronDown,
@@ -173,6 +173,27 @@ function getInitials(name: string) {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
+}
+
+function groupEntriesByDay(entries: ChangelogEntry[]) {
+  const groups = new Map<string, { label: string; entries: ChangelogEntry[] }>();
+
+  for (const entry of entries) {
+    const date = parseISO(entry.createdAt);
+    const key = isValid(date) ? format(date, 'yyyy-MM-dd') : 'unknown-date';
+    const label = !isValid(date)
+      ? 'Unknown date'
+      : isToday(date)
+        ? 'Today'
+        : isYesterday(date)
+          ? 'Yesterday'
+          : format(date, 'EEE, d MMM yyyy');
+    const group = groups.get(key);
+    if (group) group.entries.push(entry);
+    else groups.set(key, { label, entries: [entry] });
+  }
+
+  return Array.from(groups, ([key, group]) => ({ key, ...group }));
 }
 
 // ── Action styling ─────────────────────────────────────────────────────────────
@@ -427,8 +448,16 @@ function ChangelogSection({
             {/* Vertical timeline line */}
             <div className="absolute left-[5px] top-0 h-full w-px bg-border" />
             <div className="space-y-0">
-              {entries.map((entry) => (
-                <ChangelogCard key={entry.id} entry={entry} />
+              {groupEntriesByDay(entries).map((group) => (
+                <div key={group.key}>
+                  <h3 className="sticky top-16 z-10 -ml-4 flex items-center gap-2 bg-background/90 py-2 text-sm font-semibold text-foreground backdrop-blur">
+                    <span>{group.label}</span>
+                    <span className="text-xs font-normal text-muted-foreground">· {group.entries.length} {group.entries.length === 1 ? 'change' : 'changes'}</span>
+                  </h3>
+                  {group.entries.map((entry) => (
+                    <ChangelogCard key={entry.id} entry={entry} />
+                  ))}
+                </div>
               ))}
             </div>
           </div>
