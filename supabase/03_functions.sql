@@ -792,8 +792,8 @@ begin
     from public.cycle_deposits
     where cycle_id = NEW.cycle_id and member_id = NEW.member_id and id <> NEW.id;
 
-    v_action := 'update';
-    v_title := 'Updated deposit for ' || coalesce(v_member_name, 'member');
+    v_action := 'create';
+    v_title := 'Added deposit for ' || coalesce(v_member_name, 'member');
     v_changes := jsonb_build_array(
       jsonb_build_object('field', 'member', 'label', 'Member', 'value', coalesce(v_member_name, 'member')),
       jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', v_prev_balance, 'to', v_prev_balance + NEW.amount),
@@ -822,10 +822,15 @@ begin
       v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'note', 'label', 'Note', 'value', NEW.note));
     end if;
   elsif TG_OP = 'DELETE' then
+    select coalesce(sum(amount), 0) into v_prev_balance
+    from public.cycle_deposits
+    where cycle_id = OLD.cycle_id and member_id = OLD.member_id and id <> OLD.id;
+
     v_action := 'delete';
     v_title := 'Removed deposit for ' || coalesce(v_member_name, 'member');
     v_changes := jsonb_build_array(
       jsonb_build_object('field', 'member', 'label', 'Member', 'value', coalesce(v_member_name, 'member')),
+      jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', v_prev_balance + OLD.amount, 'to', v_prev_balance),
       jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', OLD.amount)
     );
     if OLD.note is not null and trim(OLD.note) <> '' then
@@ -1136,7 +1141,7 @@ as $$
     and (entity_type_input = 'all' or entry.entity_type = entity_type_input)
     and (
       action_input = 'all'
-      or (case when entry.entity_type = 'deposit' then 'update' else entry.action end) = action_input
+      or entry.action = action_input
     )
     and (
       nullif(trim(search_input), '') is null

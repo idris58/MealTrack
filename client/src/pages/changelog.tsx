@@ -81,13 +81,40 @@ function getChange(entry: ChangelogEntry, field: string) {
 }
 
 function getDisplayAction(entry: ChangelogEntry): ChangelogAction {
-  return entry.entityType === 'deposit' ? 'update' : entry.action;
+  return entry.action;
 }
 
-function getDisplayTitle(entry: ChangelogEntry): string {
+type DisplayChangelogEntry = ChangelogEntry & { deletedThenRestored?: boolean };
+
+function numericValue(value: ChangelogChange['value'] | ChangelogChange['from'] | ChangelogChange['to']) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatSignedCurrency(value: number) {
+  return `${value < 0 ? '−' : '+'}${formatCurrency(Math.abs(value))}`;
+}
+
+function getDepositAmount(entry: ChangelogEntry) {
+  return numericValue(
+    getChange(entry, 'transaction_amount')?.value ?? getChange(entry, 'amount')?.value,
+  );
+}
+
+function getDisplayTitle(entry: DisplayChangelogEntry): string {
   if (entry.entityType === 'deposit') {
+    const amount = getDepositAmount(entry);
     const member = getChange(entry, 'member')?.value;
-    return `Updated deposit for ${member ?? 'member'}`;
+    if (amount !== null) {
+      const kind = amount < 0 ? 'Deduction' : 'Deposit';
+      const removed = entry.action === 'delete' ? 'Deleted ' : '';
+      return `${removed}${kind} ${formatSignedCurrency(amount)}${member ? ` for ${member}` : ''}`;
+    }
+  }
+  if (entry.title.startsWith('Restored')) {
+    const restoredItem = entry.title.replace(/^Restored\s*/i, '');
+    return entry.deletedThenRestored ? `Deleted then restored ${restoredItem}` : entry.title;
   }
   if (entry.entityType === 'meal_log') {
     const changedMembers = entry.changes.filter((change) => change.field.startsWith('member:')).length;
@@ -132,13 +159,32 @@ function getEntrySummary(entry: ChangelogEntry): string {
   }
 
   if (entry.entityType === 'deposit') {
-    const txChange =
-      getChange(entry, 'transaction_amount') ?? getChange(entry, 'amount');
-    if (txChange && typeof txChange.value === 'number') {
-      const prefix = txChange.value < 0 ? 'Deduction' : 'Transaction';
-      return `${prefix}: ${formatCurrency(txChange.value)}`;
+    const balanceChange = getChange(entry, 'deposit_balance');
+    const balanceFrom = numericValue(balanceChange?.from);
+    const balanceTo = numericValue(balanceChange?.to);
+    if (balanceFrom !== null && balanceTo !== null) {
+      return `Balance ${formatCurrency(balanceFrom)} → ${formatCurrency(balanceTo)}`;
+    }
+    const amount = getDepositAmount(entry);
+    if (amount !== null) {
+      const prefix = amount < 0 ? 'Deduction' : 'Deposit';
+      return `${prefix}: ${formatSignedCurrency(amount)}`;
     }
     return 'Deposit balance updated';
+  }
+
+  if (entry.entityType === 'expense') {
+    const amountChange = getChange(entry, 'amount');
+    const from = numericValue(amountChange?.from);
+    const to = numericValue(amountChange?.to);
+    if (from !== null && to !== null) {
+      const amountSummary = `${formatCurrency(from)} → ${formatCurrency(to)} (${formatSignedCurrency(to - from)})`;
+      const otherChanges = entry.changes
+        .filter((change) => change.field !== 'amount')
+        .slice(0, 1)
+        .map(formatChangeLabel);
+      return [amountSummary, ...otherChanges].join(' · ');
+    }
   }
 
   const meaningful = entry.changes.filter(
@@ -169,6 +215,37 @@ function formatChangeLabel(change: ChangelogChange): string {
     return `${change.label}: ${formatValue(change.from)} → ${formatValue(change.to)}`;
   }
   return `${change.label}: ${formatValue(change.value)}`;
+}
+
+function collapseRestorePairs(entries: ChangelogEntry[]): DisplayChangelogEntry[] {
+  const pairedDeleteIds = new Set<string>();
+  const pairedRestoreIds = new Set<string>();
+
+  for (const restored of entries) {
+    if (!restored.title.startsWith('Restored')) continue;
+    const restoredAt = Date.parse(restored.createdAt);
+    const matchingDelete = entries
+      .filter((candidate) => candidate.action === 'delete'
+        && candidate.entityType === restored.entityType
+        && candidate.entityId === restored.entityId
+        && candidate.cycleId === restored.cycleId
+        && candidate.actor?.id === restored.actor?.id
+        && !pairedDeleteIds.has(candidate.id))
+      .map((candidate) => ({ candidate, deletedAt: Date.parse(candidate.createdAt) }))
+      .filter(({ deletedAt }) => Number.isFinite(deletedAt)
+        && deletedAt <= restoredAt
+        && restoredAt - deletedAt <= 10_000)
+      .sort((a, b) => b.deletedAt - a.deletedAt)[0]?.candidate;
+
+    if (matchingDelete) {
+      pairedDeleteIds.add(matchingDelete.id);
+      pairedRestoreIds.add(restored.id);
+    }
+  }
+
+  return entries
+    .filter((entry) => !pairedDeleteIds.has(entry.id))
+    .map((entry) => ({ ...entry, deletedThenRestored: pairedRestoreIds.has(entry.id) }));
 }
 
 function getDetailedChanges(entry: ChangelogEntry): ChangelogChange[] {
@@ -290,6 +367,32 @@ function ChangeRow({ change, entry }: { change: ChangelogChange; entry: Changelo
     return formatValue(v);
   };
 
+  if (entry.entityType === 'expense' && change.field === 'amount') {
+    const from = numericValue(change.from);
+    const to = numericValue(change.to);
+    if (from !== null && to !== null) {
+      const delta = to - from;
+      return (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-medium text-foreground/70">Amount</span>
+          <span className="tabular-nums text-muted-foreground">{formatCurrency(from)}</span>
+          <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
+          <span className="tabular-nums font-medium">{formatCurrency(to)}</span>
+          <span className={cn(
+            'rounded px-1.5 font-semibold tabular-nums',
+            delta > 0
+              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+              : delta < 0
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-muted text-muted-foreground',
+          )}>
+            {formatSignedCurrency(delta)}
+          </span>
+        </div>
+      );
+    }
+  }
+
   if (change.from !== undefined || change.to !== undefined) {
     return (
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -347,7 +450,7 @@ function MealDiff({ changes }: { changes: ChangelogChange[] }) {
   );
 }
 
-function ChangelogCard({ entry }: { entry: ChangelogEntry }) {
+function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
   const [open, setOpen] = useState(false);
 
   const displayAction = getDisplayAction(entry);
@@ -356,6 +459,28 @@ function ChangelogCard({ entry }: { entry: ChangelogEntry }) {
   const EntityIcon = entityStyle.icon;
   const detailed = getDetailedChanges(entry);
   const summary = getEntrySummary(entry);
+  const isRestore = entry.title.startsWith('Restored');
+  const depositAmount = entry.entityType === 'deposit' ? getDepositAmount(entry) : null;
+  const depositBadge = entry.entityType === 'deposit' && entry.action !== 'delete' && depositAmount !== null;
+  const badgeLabel = isRestore
+    ? 'Restored'
+    : depositBadge
+      ? depositAmount < 0 ? 'Deduction' : 'Deposit'
+      : actionStyle.label;
+  const badgeClass = isRestore
+    ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20'
+    : depositBadge
+      ? depositAmount < 0
+        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+      : actionStyle.badge;
+  const timelineDotClass = isRestore
+    ? 'bg-sky-500 shadow-[0_0_0_4px_rgba(14,165,233,0.15)]'
+    : depositBadge
+      ? depositAmount < 0
+        ? 'bg-rose-500 shadow-[0_0_0_4px_rgba(244,63,94,0.15)]'
+        : ACTION_STYLE.create.dot
+      : actionStyle.dot;
 
   const timestamp = new Date(entry.createdAt);
   const relativeTime = formatDistanceToNow(timestamp, { addSuffix: true });
@@ -368,7 +493,7 @@ function ChangelogCard({ entry }: { entry: ChangelogEntry }) {
         <div
           className={cn(
             'relative z-10 mt-1.5 h-3 w-3 shrink-0 rounded-full transition-transform group-hover:scale-125',
-            actionStyle.dot,
+            timelineDotClass,
           )}
         />
       </div>
@@ -395,8 +520,8 @@ function ChangelogCard({ entry }: { entry: ChangelogEntry }) {
                   <EntityIcon className={cn('h-3 w-3', entityStyle.color)} />
                   {entityStyle.label}
                 </Badge>
-                <Badge variant="outline" className={cn('border text-[11px]', actionStyle.badge)}>
-                  {actionStyle.label}
+                <Badge variant="outline" className={cn('border text-[11px]', badgeClass)}>
+                  {badgeLabel}
                 </Badge>
               </div>
             </div>
@@ -458,7 +583,7 @@ function ChangelogSection({
 }: {
   title: string;
   description: string;
-  entries: ChangelogEntry[];
+  entries: DisplayChangelogEntry[];
   cycleStat?: { create: number; update: number; delete: number };
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -546,6 +671,8 @@ export default function ChangelogPage() {
   const [entityFilter, setEntityFilter] = useState<ChangelogEntityType | 'all'>('all');
   const [search, setSearch] = useState('');
   const cycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
+  const displayedActiveEntries = collapseRestorePairs(activeCycleChangelogEntries);
+  const displayedPendingEntries = collapseRestorePairs(pendingCycleChangelogEntries);
 
   useEffect(() => {
     const scopedCycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
@@ -686,8 +813,8 @@ export default function ChangelogPage() {
             <ChangelogSection
               title="Active Cycle"
               description="Changes happening in the current running cycle."
-              entries={activeCycleChangelogEntries}
-              cycleStat={computeStats(activeCycleChangelogEntries)}
+              entries={displayedActiveEntries}
+              cycleStat={computeStats(displayedActiveEntries)}
             />
           )}
 
@@ -695,8 +822,8 @@ export default function ChangelogPage() {
             <ChangelogSection
               title="Pending Cycle"
               description="Settlement and correction activity for the cycle awaiting finalization."
-              entries={pendingCycleChangelogEntries}
-              cycleStat={computeStats(pendingCycleChangelogEntries)}
+              entries={displayedPendingEntries}
+              cycleStat={computeStats(displayedPendingEntries)}
             />
           )}
 
