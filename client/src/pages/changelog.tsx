@@ -19,6 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import {
   useMealActions,
@@ -371,11 +372,11 @@ const ACTION_STYLE: Record<ChangelogAction, { dot: string; badge: string; label:
   },
 };
 
-const ENTITY_STYLE: Record<ChangelogEntityType, { icon: React.ElementType; label: string; color: string }> = {
-  member: { icon: Users, label: 'Member', color: 'text-violet-500' },
-  expense: { icon: DollarSign, label: 'Expense', color: 'text-blue-500' },
-  meal_log: { icon: UtensilsCrossed, label: 'Meal', color: 'text-orange-500' },
-  deposit: { icon: RefreshCcw, label: 'Deposit', color: 'text-teal-500' },
+const ENTITY_STYLE: Record<ChangelogEntityType, { icon: React.ElementType; label: string; color: string; border: string }> = {
+  member: { icon: Users, label: 'Member', color: 'text-violet-500', border: 'border-violet-500/30' },
+  expense: { icon: DollarSign, label: 'Expense', color: 'text-blue-500', border: 'border-blue-500/30' },
+  meal_log: { icon: UtensilsCrossed, label: 'Meal', color: 'text-orange-500', border: 'border-orange-500/30' },
+  deposit: { icon: RefreshCcw, label: 'Deposit', color: 'text-teal-500', border: 'border-teal-500/30' },
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -572,6 +573,16 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
   const timestamp = new Date(entry.createdAt);
   const relativeTime = formatDistanceToNow(timestamp, { addSuffix: true });
   const exactTime = format(timestamp, "MMM d, yyyy 'at' h:mm a");
+  const detailsId = `changelog-details-${entry.id}`;
+  const toggleDetails = () => {
+    if (detailed.length > 0) setOpen((current) => !current);
+  };
+  const handleHeaderKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleDetails();
+    }
+  };
 
   return (
     <div className="group relative flex gap-3">
@@ -595,7 +606,18 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
         >
           {/* Header */}
           <div className="flex flex-col gap-3 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div
+              role={detailed.length > 0 ? 'button' : undefined}
+              tabIndex={detailed.length > 0 ? 0 : undefined}
+              aria-expanded={detailed.length > 0 ? open : undefined}
+              aria-controls={detailed.length > 0 ? detailsId : undefined}
+              onClick={toggleDetails}
+              onKeyDown={handleHeaderKeyDown}
+              className={cn(
+                'flex flex-wrap items-start justify-between gap-3 rounded-md',
+                detailed.length > 0 && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              )}
+            >
               {/* Left: title + meta */}
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="truncate font-semibold leading-tight">{getDisplayTitle(entry)}</p>
@@ -603,7 +625,7 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
               </div>
               {/* Right: badges */}
               <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                <Badge variant="outline" className={cn('gap-1 border text-[11px]', ENTITY_STYLE[entry.entityType].color.replace('text-', 'border-').replace('-500', '-500/30'))}>
+                <Badge variant="outline" className={cn('gap-1 border text-[11px]', entityStyle.border)}>
                   <EntityIcon className={cn('h-3 w-3', entityStyle.color)} />
                   {entityStyle.label}
                 </Badge>
@@ -631,7 +653,9 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
                     variant="ghost"
                     size="sm"
                     className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => setOpen((o) => !o)}
+                    aria-expanded={open}
+                    aria-controls={detailsId}
+                    onClick={toggleDetails}
                   >
                     Details
                     <ChevronsUpDown className="h-3 w-3" />
@@ -643,7 +667,7 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
 
           {/* Expanded details */}
           {open && detailed.length > 0 && (
-            <div className="border-t bg-muted/30 px-4 py-3 space-y-2">
+            <div id={detailsId} className="border-t bg-muted/30 px-4 py-3 space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Change Details
               </p>
@@ -664,16 +688,45 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
   );
 }
 
+function ChangelogSkeletonCards() {
+  return (
+    <div className="relative space-y-3 pl-4" aria-label="Loading changelog entries" aria-busy="true">
+      <div className="absolute left-[5px] top-0 h-full w-px bg-border" />
+      {Array.from({ length: 3 }, (_, index) => (
+        <div key={index} className="relative rounded-xl border bg-card p-4 shadow-sm">
+          <span className="absolute -left-[13px] top-6 h-3 w-3 rounded-full bg-muted ring-4 ring-background" />
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-40 max-w-full" />
+              <Skeleton className="h-3 w-56 max-w-full" />
+            </div>
+            <div className="flex shrink-0 gap-1.5">
+              <Skeleton className="h-5 w-14 rounded-md" />
+              <Skeleton className="h-5 w-16 rounded-md" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between border-t pt-3">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChangelogSection({
   title,
   description,
   entries,
   cycleStat,
+  loading,
 }: {
   title: string;
   description: string;
   entries: DisplayChangelogEntry[];
   cycleStat?: { create: number; update: number; delete: number };
+  loading: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -713,10 +766,14 @@ function ChangelogSection({
 
       {!collapsed && (
         entries.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-10 text-center">
-            <ClipboardList className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">No matching entries in this section.</p>
-          </div>
+          loading ? (
+            <ChangelogSkeletonCards />
+          ) : (
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-10 text-center">
+              <ClipboardList className="h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">No matching entries in this section.</p>
+            </div>
+          )
         ) : (
           <div className="relative pl-4">
             {/* Vertical timeline line */}
@@ -904,6 +961,7 @@ export default function ChangelogPage() {
               description="Changes happening in the current running cycle."
               entries={displayedActiveEntries}
               cycleStat={computeStats(displayedActiveEntries)}
+              loading={changelogLoading}
             />
           )}
 
@@ -913,6 +971,7 @@ export default function ChangelogPage() {
               description="Settlement and correction activity for the cycle awaiting finalization."
               entries={displayedPendingEntries}
               cycleStat={computeStats(displayedPendingEntries)}
+              loading={changelogLoading}
             />
           )}
 
