@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { supabase } from './supabase';
-import {
-  type OfflineOp,
-} from './offline-queue';
+import { dequeueAll, type OfflineOp } from './offline-queue';
 import { readOfflineSnapshot, writeOfflineSnapshot } from './offline-cache';
 import { broadcastSharedUpdate } from './shared-update';
 import { triggerDepositPush } from './push-triggers';
@@ -143,6 +141,94 @@ function normalizeExpenseType(type: string): Expense['type'] {
 
 function normalizeSnapshotExpenses(expenses: Array<Omit<Expense, 'type'> & { type: string }>): Expense[] {
   return expenses.map((expense) => ({ ...expense, type: normalizeExpenseType(expense.type) }));
+}
+
+function overlayQueuedOperations<TData extends Pick<MealDataSnapshot, 'deposits' | 'expenses' | 'mealLogs'>>(
+  data: TData,
+  operations: OfflineOp[],
+) {
+  const deposits = [...data.deposits];
+  let expenses = normalizeSnapshotExpenses(data.expenses);
+  const mealLogs = [...data.mealLogs];
+
+  for (const operation of operations) {
+    const payload = operation.payload;
+    if (operation.type === 'ADD_EXPENSE') {
+      const item = payload as {
+        recordId?: string; amount: number; description: string; type: string;
+        paidBy: string; date: string; cycleId: string;
+      };
+      const existingIndex = expenses.findIndex((expense) => expense.id === operation.id || expense.id === item.recordId);
+      const optimisticExpense: Expense = {
+        id: operation.id,
+        cycleId: item.cycleId,
+        amount: Number(item.amount),
+        description: item.description,
+        type: normalizeExpenseType(item.type),
+        date: item.date,
+        paidBy: item.paidBy,
+      };
+      if (existingIndex >= 0) expenses[existingIndex] = optimisticExpense;
+      else expenses.unshift(optimisticExpense);
+    } else if (operation.type === 'UPDATE_EXPENSE') {
+      const item = payload as {
+        id: string; amount: number; description: string; type: string;
+        paidBy: string; date: string; cycleId: string;
+      };
+      expenses = expenses.map((expense) => expense.id === item.id ? {
+        ...expense,
+        amount: Number(item.amount),
+        description: item.description,
+        type: normalizeExpenseType(item.type),
+        paidBy: item.paidBy,
+        date: item.date,
+      } : expense);
+    } else if (operation.type === 'DELETE_EXPENSE') {
+      const item = payload as { id: string };
+      expenses = expenses.filter((expense) => expense.id !== item.id);
+    } else if (operation.type === 'ADD_DEPOSIT') {
+      const item = payload as {
+        recordId?: string; memberId: string; amount: number; cycleId: string; note: string | null;
+      };
+      const existingIndex = deposits.findIndex((deposit) => deposit.id === operation.id || deposit.id === item.recordId);
+      const optimisticDeposit: CycleDeposit = {
+        id: operation.id,
+        cycleId: item.cycleId,
+        memberId: item.memberId,
+        amount: Number(item.amount),
+        note: item.note ?? undefined,
+        createdAt: new Date(operation.createdAt).toISOString(),
+      };
+      if (existingIndex >= 0) deposits[existingIndex] = optimisticDeposit;
+      else deposits.push(optimisticDeposit);
+    } else if (operation.type === 'ADD_MEAL_LOG') {
+      const item = payload as {
+        entries: Array<{ memberId: string; count: number }>;
+        dateStr: string;
+        cycleId: string;
+      };
+      for (const entry of item.entries) {
+        const rowIndex = mealLogs.findIndex((log) =>
+          log.cycleId === item.cycleId && log.date === item.dateStr && log.memberId === entry.memberId,
+        );
+        if (Number(entry.count) <= 0) {
+          if (rowIndex >= 0) mealLogs.splice(rowIndex, 1);
+        } else {
+          const optimisticLog: MealLog = {
+            id: `offline-meal-${operation.id}-${entry.memberId}`,
+            cycleId: item.cycleId,
+            memberId: entry.memberId,
+            date: item.dateStr,
+            count: Number(entry.count),
+          };
+          if (rowIndex >= 0) mealLogs[rowIndex] = optimisticLog;
+          else mealLogs.push(optimisticLog);
+        }
+      }
+    }
+  }
+
+  return { ...data, deposits, expenses, mealLogs };
 }
 
 function mapMealLogRows(rows: MealLogRow[]): MealLog[] {
@@ -392,6 +478,14 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setRefreshing(true);
 
     const cacheKey = `mealtrack-data-cache-${userId}-${messId}`;
+    let queuedOperations: OfflineOp[] = [];
+    try {
+      queuedOperations = (await dequeueAll({ userId, messId })).filter(
+        (operation) => operation.status !== 'failed' && operation.status !== 'conflict',
+      );
+    } catch {
+      // Queue access can fail in restricted storage contexts; use the fetched rows.
+    }
 
     let snapshot: MealDataSnapshot | null = null;
     if (navigator.onLine) {
@@ -401,14 +495,15 @@ export function MealProvider({ children }: { children: ReactNode }) {
         // Ignore an unavailable cache and continue with the server request.
       }
       if (snapshot) {
-        setMemberRoster(snapshot.members);
-        setArchivedMemberRoster(snapshot.archivedMembers ?? []);
-        setCycles(snapshot.cycles);
-        setAllDeposits(snapshot.deposits);
-        setAllExpenses(normalizeSnapshotExpenses(snapshot.expenses));
-        setAllMealLogs(snapshot.mealLogs);
-        setAllChangelogEntries(snapshot.changelog ?? []);
-        setLoadedCycleIds(new Set(snapshot.loadedCycleIds ?? []));
+        const snapshotWithQueue = overlayQueuedOperations(snapshot, queuedOperations);
+        setMemberRoster(snapshotWithQueue.members);
+        setArchivedMemberRoster(snapshotWithQueue.archivedMembers ?? []);
+        setCycles(snapshotWithQueue.cycles);
+        setAllDeposits(snapshotWithQueue.deposits);
+        setAllExpenses(snapshotWithQueue.expenses);
+        setAllMealLogs(snapshotWithQueue.mealLogs);
+        setAllChangelogEntries(snapshotWithQueue.changelog ?? []);
+        setLoadedCycleIds(new Set(snapshotWithQueue.loadedCycleIds ?? []));
         setDataError(null);
         hasLoadedDataRef.current = true;
         setLoading(false);
@@ -429,14 +524,15 @@ export function MealProvider({ children }: { children: ReactNode }) {
             loadedCycleIds: string[];
           }>(cacheKey);
         if (snap) {
-          setMemberRoster(snap.members);
-          setArchivedMemberRoster(snap.archivedMembers ?? []);
-          setCycles(snap.cycles);
-          setAllDeposits(snap.deposits);
-          setAllExpenses(normalizeSnapshotExpenses(snap.expenses));
-          setAllMealLogs(snap.mealLogs);
-          setAllChangelogEntries(snap.changelog ?? []);
-          setLoadedCycleIds(new Set(snap.loadedCycleIds));
+          const snapshotWithQueue = overlayQueuedOperations(snap, queuedOperations);
+          setMemberRoster(snapshotWithQueue.members);
+          setArchivedMemberRoster(snapshotWithQueue.archivedMembers ?? []);
+          setCycles(snapshotWithQueue.cycles);
+          setAllDeposits(snapshotWithQueue.deposits);
+          setAllExpenses(snapshotWithQueue.expenses);
+          setAllMealLogs(snapshotWithQueue.mealLogs);
+          setAllChangelogEntries(snapshotWithQueue.changelog ?? []);
+          setLoadedCycleIds(new Set(snapshotWithQueue.loadedCycleIds ?? []));
           setDataError(null);
           hasLoadedDataRef.current = true;
           setLoading(false);
@@ -520,13 +616,18 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const nextDeposits = initialRows.deposits;
       const nextExpenses = initialRows.expenses;
       const nextMealLogs = initialRows.mealLogs;
+      const rowsWithQueue = overlayQueuedOperations({
+        deposits: nextDeposits,
+        expenses: nextExpenses,
+        mealLogs: nextMealLogs,
+      }, queuedOperations);
 
       setMemberRoster(nextMembers);
       setArchivedMemberRoster(nextArchivedMembers);
       setCycles(nextCycles);
-      setAllDeposits(nextDeposits);
-      setAllExpenses(nextExpenses);
-      setAllMealLogs(nextMealLogs);
+      setAllDeposits(rowsWithQueue.deposits);
+      setAllExpenses(rowsWithQueue.expenses);
+      setAllMealLogs(rowsWithQueue.mealLogs);
       setLoadedCycleIds(new Set(initialCycleIds));
       setDataError(null);
       hasLoadedDataRef.current = true;
@@ -548,14 +649,15 @@ export function MealProvider({ children }: { children: ReactNode }) {
               loadedCycleIds: string[];
             }>(cacheKey);
           if (snap) {
-            setMemberRoster(snap.members);
-            setArchivedMemberRoster(snap.archivedMembers ?? []);
-            setCycles(snap.cycles);
-            setAllDeposits(snap.deposits);
-            setAllExpenses(normalizeSnapshotExpenses(snap.expenses));
-            setAllMealLogs(snap.mealLogs);
-            setAllChangelogEntries(snap.changelog ?? []);
-            setLoadedCycleIds(new Set(snap.loadedCycleIds));
+            const snapshotWithQueue = overlayQueuedOperations(snap, queuedOperations);
+            setMemberRoster(snapshotWithQueue.members);
+            setArchivedMemberRoster(snapshotWithQueue.archivedMembers ?? []);
+            setCycles(snapshotWithQueue.cycles);
+            setAllDeposits(snapshotWithQueue.deposits);
+            setAllExpenses(snapshotWithQueue.expenses);
+            setAllMealLogs(snapshotWithQueue.mealLogs);
+            setAllChangelogEntries(snapshotWithQueue.changelog ?? []);
+            setLoadedCycleIds(new Set(snapshotWithQueue.loadedCycleIds ?? []));
             setDataError(null);
             hasLoadedDataRef.current = true;
             setLoading(false);
