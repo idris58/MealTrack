@@ -89,18 +89,46 @@ function getDisplayTitle(entry: ChangelogEntry): string {
     const member = getChange(entry, 'member')?.value;
     return `Updated deposit for ${member ?? 'member'}`;
   }
+  if (entry.entityType === 'meal_log') {
+    const changedMembers = entry.changes.filter((change) => change.field.startsWith('member:')).length;
+    if (changedMembers > 0) {
+      return `Meals updated for ${changedMembers} ${changedMembers === 1 ? 'member' : 'members'}`;
+    }
+  }
   return entry.title;
+}
+
+function mealLogChanges(entry: ChangelogEntry) {
+  return entry.changes.filter((change) => change.field.startsWith('member:'));
+}
+
+function mealCount(value: ChangelogChange['from'] | ChangelogChange['to']) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMealCount(value: number) {
+  return formatValue(value);
+}
+
+function formatSignedMealCount(value: number) {
+  return `${value >= 0 ? '+' : ''}${formatMealCount(value)}`;
 }
 
 function getEntrySummary(entry: ChangelogEntry): string {
   if (entry.entityType === 'meal_log') {
     const dateChange = getChange(entry, 'date');
-    const changedMembers =
-      entry.changes.filter((c) => c.field.startsWith('member:')).length || 1;
-    const formattedDate = dateChange
-      ? formatValue(dateChange.value)
-      : format(new Date(entry.createdAt), 'PPP');
-    return `${formattedDate} · ${changedMembers} ${changedMembers === 1 ? 'member change' : 'member changes'}`;
+    const dateValue = typeof dateChange?.value === 'string' ? parseISO(dateChange.value) : null;
+    const entryDate = parseISO(entry.createdAt);
+    const formattedDate = dateValue && isValid(dateValue)
+      ? format(dateValue, 'd MMM')
+      : isValid(entryDate)
+        ? format(entryDate, 'd MMM')
+        : 'Unknown date';
+    const rows = mealLogChanges(entry);
+    const net = rows.reduce((sum, change) => sum + mealCount(change.to) - mealCount(change.from), 0);
+    const memberLabel = `${rows.length} ${rows.length === 1 ? 'member' : 'members'}`;
+    return `${formattedDate} · ${memberLabel} · ${formatSignedMealCount(net)} meals`;
   }
 
   if (entry.entityType === 'deposit') {
@@ -144,15 +172,7 @@ function formatChangeLabel(change: ChangelogChange): string {
 }
 
 function getDetailedChanges(entry: ChangelogEntry): ChangelogChange[] {
-  if (
-    entry.entityType === 'meal_log' &&
-    entry.changes.some((c) => c.field.startsWith('member:'))
-  ) {
-    return [
-      ...entry.changes.filter((c) => c.field === 'date'),
-      ...entry.changes.filter((c) => c.field.startsWith('member:')),
-    ];
-  }
+  if (entry.entityType === 'meal_log') return mealLogChanges(entry);
   if (entry.entityType === 'deposit') {
     const member = getChange(entry, 'member');
     const balance = getChange(entry, 'deposit_balance');
@@ -289,6 +309,44 @@ function ChangeRow({ change, entry }: { change: ChangelogChange; entry: Changelo
   );
 }
 
+function MealDiff({ changes }: { changes: ChangelogChange[] }) {
+  const rows = changes.filter((change) => change.field.startsWith('member:'));
+  const net = rows.reduce((sum, change) => sum + mealCount(change.to) - mealCount(change.from), 0);
+
+  return (
+    <div className="space-y-1.5">
+      {rows.map((change) => {
+        const from = mealCount(change.from);
+        const to = mealCount(change.to);
+        const delta = to - from;
+        return (
+          <div key={change.field} className="flex items-center justify-between gap-3 rounded-lg bg-background px-3 py-1.5 text-xs">
+            <span className="min-w-0 truncate font-medium">{change.label}</span>
+            <span className="flex shrink-0 items-center gap-2 tabular-nums">
+              <span className="text-muted-foreground line-through">{formatMealCount(from)}</span>
+              <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+              <b>{formatMealCount(to)}</b>
+              <span className={cn(
+                'rounded px-1.5 font-semibold',
+                delta > 0
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : delta < 0
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    : 'bg-muted text-muted-foreground',
+              )}>
+                {formatSignedMealCount(delta)}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+      <p className="pt-1 text-right text-[11px] text-muted-foreground">
+        Net {formatSignedMealCount(net)} meals · {rows.length} {rows.length === 1 ? 'member' : 'members'}
+      </p>
+    </div>
+  );
+}
+
 function ChangelogCard({ entry }: { entry: ChangelogEntry }) {
   const [open, setOpen] = useState(false);
 
@@ -378,7 +436,9 @@ function ChangelogCard({ entry }: { entry: ChangelogEntry }) {
                 Change Details
               </p>
               <div className="space-y-2">
-                {detailed.map((change, idx) => (
+                {entry.entityType === 'meal_log' ? (
+                  <MealDiff changes={detailed} />
+                ) : detailed.map((change, idx) => (
                   <ChangeRow key={`${entry.id}-${change.field}-${idx}`} change={change} entry={entry} />
                 ))}
               </div>
