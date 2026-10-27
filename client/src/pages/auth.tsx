@@ -161,12 +161,11 @@ export default function AuthPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const isRecoveryLink = useMemo(() => {
-    const hash = window.location.hash.toLowerCase();
-    const search = window.location.search.toLowerCase();
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const searchParams = new URLSearchParams(window.location.search);
     return (
-      hash.includes("type=recovery") ||
-      hash.includes("access_token") ||
-      search.includes("type=recovery") ||
+      hashParams.get("type")?.toLowerCase() === "recovery" ||
+      searchParams.get("type")?.toLowerCase() === "recovery" ||
       lastAuthEvent === "PASSWORD_RECOVERY"
     );
   }, [lastAuthEvent]);
