@@ -208,6 +208,10 @@ function PostEditPanel({
       } else {
         setError('Failed to save notice. Please try again.');
       }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error && caughtError.message
+        ? caughtError.message
+        : 'Failed to save notice. Please try again.');
     } finally {
       setWorking(false);
     }

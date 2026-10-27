@@ -43,12 +43,12 @@ interface NoticeContextValue {
   loading: boolean;
   /** True if the user has dismissed the banner for the current notice. */
   dismissed: boolean;
-  /** Post or replace a notice. Returns the new notice or null on error. */
+  /** Post a notice. Throws the server error when the save fails. */
   postNotice: (
     content: string,
     expiresAt: Date,
     title?: string,
-  ) => Promise<Notice | null>;
+  ) => Promise<Notice>;
   /** Update the active notice in-place. Returns updated notice or null. */
   updateNotice: (
     id: string,
@@ -277,8 +277,8 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     content: string,
     expiresAt: Date,
     title?: string,
-  ): Promise<Notice | null> => {
-    if (!user?.id) return null;
+  ): Promise<Notice> => {
+    if (!user?.id) throw new Error('Sign in before posting a notice.');
     const effectiveTitle = (title && title.trim()) || 'Notice';
     const { data, error } = await supabase.rpc('post_notice', {
       content_input: content,
@@ -286,9 +286,9 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       title_input: effectiveTitle,
     });
 
-    if (error) { console.error('Error posting notice:', error); return null; }
+    if (error) throw new Error(error.message || 'Unable to post notice. Please try again.');
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row) return null;
+    if (!row) throw new Error('The server did not return the saved notice. Please try again.');
     const n = rowToNotice(row as any);
     setNotice(n);
     checkDismissed(n);

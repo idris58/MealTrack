@@ -44,6 +44,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { SyncBadge } from '@/components/sync-badge';
 import { cn } from '@/lib/utils';
 import { runMutation } from '@/lib/run-mutation';
+import { toast } from 'sonner';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DELETE_GRACE_MS = 10 * 1000;
@@ -286,6 +287,7 @@ export function ManagerMembersView() {
   const [deletedMembers, setDeletedMembers] = useState<DeletedMemberGhost[]>([]);
   const { user, canManageMembers, canManageRoles, canManageDeposits } = useAuth();
   const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string; email: string; role: 'manager' | 'coordinator' | 'member' }>>([]);
+  const [profilesError, setProfilesError] = useState<string | null>(null);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteTargetMemberId, setInviteTargetMemberId] = useState<string>('new');
@@ -322,9 +324,13 @@ export function ManagerMembersView() {
   };
 
   const handleUndoMember = async (memberId: string) => {
-    await restoreMember(memberId);
-    setDeletedMembers((prev) => prev.filter((entry) => entry.member.id !== memberId));
-    setCountdownMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; });
+    try {
+      await restoreMember(memberId);
+      setDeletedMembers((prev) => prev.filter((entry) => entry.member.id !== memberId));
+      setCountdownMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not restore the member. Please try again.');
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -334,35 +340,59 @@ export function ManagerMembersView() {
     const oldIndex = members.findIndex((member) => member.id === active.id);
     const newIndex = members.findIndex((member) => member.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
-    void reorderMembers(arrayMove(members.map((member) => member.id), oldIndex, newIndex)).catch((error) => console.error('Could not reorder members:', error));
+    void reorderMembers(arrayMove(members.map((member) => member.id), oldIndex, newIndex)).catch((error) => {
+      toast.error(error instanceof Error ? error.message : 'Could not save member order. Please try again.');
+    });
   };
 
   useEffect(() => {
     let active = true;
     if (!user) return;
-    void supabase.from('profiles').select('id, full_name, email, role').order('full_name').then((profilesResult) => {
-      if (!active) return;
-      setProfiles((profilesResult.data ?? []).filter((profile) => profile.id !== user.id));
-    });
+    setProfilesError(null);
+    void (async () => {
+      try {
+        const profilesResult = await supabase.from('profiles').select('id, full_name, email, role').order('full_name');
+        if (!active) return;
+        if (profilesResult.error) {
+          setProfilesError(`Could not load member roles: ${profilesResult.error.message}`);
+          return;
+        }
+        setProfiles((profilesResult.data ?? []).filter((profile) => profile.id !== user.id));
+      } catch (error) {
+        if (!active) return;
+        setProfilesError(error instanceof Error ? error.message : 'Could not load member roles. Please try again.');
+      }
+    })();
     return () => { active = false; };
   }, [user?.id]);
 
   const toggleCoordinator = async (profileId: string, role: 'coordinator' | 'member') => {
     if (!canManageRoles || roleUpdating) return;
     setRoleUpdating(profileId);
-    const { error } = await supabase.rpc('set_mess_role', { profile_id_input: profileId, role_input: role });
-    if (error) console.error('Could not update member role:', error);
-    else setProfiles((current) => current.map((profile) => profile.id === profileId ? { ...profile, role } : profile));
-    setRoleUpdating(null);
+    try {
+      const { error } = await supabase.rpc('set_mess_role', { profile_id_input: profileId, role_input: role });
+      if (error) throw error;
+      setProfiles((current) => current.map((profile) => profile.id === profileId ? { ...profile, role } : profile));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update member role. Please try again.');
+    } finally {
+      setRoleUpdating(null);
+    }
   };
 
   const loadInvites = async () => {
     if (!canManageMembers) return;
     setInvitesLoading(true);
-    const { data, error } = await supabase.rpc('list_member_invites');
-    if (error) setInviteError(error.message);
-    else setInvites((data ?? []) as MemberInvite[]);
-    setInvitesLoading(false);
+    setInviteError(null);
+    try {
+      const { data, error } = await supabase.rpc('list_member_invites');
+      if (error) throw error;
+      setInvites((data ?? []) as MemberInvite[]);
+    } catch (error) {
+      setInviteError(error instanceof Error ? error.message : 'Could not load invite links. Please try again.');
+    } finally {
+      setInvitesLoading(false);
+    }
   };
 
   useEffect(() => { if (inviteManagerOpen) void loadInvites(); }, [inviteManagerOpen]);
@@ -415,6 +445,13 @@ export function ManagerMembersView() {
     return cards;
   }, [deletedMembers, members]);
   const visibleArchivedMembers = archivedMembers.filter((member) => !countdownMemberIds.has(member.id));
+  const restoreArchivedMember = async (memberId: string) => {
+    try {
+      await restoreMember(memberId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not restore the member. Please try again.');
+    }
+  };
 
   return (
     <TooltipProvider>
@@ -450,6 +487,7 @@ export function ManagerMembersView() {
             ) : null}
           </div>
         </header>
+        {profilesError ? <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{profilesError}</p> : null}
 
         {/* Dialogs */}
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}><DialogContent><DialogHeader><DialogTitle>Add New Member</DialogTitle></DialogHeader><AddMemberForm onClose={() => setIsAddOpen(false)} /></DialogContent></Dialog>
@@ -634,7 +672,7 @@ export function ManagerMembersView() {
                       <p className="truncate text-sm font-medium">{member.name}</p>
                       <p className="text-xs text-muted-foreground">Historical records retained</p>
                     </div>
-                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => void restoreMember(member.id).catch((error) => console.error('Could not restore archived member:', error))}>
+                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => void restoreArchivedMember(member.id)}>
                       <RotateCcw className="h-4 w-4" />Restore
                     </Button>
                   </div>
