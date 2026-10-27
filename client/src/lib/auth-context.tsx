@@ -32,6 +32,29 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function clearUserBrowserData(userId: string) {
+  try {
+    localStorage.removeItem(`mealtrack-profile-${userId}`);
+    localStorage.removeItem("mealtrack:last-shared-meal-code");
+
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith("mealtrack:shared-cache:") || key?.startsWith("mealtrack-dismissed-notice-")) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Storage may be unavailable in private browsing or when quota access fails.
+  }
+
+  try {
+    window.sessionStorage.removeItem(`mealtrack:notification-onboarding-dismissed:${userId}`);
+    window.sessionStorage.removeItem("mealtrack:switch-shared-meal-code");
+  } catch {
+    // Keep logout available when session storage is unavailable.
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,9 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canManageCycles: isManager,
     canManageMess: isManager,
     signOut: async () => {
-      if (session?.user) {
-        window.sessionStorage.removeItem(`mealtrack:notification-onboarding-dismissed:${session.user.id}`);
-      }
+      const signedOutUserId = session?.user.id;
       try {
         await cleanupPushSubscriptionOnLogout(session?.access_token);
       } catch {
@@ -217,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         throw error;
       }
+      if (signedOutUserId) clearUserBrowserData(signedOutUserId);
       try {
         await clearOfflineData();
       } catch {
