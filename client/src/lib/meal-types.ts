@@ -38,11 +38,14 @@ export interface MealLogVersion {
   exists: boolean;
 }
 
+export type DepositKind = 'deposit' | 'refund' | 'carry_forward' | 'correction';
+
 export interface CycleDeposit {
   id: string;
   cycleId: string;
   memberId: string;
   amount: number;
+  kind?: DepositKind;
   note?: string;
   createdAt: string;
 }
@@ -161,7 +164,7 @@ export interface MealActionsContextType {
   updateExpense: (id: string, updates: { amount: number; description: string; type: 'meal' | 'utility'; paidBy: string; date?: string }) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   restoreExpense: (id: string) => Promise<void>;
-  addDeposit: (memberId: string, amount: number, cycleId?: string, note?: string) => Promise<void>;
+  addDeposit: (memberId: string, amount: number, cycleId?: string, note?: string, kind?: DepositKind) => Promise<void>;
   saveMealLogs: (entries: Array<{ memberId: string; count: number }>, date: string, cycleId?: string, expected?: MealLogVersion[]) => Promise<void>;
   logMeal: (memberId: string, count: number, date: string, cycleId?: string) => Promise<void>;
   renameActiveCycle: (name: string) => Promise<void>;

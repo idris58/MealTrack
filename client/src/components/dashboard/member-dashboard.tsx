@@ -90,9 +90,8 @@ function relativeDay(iso: string) {
 }
 
 function depositKind(d: CycleDeposit): 'deposit' | 'refund' | 'carry' {
-  const note = (d.note ?? '').toLowerCase();
-  if (note.includes('carry') || note.includes('forward') || note.includes('opening')) return 'carry';
-  if (d.amount < 0 || note.includes('refund') || note.includes('deduct') || note.includes('correction')) return 'refund';
+  if (d.kind === 'carry_forward') return 'carry';
+  if (d.kind === 'refund' || d.kind === 'correction' || d.amount < 0) return 'refund';
   return 'deposit';
 }
 
@@ -562,8 +561,8 @@ export function MemberDashboard() {
             <ul className="divide-y">
               {recentDeposits.map((d) => {
                 const kind = depositKind(d);
-                const out = kind === 'refund';
-                const Icon = out ? ArrowDownLeft : kind === 'carry' ? Repeat2 : ArrowUpRight;
+                const out = kind === 'refund' || d.amount < 0;
+                const Icon = kind === 'carry' ? Repeat2 : out ? ArrowDownLeft : ArrowUpRight;
                 return (
                   <li key={d.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                     <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', out ? 'bg-rose-500/10 text-rose-600' : kind === 'carry' ? 'bg-violet-500/10 text-violet-600' : 'bg-emerald-500/10 text-emerald-600')}>

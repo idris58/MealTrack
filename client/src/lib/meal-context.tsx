@@ -25,6 +25,7 @@ import type {
   ChangelogEntry,
   Cycle,
   CycleDeposit,
+  DepositKind,
   CycleStatus,
   Expense,
   MealActionsContextType,
@@ -43,6 +44,7 @@ export type {
   ChangelogEntry,
   Cycle,
   CycleDeposit,
+  DepositKind,
   CycleDetails,
   CycleStatus,
   Expense,
@@ -103,6 +105,7 @@ type CycleDepositRow = {
   cycle_id: string;
   member_id: string;
   amount: number | string;
+  kind: DepositKind | null;
   note: string | null;
   created_at: string;
 };
@@ -188,7 +191,7 @@ function overlayQueuedOperations<TData extends Pick<MealDataSnapshot, 'deposits'
       expenses = expenses.filter((expense) => expense.id !== item.id);
     } else if (operation.type === 'ADD_DEPOSIT') {
       const item = payload as {
-        recordId?: string; memberId: string; amount: number; cycleId: string; note: string | null;
+        recordId?: string; memberId: string; amount: number; kind?: DepositKind; cycleId: string; note: string | null;
       };
       const existingIndex = deposits.findIndex((deposit) => deposit.id === operation.id || deposit.id === item.recordId);
       const optimisticDeposit: CycleDeposit = {
@@ -196,6 +199,7 @@ function overlayQueuedOperations<TData extends Pick<MealDataSnapshot, 'deposits'
         cycleId: item.cycleId,
         memberId: item.memberId,
         amount: Number(item.amount),
+        kind: item.kind ?? (Number(item.amount) < 0 ? 'refund' : 'deposit'),
         note: item.note ?? undefined,
         createdAt: new Date(operation.createdAt).toISOString(),
       };
@@ -250,6 +254,7 @@ function mapDepositRows(rows: CycleDepositRow[]): CycleDeposit[] {
     cycleId: deposit.cycle_id,
     memberId: deposit.member_id,
     amount: Number(deposit.amount),
+    kind: deposit.kind ?? (Number(deposit.amount) < 0 ? 'refund' : 'deposit'),
     note: deposit.note ?? undefined,
     createdAt: deposit.created_at,
   }));
@@ -386,7 +391,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const [depositsResult, expensesResult] = await Promise.all([
       supabase
         .from('cycle_deposits')
-        .select('id, cycle_id, member_id, amount, note, created_at')
+        .select('id, cycle_id, member_id, amount, kind, note, created_at')
         .eq('mess_id', messId)
         .eq('cycle_id', cycleId)
         .order('created_at', { ascending: true }),
@@ -431,7 +436,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     }
 
     const [depositsResult, expensesResult] = await Promise.all([
-      supabase.from('cycle_deposits').select('id, cycle_id, member_id, amount, note, created_at').eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
+      supabase.from('cycle_deposits').select('id, cycle_id, member_id, amount, kind, note, created_at').eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
       supabase.from('expenses').select('id, cycle_id, amount, description, type, date, paid_by, updated_at').eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
     ]);
     if (depositsResult.error) throw depositsResult.error;
@@ -892,7 +897,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     if (op.type === 'ADD_DEPOSIT') {
       const p = op.payload as {
-        recordId?: string; memberId: string; amount: number; cycleId: string; note: string | null; userId: string; messId: string;
+        recordId?: string; memberId: string; amount: number; kind?: DepositKind; cycleId: string; note: string | null; userId: string; messId: string;
       };
       const { data, error } = await withRequestTimeout((signal) => supabase
         .from('cycle_deposits')
@@ -901,6 +906,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           member_id: p.memberId,
           cycle_id: p.cycleId,
           amount: p.amount,
+          kind: p.kind ?? (p.amount < 0 ? 'refund' : 'deposit'),
           note: p.note,
           user_id: userId,
           mess_id: messId,
@@ -911,7 +917,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       setAllDeposits((prev) => [
         ...prev.filter((d) => d.id !== op.id),
-        { id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount), note: data.note ?? undefined, createdAt: data.created_at },
+        { id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount), kind: data.kind, note: data.note ?? undefined, createdAt: data.created_at },
       ]);
       void triggerDepositPush({ depositId: data.id });
       return;

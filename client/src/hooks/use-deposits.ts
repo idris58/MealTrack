@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { enqueue } from '@/lib/offline-queue';
 import { isTransientRequestError, withRequestTimeout } from '@/lib/request-retry';
 import { triggerDepositPush } from '@/lib/push-triggers';
-import type { CycleDeposit } from '@/lib/meal-types';
+import type { CycleDeposit, DepositKind } from '@/lib/meal-types';
 
 type Options = {
   userId: string | null;
@@ -20,7 +20,7 @@ export function useDeposits(options: Options) {
   const latest = useRef(options);
   latest.current = options;
 
-  const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string) => {
+  const addDeposit = useCallback(async (memberId: string, amount: number, cycleId?: string, note?: string, kind: DepositKind = amount < 0 ? 'refund' : 'deposit') => {
     const { userId, messId, setDeposits, setPendingSyncIds, getCycleId, broadcast } = latest.current;
     if (!userId || !messId) throw new Error('Sign in and join a mess before recording a deposit.');
     if (amount === 0) throw new Error('Deposit amount cannot be zero.');
@@ -31,13 +31,13 @@ export function useDeposits(options: Options) {
     const queueDeposit = async () => {
       const id = `offline-${uuidv4()}`;
       setDeposits((previous) => [...previous, {
-        id, cycleId: targetCycleId, memberId, amount, note: note ?? undefined, createdAt: new Date().toISOString(),
+        id, cycleId: targetCycleId, memberId, amount, kind, note: note ?? undefined, createdAt: new Date().toISOString(),
       }]);
       setPendingSyncIds((previous) => new Set(previous).add(id));
       await enqueue({
         id,
         type: 'ADD_DEPOSIT',
-        payload: { recordId, memberId, amount, cycleId: targetCycleId, note: note ?? null, userId, messId },
+        payload: { recordId, memberId, amount, kind, cycleId: targetCycleId, note: note ?? null, userId, messId },
         createdAt: Date.now(),
       });
     };
@@ -49,7 +49,7 @@ export function useDeposits(options: Options) {
     let data;
     try {
       const result = await withRequestTimeout((signal) => supabase.from('cycle_deposits').upsert([{
-        id: recordId, member_id: memberId, cycle_id: targetCycleId, amount, note: note ?? null, user_id: userId, mess_id: messId,
+        id: recordId, member_id: memberId, cycle_id: targetCycleId, amount, kind, note: note ?? null, user_id: userId, mess_id: messId,
       }], { onConflict: 'id' }).abortSignal(signal).select().single());
       if (result.error) {
         if (isTransientRequestError(result.error)) {
@@ -66,7 +66,7 @@ export function useDeposits(options: Options) {
     }
 
     setDeposits((previous) => [...previous, {
-      id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount),
+      id: data.id, cycleId: data.cycle_id, memberId: data.member_id, amount: Number(data.amount), kind: data.kind,
       note: data.note ?? undefined, createdAt: data.created_at,
     }]);
     void triggerDepositPush({ depositId: data.id });

@@ -52,9 +52,8 @@ const roundUp10 = (n: number) => Math.ceil(n / 10) * 10;
 type Kind = 'deposit' | 'refund' | 'carry';
 
 function kindOf(d: CycleDeposit): Kind {
-  const note = (d.note ?? '').toLowerCase();
-  if (note.includes('carry') || note.includes('forward') || note.includes('opening')) return 'carry';
-  if (d.amount < 0 || note.includes('refund') || note.includes('deduct') || note.includes('correction')) return 'refund';
+  if (d.kind === 'carry_forward') return 'carry';
+  if (d.kind === 'refund' || d.kind === 'correction' || d.amount < 0) return 'refund';
   return 'deposit';
 }
 

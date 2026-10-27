@@ -106,7 +106,7 @@ function DepositForm({ memberId, onClose }: { memberId: string; onClose: () => v
     if (!isNaN(val) && val !== 0) {
       setIsSubmitting(true);
       const signedAmount = mode === 'deduct' ? -Math.abs(val) : Math.abs(val);
-      try { await runMutation(async () => { await addDeposit(memberId, signedAmount, undefined, mode === 'deduct' ? 'Deduction/Refund' : undefined); onClose(); }); }
+      try { await runMutation(async () => { await addDeposit(memberId, signedAmount, undefined, undefined, mode === 'deduct' ? 'refund' : 'deposit'); onClose(); }); }
       finally { setIsSubmitting(false); }
     }
   };

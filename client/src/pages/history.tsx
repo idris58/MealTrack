@@ -83,7 +83,7 @@ function SettlementForm({
 
     try {
       await runMutation(async () => {
-        await addDeposit(memberId, parsed, cycleId, note || undefined);
+        await addDeposit(memberId, parsed, cycleId, note || undefined, parsed < 0 ? 'refund' : 'deposit');
         onClose();
       });
     } finally {

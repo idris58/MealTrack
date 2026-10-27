@@ -146,9 +146,38 @@ create table if not exists public.cycle_deposits (
   amount numeric not null,
   note text,
   created_at timestamptz not null default now(),
-  mess_id uuid references public.messes(id) on delete set null,
-  profile_id uuid references public.profiles(id) on delete set null
+  mess_id uuid references public.messes(id) on delete set null
 );
+
+-- Deposit behavior is explicit; note remains user-facing free text.
+alter table public.cycle_deposits add column if not exists kind text;
+update public.cycle_deposits
+set kind = case
+  when lower(trim(coalesce(note, ''))) like 'carry-forward%'
+    or lower(trim(coalesce(note, ''))) = 'opening balance' then 'carry_forward'
+  when lower(coalesce(note, '')) like '%correction%' then 'correction'
+  when amount < 0
+    or lower(coalesce(note, '')) ~ '(refund|deduct)' then 'refund'
+  else 'deposit'
+end
+where kind is null;
+alter table public.cycle_deposits alter column kind set default 'deposit';
+alter table public.cycle_deposits alter column kind set not null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'cycle_deposits_kind_check'
+      and conrelid = 'public.cycle_deposits'::regclass
+  ) then
+    alter table public.cycle_deposits add constraint cycle_deposits_kind_check
+      check (kind in ('deposit', 'refund', 'carry_forward', 'correction'));
+  end if;
+end $$;
+
+-- user_id already identifies the actor; profile_id duplicated the same auth UUID.
+alter table public.cycle_deposits drop column if exists profile_id;
 
 create table if not exists public.changelog_entries (
   id uuid primary key default gen_random_uuid(),

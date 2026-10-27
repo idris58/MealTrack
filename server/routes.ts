@@ -766,7 +766,7 @@ export async function registerRoutes(
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: deposit, error } = await supabaseAdmin
       .from("cycle_deposits")
-      .select("id, member_id, amount, note")
+      .select("id, member_id, amount, kind, note")
       .eq("id", depositId)
       .eq("mess_id", messId)
       .maybeSingle();

@@ -546,14 +546,12 @@ export async function sendDepositPush({
 }: {
   actorUserId: string;
   messId: string;
-  deposit: { id: string; member_id: string; amount: number | string; note: string | null };
+  deposit: { id: string; member_id: string; amount: number | string; kind: "deposit" | "refund" | "carry_forward" | "correction"; note: string | null };
 }) {
-  const { id: depositId, member_id: memberId, amount: rawAmount, note } = deposit;
+  const { id: depositId, member_id: memberId, amount: rawAmount, kind, note } = deposit;
   const amount = Number(rawAmount);
   // Skip carry-forward automated deposits to avoid spam
-  if (note && note.trim().toLowerCase().startsWith("carry-forward")) {
-    return;
-  }
+  if (kind === "carry_forward") return;
 
   const supabase = assertSupabaseAdmin();
   const { data: member, error: memberError } = await supabase

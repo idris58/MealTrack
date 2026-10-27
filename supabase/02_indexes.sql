@@ -92,7 +92,6 @@ alter table if exists public.meal_logs drop constraint if exists meal_logs_membe
 alter table if exists public.meal_logs drop constraint if exists meal_logs_member_id_date_cycle_key;
 alter table if exists public.meal_logs add constraint meal_logs_member_id_date_cycle_key unique (member_id, date, cycle_id);
 create index if not exists cycle_deposits_mess_id_idx on public.cycle_deposits(mess_id);
-create index if not exists cycle_deposits_profile_id_idx on public.cycle_deposits(profile_id);
 create index if not exists cycle_deposits_mess_cycle_idx on public.cycle_deposits(mess_id, cycle_id);
 create index if not exists changelog_entries_mess_created_idx on public.changelog_entries(mess_id, created_at desc);
 create unique index if not exists changelog_entries_batch_key_idx on public.changelog_entries(batch_key) where batch_key is not null;

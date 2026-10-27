@@ -318,13 +318,13 @@ begin
     select coalesce(sum(amount), 0) into previous_balance
     from public.cycle_deposits
     where mess_id = current_mess and cycle_id = pending_cycle.id and member_id = carry_member_id;
-    insert into public.cycle_deposits (user_id, profile_id, mess_id, cycle_id, member_id, amount, note)
-    values (auth.uid(), auth.uid(), current_mess, pending_cycle.id, carry_member_id, -carry_amount,
+    insert into public.cycle_deposits (user_id, mess_id, cycle_id, member_id, amount, kind, note)
+    values (auth.uid(), current_mess, pending_cycle.id, carry_member_id, -carry_amount, 'carry_forward',
       'Carry-forward correction — balance moved to next cycle')
     returning id into deposit_id;
 
-    insert into public.cycle_deposits (user_id, profile_id, mess_id, cycle_id, member_id, amount, note)
-    values (auth.uid(), auth.uid(), current_mess, new_cycle.id, carry_member_id, carry_amount,
+    insert into public.cycle_deposits (user_id, mess_id, cycle_id, member_id, amount, kind, note)
+    values (auth.uid(), current_mess, new_cycle.id, carry_member_id, carry_amount, 'carry_forward',
       'Carry-forward from ' || pending_cycle.name)
     returning id into deposit_id;
   end loop;
@@ -777,7 +777,7 @@ declare
   v_changes jsonb := '[]'::jsonb;
 begin
   if v_actor is null then
-    v_actor := coalesce(NEW.profile_id, NEW.user_id, OLD.profile_id, OLD.user_id);
+    v_actor := coalesce(NEW.user_id, OLD.user_id);
   end if;
 
   v_mess_id := coalesce(NEW.mess_id, OLD.mess_id);
@@ -797,13 +797,14 @@ begin
     v_changes := jsonb_build_array(
       jsonb_build_object('field', 'member', 'label', 'Member', 'value', coalesce(v_member_name, 'member')),
       jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', v_prev_balance, 'to', v_prev_balance + NEW.amount),
-      jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', NEW.amount)
+      jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', NEW.amount),
+      jsonb_build_object('field', 'kind', 'label', 'Kind', 'value', NEW.kind)
     );
     if NEW.note is not null and trim(NEW.note) <> '' then
       v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'note', 'label', 'Note', 'value', NEW.note));
     end if;
   elsif TG_OP = 'UPDATE' then
-    if OLD.amount = NEW.amount and OLD.note is not distinct from NEW.note then
+    if OLD.amount = NEW.amount and OLD.note is not distinct from NEW.note and OLD.kind is not distinct from NEW.kind then
       return NEW;
     end if;
 
@@ -818,6 +819,9 @@ begin
       jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', v_prev_balance + OLD.amount, 'to', v_prev_balance + NEW.amount),
       jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', NEW.amount)
     );
+    if OLD.kind is distinct from NEW.kind then
+      v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'kind', 'label', 'Kind', 'from', OLD.kind, 'to', NEW.kind));
+    end if;
     if NEW.note is not null and trim(NEW.note) <> '' then
       v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'note', 'label', 'Note', 'value', NEW.note));
     end if;
@@ -831,7 +835,8 @@ begin
     v_changes := jsonb_build_array(
       jsonb_build_object('field', 'member', 'label', 'Member', 'value', coalesce(v_member_name, 'member')),
       jsonb_build_object('field', 'deposit_balance', 'label', 'Deposit Balance', 'from', v_prev_balance + OLD.amount, 'to', v_prev_balance),
-      jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', OLD.amount)
+      jsonb_build_object('field', 'transaction_amount', 'label', 'Transaction', 'value', OLD.amount),
+      jsonb_build_object('field', 'kind', 'label', 'Kind', 'value', OLD.kind)
     );
     if OLD.note is not null and trim(OLD.note) <> '' then
       v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'note', 'label', 'Note', 'value', OLD.note));
