@@ -55,20 +55,22 @@ export function useCycles(options: Options) {
     if (pendingCycle) throw new Error('Finish the pending cycle settlement before closing another cycle.');
     const details = getCycleDetails?.(activeCycle.id);
     if (!details) throw new Error('Load the current cycle details before closing it.');
-    const snapshot: SnapshotMember[] = getCycleMembers(activeCycle.id).map(({ id, name, avatar }) => ({ id, name, avatar }));
+    const closedAt = new Date().toISOString();
+    const snapshot: SnapshotMember[] = getCycleMembers(activeCycle.id).map(({ id, name, avatar, createdAt, deletedAt }) => ({ id, name, avatar, createdAt, deletedAt }));
     const settlement = computeCycleMath({
       members: details.members,
       deposits: details.deposits,
       expenses: details.expenses,
       mealLogs: details.mealLogs,
       finalized: true,
+      cycleStartedAt: activeCycle.startedAt,
+      cycleEndedAt: closedAt,
     });
     const settlementSnapshot = settlement.members.map((member) => ({
       memberId: member.id,
       balance: member.balance,
       deposited: member.deposit,
     }));
-    const closedAt = new Date().toISOString();
     const { error } = await supabase.from('cycles').update({ status: 'pending', closed_at: closedAt, members_snapshot: snapshot, settlement_snapshot: settlementSnapshot }).eq('id', activeCycle.id).eq('mess_id', messId).eq('status', 'active');
     if (error) throw new Error('Unable to close the cycle. Please try again.');
     setCycles((previous) => previous.map((cycle) => cycle.id === activeCycle.id ? { ...cycle, status: 'pending', closedAt, membersSnapshot: snapshot, settlementSnapshot } : cycle));

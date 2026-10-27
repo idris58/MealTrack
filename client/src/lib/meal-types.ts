@@ -7,6 +7,8 @@ export interface Member {
   mealsEaten: number;
   avatar?: string;
   profileId?: string | null;
+  createdAt?: string | null;
+  deletedAt?: string | null;
   hasPendingDeposit?: boolean;
   archived?: boolean;
 }
@@ -103,6 +105,8 @@ export interface SnapshotMember {
   id: string;
   name: string;
   avatar?: string;
+  createdAt?: string | null;
+  deletedAt?: string | null;
 }
 
 export interface CycleDetails {

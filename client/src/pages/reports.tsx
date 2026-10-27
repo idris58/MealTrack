@@ -144,7 +144,14 @@ export default function ReportsPage() {
     const expenses = (details?.expenses ?? []).filter((item) => isDateInFilterRange(item.date, from, to, fromKey, toKey));
     const logs = (details?.mealLogs ?? []).filter((item) => isDateInFilterRange(item.date, from, to, fromKey, toKey));
     const deposits = (details?.deposits ?? []).filter((item) => isDateInFilterRange(item.createdAt, from, to, fromKey, toKey));
-    const math = computeCycleMath({ members, deposits, expenses, mealLogs: logs });
+    const math = computeCycleMath({
+      members,
+      deposits,
+      expenses,
+      mealLogs: logs,
+      cycleStartedAt: from.toISOString(),
+      cycleEndedAt: endOfDay(to).toISOString(),
+    });
     const { totalMealExpenses, totalFixedExpenses, totalMealsConsumed: totalMeals, currentMealRate: rate, totalDeposits } = math.stats;
     const totalExpenses = totalMealExpenses + totalFixedExpenses;
     const rows: ReportMember[] = math.members.map((member) => ({

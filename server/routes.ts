@@ -96,6 +96,7 @@ type MemberRow = {
   name: string;
   avatar: string | null;
   deleted_at: string | null;
+  created_at: string | null;
   sort_order: number | null;
 };
 
@@ -103,6 +104,8 @@ type SnapshotMember = {
   id: string;
   name: string;
   avatar?: string;
+  createdAt?: string | null;
+  deletedAt?: string | null;
 };
 
 type SettlementSnapshotEntry = { memberId: string; balance: number; deposited: number };
@@ -177,12 +180,15 @@ function buildSharedPayload(
         id: member.id,
         name: member.name,
         avatar: member.avatar || member.name.substring(0, 2).toUpperCase(),
+        createdAt: member.createdAt,
+        deletedAt: member.deletedAt,
       }))
     : selectCycleMembers(
         membersData.map((member) => ({
           id: member.id,
           name: member.name,
           avatar: member.avatar || member.name.substring(0, 2).toUpperCase(),
+          createdAt: member.created_at,
           deletedAt: member.deleted_at,
         })),
         historyMemberIds,
@@ -211,6 +217,8 @@ function buildSharedPayload(
     mealLogs,
     settlementSnapshot: cycle.settlement_snapshot,
     finalized: cycle.status === "pending" || cycle.status === "closed",
+    cycleStartedAt: cycle.started_at,
+    cycleEndedAt: cycle.closed_at ?? new Date().toISOString(),
   });
 
   return {
@@ -422,7 +430,7 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
     await Promise.all([
       supabaseAdmin
         .from("members")
-        .select("id, name, avatar, deleted_at, sort_order")
+        .select("id, name, avatar, created_at, deleted_at, sort_order")
         .eq(...scopeFilter(scope))
         .order("sort_order", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true }),
@@ -789,7 +797,7 @@ export async function registerRoutes(
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: cycle, error: cycleError } = await supabaseAdmin
       .from("cycles")
-      .select("id, name, status, members_snapshot, settlement_snapshot")
+      .select("id, name, status, started_at, closed_at, members_snapshot, settlement_snapshot")
       .eq("id", cycleId)
       .eq("mess_id", messId)
       .eq("status", "pending")
@@ -803,12 +811,13 @@ export async function registerRoutes(
     const liveRoster = roster ? [] : await fetchAllPages<{
       id: string;
       name: string;
+      created_at: string | null;
       deleted_at: string | null;
       sort_order: number | null;
     }>(async (from, to) =>
       await supabaseAdmin
         .from("members")
-        .select("id, name, deleted_at, sort_order")
+        .select("id, name, created_at, deleted_at, sort_order")
         .eq("mess_id", messId)
         .order("sort_order", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true })
@@ -861,6 +870,8 @@ export async function registerRoutes(
       mealLogs: mealLogs.map((log) => ({ memberId: log.member_id, count: Number(log.count) })),
       settlementSnapshot: cycle.settlement_snapshot,
       finalized: true,
+      cycleStartedAt: cycle.started_at,
+      cycleEndedAt: cycle.closed_at,
     });
     const dueMembers = math.members
       .filter((member) => member.balance < 0)

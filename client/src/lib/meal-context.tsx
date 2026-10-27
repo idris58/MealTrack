@@ -67,6 +67,7 @@ type MemberRow = {
   deleted_at?: string | null;
   delete_expires_at?: string | null;
   profile_id?: string | null;
+  created_at?: string | null;
 };
 
 type CycleRow = {
@@ -357,7 +358,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     const cycleMemberIds = new Set<string>();
     const cycleHistoryMemberIds = historyMemberIdsByCycle.get(cycleId) ?? new Set<string>();
+    const currentMembersById = new Map([...memberRoster, ...archivedMemberRoster].map((member) => [member.id, member]));
     const snapshotMembers = (snapshot && cycle.status !== 'active' ? snapshot : memberRoster).map((member) => {
+      const currentMember = currentMembersById.get(member.id);
       cycleMemberIds.add(member.id);
       return {
         ...member,
@@ -366,6 +369,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
         deposit: 0,
         mealsEaten: 0,
         avatar: toAvatar(member.name, member.avatar),
+        createdAt: member.createdAt ?? currentMember?.createdAt,
+        deletedAt: member.deletedAt ?? currentMember?.deletedAt,
       };
     });
     const archivedHistoryMembers = archivedMemberRoster
@@ -561,7 +566,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const [membersResult, cyclesResult] = await Promise.all([
         supabase
           .from('members')
-          .select('id, name, avatar, deleted_at, delete_expires_at, profile_id')
+          .select('id, name, avatar, created_at, deleted_at, delete_expires_at, profile_id')
           .eq('mess_id', messId)
           .order('sort_order', { ascending: true, nullsFirst: false })
           .order('created_at', { ascending: true }),
@@ -586,6 +591,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
           mealsEaten: 0,
           avatar: toAvatar(member.name, member.avatar),
           profileId: member.profile_id ?? null,
+          createdAt: member.created_at ?? null,
+          deletedAt: member.deleted_at ?? null,
         }));
       const nextArchivedMembers = memberRows
         // Include both permanent archives and members still in the undo window.
@@ -599,6 +606,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
           mealsEaten: 0,
           avatar: toAvatar(member.name, member.avatar),
           profileId: member.profile_id ?? null,
+          createdAt: member.created_at ?? null,
+          deletedAt: member.deleted_at ?? null,
           archived: !member.delete_expires_at,
         }));
 

@@ -45,6 +45,8 @@ function sameMembers(previous: Member[], current: Member[]) {
       && member.name === next.name
       && member.avatar === next.avatar
       && member.profileId === next.profileId
+      && member.createdAt === next.createdAt
+      && member.deletedAt === next.deletedAt
       && member.archived === next.archived;
   });
 }
@@ -92,6 +94,8 @@ export function useCycleDetails({ cycles, loadedCycleIds, membersForCycle, depos
         mealLogs: cycleLogs,
         settlementSnapshot: cycle.settlementSnapshot,
         finalized,
+        cycleStartedAt: cycle.startedAt,
+        cycleEndedAt: cycle.closedAt ?? new Date().toISOString(),
       });
       const pendingDepositMemberIds = new Set(
         cycleDeposits.filter((item) => item.id.startsWith('offline-')).map((item) => item.memberId),

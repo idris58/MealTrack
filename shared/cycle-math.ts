@@ -3,6 +3,8 @@ import { allocateIntegerBalances } from "./settlement-math";
 export type CycleMathMember = {
   id: string;
   name: string;
+  createdAt?: string | null;
+  deletedAt?: string | null;
 };
 
 export type CycleMathDeposit = { memberId: string; amount: number };
@@ -37,6 +39,55 @@ export function computeMemberCosts(mealsEaten: number, mealRate: number, fixedCo
   return { mealCost, fixedCost, totalCost: mealCost + fixedCost };
 }
 
+function prorateFixedCosts<TMember extends CycleMathMember>(
+  members: TMember[],
+  totalFixedExpenses: number,
+  cycleStartedAt?: string | null,
+  cycleEndedAt?: string | null,
+) {
+  const equalShare = members.length > 0 ? totalFixedExpenses / members.length : 0;
+  const cycleStart = cycleStartedAt ? new Date(cycleStartedAt).getTime() : Number.NaN;
+  const cycleEnd = cycleEndedAt ? new Date(cycleEndedAt).getTime() : Number.NaN;
+  if (!Number.isFinite(cycleStart) || !Number.isFinite(cycleEnd) || cycleEnd <= cycleStart) {
+    return { perMember: new Map(members.map((member) => [member.id, equalShare])), average: equalShare };
+  }
+
+  const intervals = members.map((member) => {
+    const joinedAt = member.createdAt ? new Date(member.createdAt).getTime() : cycleStart;
+    const leftAt = member.deletedAt ? new Date(member.deletedAt).getTime() : cycleEnd;
+    const start = Math.max(cycleStart, Number.isFinite(joinedAt) ? joinedAt : cycleStart);
+    const end = Math.min(cycleEnd, Number.isFinite(leftAt) ? leftAt : cycleEnd);
+    return { id: member.id, start, end };
+  });
+
+  const boundaries = Array.from(new Set([
+    cycleStart,
+    cycleEnd,
+    ...intervals.flatMap(({ start, end }) => [start, end]),
+  ])).sort((left, right) => left - right);
+  const perMember = new Map(members.map((member) => [member.id, 0]));
+  const cycleDuration = cycleEnd - cycleStart;
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+    const duration = end - start;
+    if (duration <= 0) continue;
+    const midpoint = start + duration / 2;
+    const activeMembers = intervals.filter((interval) => interval.start <= midpoint && midpoint < interval.end);
+    if (activeMembers.length === 0) continue;
+    const intervalCost = totalFixedExpenses * duration / cycleDuration / activeMembers.length;
+    for (const member of activeMembers) {
+      perMember.set(member.id, (perMember.get(member.id) ?? 0) + intervalCost);
+    }
+  }
+
+  const allocatedTotal = Array.from(perMember.values()).reduce((sum, amount) => sum + amount, 0);
+  return {
+    perMember,
+    average: members.length > 0 ? allocatedTotal / members.length : 0,
+  };
+}
+
 /** Keep roster ordering, and include archived members only when this cycle has their history. */
 export function selectCycleMembers<TMember extends CycleMathMember & { deletedAt?: string | null }>(
   roster: TMember[],
@@ -57,6 +108,8 @@ export function computeCycleMath<TMember extends CycleMathMember>({
   mealLogs,
   settlementSnapshot,
   finalized = false,
+  cycleStartedAt,
+  cycleEndedAt,
 }: {
   members: TMember[];
   deposits: CycleMathDeposit[];
@@ -64,6 +117,8 @@ export function computeCycleMath<TMember extends CycleMathMember>({
   mealLogs: CycleMathMealLog[];
   settlementSnapshot?: SettlementSnapshotEntry[] | null;
   finalized?: boolean;
+  cycleStartedAt?: string | null;
+  cycleEndedAt?: string | null;
 }): CycleMathResult<TMember> {
   const memberIds = new Set(members.map((member) => member.id));
   const cycleDeposits = deposits.filter((deposit) => memberIds.has(deposit.memberId));
@@ -87,13 +142,15 @@ export function computeCycleMath<TMember extends CycleMathMember>({
   const totalMealsConsumed = cycleMealLogs.reduce((sum, log) => sum + log.count, 0);
   const totalDeposits = cycleDeposits.reduce((sum, deposit) => sum + deposit.amount, 0);
   const currentMealRate = totalMealsConsumed > 0 ? totalMealExpenses / totalMealsConsumed : 0;
-  const fixedCostPerMember = members.length > 0 ? totalFixedExpenses / members.length : 0;
+  const fixedCostAllocation = prorateFixedCosts(members, totalFixedExpenses, cycleStartedAt, cycleEndedAt);
+  const fixedCostPerMember = fixedCostAllocation.average;
   const remainingCash = totalDeposits - totalMealExpenses - totalFixedExpenses;
 
   const rawMembers = members.map((member) => {
     const deposit = depositByMember.get(member.id) ?? 0;
     const mealsEaten = mealsByMember.get(member.id) ?? 0;
-    const { mealCost, fixedCost, totalCost } = computeMemberCosts(mealsEaten, currentMealRate, fixedCostPerMember);
+    const fixedCost = fixedCostAllocation.perMember.get(member.id) ?? 0;
+    const { mealCost, totalCost } = computeMemberCosts(mealsEaten, currentMealRate, fixedCost);
     return {
       ...member,
       deposit,
