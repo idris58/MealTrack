@@ -13,7 +13,7 @@ import {
   UtensilsCrossed,
   Zap,
 } from "lucide-react";
-import { eachDayOfInterval, format, max, min, parseISO, startOfDay } from "date-fns";
+import { eachDayOfInterval, format, parseISO, startOfDay } from "date-fns";
 import { useLocation } from "wouter";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -617,19 +617,23 @@ export default function SharedPage({ token }: { token: string }) {
     return () => window.clearTimeout(timeoutId);
   }, [data?.activeNotice]);
 
+  const mealLogDateBounds = (data?.mealLogs ?? []).reduce(
+    (bounds, log) => ({
+      start: bounds.start === null || log.date < bounds.start ? log.date : bounds.start,
+      end: bounds.end === null || log.date > bounds.end ? log.date : bounds.end,
+    }),
+    { start: null as string | null, end: null as string | null },
+  );
+  const todayKey = format(startOfDay(new Date()), "yyyy-MM-dd");
   const days = useMemo(() => {
-    if (!data || data.mealLogs.length === 0) {
-      return [startOfDay(new Date())];
-    }
+    const today = startOfDay(parseISO(todayKey));
+    if (mealLogDateBounds.start === null || mealLogDateBounds.end === null) return [today];
 
-    const logDates = data.mealLogs.map((log) => startOfDay(parseISO(log.date)));
-    const startDate = min(logDates);
-    const endDate =
-      data.cycle.status === "active"
-        ? max([...logDates, startOfDay(new Date())])
-        : max(logDates);
+    const startDate = startOfDay(parseISO(mealLogDateBounds.start));
+    const lastLoggedDate = startOfDay(parseISO(mealLogDateBounds.end));
+    const endDate = data?.cycle.status === "active" && today > lastLoggedDate ? today : lastLoggedDate;
     return eachDayOfInterval({ start: startDate, end: endDate }).reverse();
-  }, [data]);
+  }, [mealLogDateBounds.start, mealLogDateBounds.end, data?.cycle.status, todayKey]);
 
   const visibleSummaryMembers = useMemo(() => {
     if (!data) {

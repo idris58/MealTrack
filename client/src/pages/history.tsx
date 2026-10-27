@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
-import { eachDayOfInterval, format, max, min, parseISO, startOfDay } from 'date-fns';
+import { eachDayOfInterval, format, parseISO, startOfDay } from 'date-fns';
 import { Archive, Check, ChevronDown, History, Lock, Pencil, Plus, ScrollText, ShoppingBag, Trash2, Utensils, Wallet, Zap, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
 
@@ -172,13 +172,23 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
     (total, member) => total + Math.abs(cleanCurrencyFloat(member.balance)),
     0,
   );
+  const mealLogDateBounds = details.mealLogs.reduce(
+    (bounds, log) => ({
+      start: bounds.start === null || log.date < bounds.start ? log.date : bounds.start,
+      end: bounds.end === null || log.date > bounds.end ? log.date : bounds.end,
+    }),
+    { start: null as string | null, end: null as string | null },
+  );
+  const emptyCycleDate = details.cycle.closedAt || details.cycle.startedAt;
   const days = useMemo(() => {
-    if (details.mealLogs.length === 0) {
-      return [startOfDay(new Date(details.cycle.closedAt || details.cycle.startedAt))];
+    if (mealLogDateBounds.start === null || mealLogDateBounds.end === null) {
+      return [startOfDay(new Date(emptyCycleDate))];
     }
-    const logDates = details.mealLogs.map((log) => startOfDay(parseISO(log.date)));
-    return eachDayOfInterval({ start: min(logDates), end: max(logDates) }).reverse();
-  }, [details]);
+    return eachDayOfInterval({
+      start: startOfDay(parseISO(mealLogDateBounds.start)),
+      end: startOfDay(parseISO(mealLogDateBounds.end)),
+    }).reverse();
+  }, [mealLogDateBounds.start, mealLogDateBounds.end, emptyCycleDate]);
 
   const handleMarkClosed = async () => {
     if (!canLock || isMarkingClosed) return;
