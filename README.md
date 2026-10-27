@@ -9,13 +9,13 @@ A meal management app for shared living or mess-style meal tracking. It supports
   - members
   - deposits
   - meal logs
-  - meal and fixed expenses
+  - meal and Utility expenses
 - Cycle workflow with three states:
   - `active`
   - `pending`
   - `closed`
 - Pending-cycle settlement flow:
-  - close current cycle and start a new clean cycle
+  - close the current cycle, then start a new cycle when ready
   - keep the previous cycle editable for settlement and corrections
   - mark the pending cycle as fully closed when done
 - Public read-only share link for the active or pending cycle
@@ -97,13 +97,13 @@ In Supabase Auth, enable the providers you want:
 - Email + Password
 - Google
 
-Make sure your redirect URLs include your app origin. For local development this is usually:
+Make sure your redirect URLs include your app auth route. For local development this is usually:
 
 ```text
-http://localhost:5000
+http://localhost:5000/app/auth
 ```
 
-If you use password recovery or OAuth callbacks through the auth page, also ensure `/auth` works in your configured redirect flow.
+Password recovery, email confirmation, and OAuth callbacks return to `/app/auth`.
 
 ## Install and Run
 
@@ -149,7 +149,7 @@ The app now uses cycle-based history instead of snapshot-only archives.
 ### `pending`
 
 - When you close the active cycle, it becomes `pending`.
-- A fresh empty `active` cycle is created immediately.
+- Starting the next `active` cycle is a separate action after the current cycle is pending.
 - The pending cycle remains editable for:
   - settlement deposits
   - expense corrections
@@ -198,4 +198,3 @@ The current server is designed to run as one instance. Shared-page SSE clients a
 - `npm run build` - build client and server
 - `npm run start` - run the production server
 - `npm run check` - run TypeScript type-checking
-- `npm run db:push` - run Drizzle push

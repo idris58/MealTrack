@@ -177,7 +177,11 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
   // ── Initial load ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!user?.id) { setLoading(false); return; }
+    if (!user?.id || !profile?.mess_id) {
+      setNotice(null);
+      setLoading(false);
+      return;
+    }
     let active = true;
 
     const load = async () => {
@@ -190,8 +194,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
           .gt('expires_at', now)
           .order('created_at', { ascending: false })
           .limit(1);
-        if (profile?.mess_id) q = q.eq('mess_id', profile.mess_id);
-        else q = q.eq('user_id', user.id);
+        q = q.eq('mess_id', profile.mess_id);
         const { data, error } = await q.maybeSingle();
         if (error) throw error;
         if (active) {

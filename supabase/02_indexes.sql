@@ -102,7 +102,19 @@ drop index if exists public.changelog_entries_mess_id_idx;
 drop index if exists public.notices_mess_id_idx;
 create index if not exists share_links_mess_id_idx on public.share_links(mess_id);
 create index if not exists share_links_profile_id_idx on public.share_links(profile_id);
-alter table if exists public.share_links drop constraint if exists share_links_pkey;
+alter table if exists public.share_links add column if not exists id uuid default gen_random_uuid();
+update public.share_links set id = gen_random_uuid() where id is null;
+alter table public.share_links alter column id set not null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.share_links'::regclass and contype = 'p'
+  ) then
+    alter table public.share_links add constraint share_links_pkey primary key (id);
+  end if;
+end;
+$$;
 -- PostgREST upserts specify ON CONFLICT (mess_id) without a predicate, so a
 -- partial unique index cannot be inferred. A normal unique index still permits
 -- multiple NULL mess_id values under PostgreSQL's default NULLS DISTINCT rule.
@@ -116,6 +128,7 @@ create index if not exists expenses_delete_expires_idx on public.expenses(delete
 create index if not exists members_delete_expires_idx on public.members(delete_expires_at) where deleted_at is not null;
 create index if not exists cycles_delete_expires_idx on public.cycles(delete_expires_at) where deleted_at is not null;
 create index if not exists push_subscriptions_user_audience_idx on public.push_subscriptions(user_id, audience);
+create index if not exists push_subscriptions_endpoint_idx on public.push_subscriptions(endpoint);
 create index if not exists push_subscriptions_shared_token_idx on public.push_subscriptions(share_token) where audience = 'shared';
 create unique index if not exists push_subscriptions_main_unique_idx on public.push_subscriptions(user_id, endpoint) where audience = 'main' and share_token is null;
 create unique index if not exists push_subscriptions_shared_unique_idx on public.push_subscriptions(user_id, share_token, endpoint) where audience = 'shared';

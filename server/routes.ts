@@ -253,18 +253,12 @@ type SharedPayload = ReturnType<typeof buildSharedPayload> & {
   activeNotice: ActiveNotice;
 };
 
-/**
- * A share scope identifies whose data a public share view exposes. The app uses
- * mess-based multi-tenancy: data rows are owned by a mess and may be written by
- * any operator (manager OR coordinator), so reads MUST be scoped by mess_id.
- * user_id is retained only as a fallback for legacy rows that were never
- * migrated into a mess (mess_id is null).
- */
-type Scope = { userId: string; messId: string | null };
+/** Public shared data and broadcasts are always scoped to a mess. */
+type Scope = { messId: string };
 
 /** A stable key identifying a scope, used for the SSE client registry. */
 function scopeKey(scope: Scope): string {
-  return scope.messId ? `mess:${scope.messId}` : `user:${scope.userId}`;
+  return `mess:${scope.messId}`;
 }
 
 /**
@@ -272,8 +266,8 @@ function scopeKey(scope: Scope): string {
  * `.eq(...)`. Must be applied before any transform (.order/.limit/.maybeSingle),
  * since .eq lives on the filter builder.
  */
-function scopeFilter(scope: Scope): ["mess_id" | "user_id", string] {
-  return scope.messId ? ["mess_id", scope.messId] : ["user_id", scope.userId];
+function scopeFilter(scope: Scope): ["mess_id", string] {
+  return ["mess_id", scope.messId];
 }
 
 // This registry and its debounce timers are process-local. Before running more
@@ -521,11 +515,13 @@ async function resolveScopeForUserId(userId: string): Promise<Scope> {
     .eq("id", userId)
     .maybeSingle();
 
-  if (error) {
-    console.error("Error resolving mess scope for user:", error);
+  if (error) throw error;
+  if (!data?.mess_id) {
+    const missingMessError = new Error("You must belong to a mess to broadcast updates.");
+    (missingMessError as Error & { status?: number }).status = 403;
+    throw missingMessError;
   }
-
-  return { userId, messId: (data?.mess_id as string | null) ?? null };
+  return { messId: data.mess_id as string };
 }
 
 async function requireMessOperator(userId: string) {
@@ -575,8 +571,8 @@ async function fetchAllPages<T>(
 }
 
 /** Resolve the tenancy scope a share link points at. */
-function scopeFromShareLink(shareLink: { user_id: string; mess_id?: string | null }): Scope {
-  return { userId: shareLink.user_id, messId: shareLink.mess_id ?? null };
+function scopeFromShareLink(shareLink: { mess_id: string }): Scope {
+  return { messId: shareLink.mess_id };
 }
 
 export async function registerRoutes(
@@ -648,23 +644,21 @@ export async function registerRoutes(
 
     const supabaseAdmin = assertSupabaseAdmin();
     const scope = await resolveScopeForUserId(userId);
-    if (scope.messId) await requireMessOperator(userId);
-    let linkQuery = supabaseAdmin.from("share_links").select("token");
-    linkQuery = scope.messId
-      ? linkQuery.eq("mess_id", scope.messId)
-      : linkQuery.eq("user_id", userId).is("mess_id", null);
-    const { data: currentLink, error: linkError } = await linkQuery.maybeSingle();
+    await requireMessOperator(userId);
+    const { data: currentLink, error: linkError } = await supabaseAdmin
+      .from("share_links")
+      .select("token")
+      .eq("mess_id", scope.messId)
+      .maybeSingle();
     if (linkError) throw linkError;
     if (!currentLink || normalizeShareToken(currentLink.token) === oldToken) {
       return res.status(409).json({ message: "The share token has not changed." });
     }
 
-    let deleteQuery = supabaseAdmin.from("push_subscriptions").delete()
-      .eq("audience", "shared").eq("share_token", oldToken);
-    deleteQuery = scope.messId
-      ? deleteQuery.eq("mess_id", scope.messId)
-      : deleteQuery.eq("user_id", userId).is("mess_id", null);
-    const { error: deleteError } = await deleteQuery;
+    const { error: deleteError } = await supabaseAdmin.from("push_subscriptions").delete()
+      .eq("audience", "shared")
+      .eq("share_token", oldToken)
+      .eq("mess_id", scope.messId);
     if (deleteError) throw deleteError;
     return res.json({ ok: true });
   }));
@@ -988,6 +982,7 @@ export async function registerRoutes(
       .from("share_links")
       .select("user_id, mess_id, is_enabled")
       .eq("token", token)
+      .not("mess_id", "is", null)
       .maybeSingle();
 
     if (error) {
@@ -1025,6 +1020,7 @@ export async function registerRoutes(
       .from("share_links")
       .select("user_id, mess_id, is_enabled")
       .eq("token", token)
+      .not("mess_id", "is", null)
       .maybeSingle();
 
     if (shareLinkError) {
@@ -1066,6 +1062,7 @@ export async function registerRoutes(
       .from("share_links")
       .select("user_id, mess_id")
       .eq("token", token)
+      .not("mess_id", "is", null)
       .maybeSingle();
 
     if (error) {
@@ -1098,6 +1095,7 @@ export async function registerRoutes(
       .from("share_links")
       .select("user_id, is_enabled, mess_id")
       .eq("token", token)
+      .not("mess_id", "is", null)
       .maybeSingle();
 
     if (shareLinkError) {
@@ -1183,6 +1181,7 @@ export async function registerRoutes(
       .from("share_links")
       .select("user_id, is_enabled, mess_id")
       .eq("token", token)
+      .not("mess_id", "is", null)
       .maybeSingle();
 
     if (shareLinkError) {
