@@ -153,6 +153,7 @@ async function sendPushToRows(
     url: string;
     tag: string;
   },
+  options: { ttlSeconds?: number } = {},
 ) {
   const failedUserIds = new Set<string>();
   if (!ensureVapidConfigured()) {
@@ -179,7 +180,11 @@ async function sendPushToRows(
       }
 
       try {
-        await webpush.sendNotification(toWebPushSubscription(row), data);
+        await webpush.sendNotification(
+          toWebPushSubscription(row),
+          data,
+          options.ttlSeconds === undefined ? undefined : { TTL: options.ttlSeconds },
+        );
         successfulUserIds.add(row.user_id);
       } catch (error) {
         const statusCode =
@@ -927,7 +932,7 @@ export async function sendMealLogReminders() {
         body: "Today's meal has not been logged yet.",
         url: "/app/meals",
         tag: `meal-log-reminder-${local.date}-${cycle.id}`,
-      });
+      }, { ttlSeconds: 15 * 60 });
       if (failedUserIds.has(profile.id)) await removeDelivery(profile.id, "meal_log_reminder", dedupeKey);
     }
   }

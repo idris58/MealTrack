@@ -25,8 +25,24 @@ cleanupOutdatedCaches();
 clientsClaim();
 precacheAndRoute(self.__WB_MANIFEST);
 
+const appShellHandler = createHandlerBoundToURL("/index.html");
 registerRoute(
-  new NavigationRoute(createHandlerBoundToURL("/index.html"), {
+  new NavigationRoute(async ({ event, request, url }) => {
+    const response = await appShellHandler({ event, request, url });
+    if (url.pathname !== "/shared" && !url.pathname.startsWith("/shared/")) return response;
+
+    const html = await response.text();
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    return new Response(html.replace(
+      /<link\s+rel=["']manifest["'][^>]*>/i,
+      '<link rel="manifest" href="/shared-manifest.webmanifest" />',
+    ), {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }, {
     denylist: [/^\/api\//],
   }),
 );
@@ -38,17 +54,27 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  const payload = event.data?.json() as PushPayload | undefined;
-  const title = payload?.title || "MealTrack";
+  let payload: PushPayload = {};
+  if (event.data) {
+    try {
+      const parsed: unknown = event.data.json();
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        payload = parsed as PushPayload;
+      }
+    } catch {
+      payload = { body: "You have a new MealTrack update." };
+    }
+  }
+  const title = typeof payload.title === "string" && payload.title ? payload.title : "MealTrack";
 
   event.waitUntil(
     self.registration.showNotification(title, {
-      body: payload?.body,
-      icon: payload?.icon || "/icon-192.png",
-      badge: payload?.badge || "/badge-96.png",
-      tag: payload?.tag,
+      body: typeof payload.body === "string" ? payload.body : undefined,
+      icon: typeof payload.icon === "string" ? payload.icon : "/icon-192.png",
+      badge: typeof payload.badge === "string" ? payload.badge : "/badge-96.png",
+      tag: typeof payload.tag === "string" ? payload.tag : undefined,
       data: {
-        url: payload?.url || "/app",
+        url: typeof payload.url === "string" ? payload.url : "/app",
       },
     }),
   );
