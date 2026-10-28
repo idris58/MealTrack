@@ -32,6 +32,7 @@ import { format, formatDistanceToNow, isPast, parseISO, addHours } from 'date-fn
 import { cn } from '@/lib/utils';
 import { useNotice } from '@/lib/notice-context';
 import { useAuth } from '@/lib/auth-context';
+import { useNetworkStatus } from '@/lib/pwa';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ const DURATION_PRESETS = [
 function ReadPanel({ onEdit, onClose }: { onEdit: () => void; onClose: () => void }) {
   const { notice, loading, deleteNotice } = useNotice();
   const { profile } = useAuth();
+  const { isOnline } = useNetworkStatus();
   const canManage = profile?.role === 'manager' || profile?.role === 'coordinator';
   const [deleting, setDeleting] = useState(false);
 
@@ -85,6 +87,7 @@ function ReadPanel({ onEdit, onClose }: { onEdit: () => void; onClose: () => voi
   const expiry = parseISO(notice.expiresAt);
 
   const handleDelete = async () => {
+    if (!isOnline) return;
     setDeleting(true);
     await deleteNotice(notice.id);
     setDeleting(false);
@@ -127,12 +130,15 @@ function ReadPanel({ onEdit, onClose }: { onEdit: () => void; onClose: () => voi
 
       {/* Manager actions */}
       {canManage && (
-        <div className="flex gap-2">
+        <div className="space-y-2">
+          {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Editing or removing a notice needs a connection. Reconnect before changing it.</p> : null}
+          <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
             className="gap-2"
             onClick={onEdit}
+            disabled={!isOnline}
           >
             <Pencil className="h-3.5 w-3.5" />
             Edit Notice
@@ -142,11 +148,12 @@ function ReadPanel({ onEdit, onClose }: { onEdit: () => void; onClose: () => voi
             size="sm"
             className="gap-2 border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
             onClick={handleDelete}
-            disabled={deleting}
+            disabled={deleting || !isOnline}
           >
             {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             Remove
           </Button>
+          </div>
         </div>
       )}
     </div>
@@ -163,6 +170,7 @@ function PostEditPanel({
   onClose: () => void;
 }) {
   const { notice, postNotice, updateNotice } = useNotice();
+  const { isOnline } = useNetworkStatus();
   const isEdit = mode === 'edit';
 
   const [content, setContent] = useState(isEdit && notice ? notice.content : '');
@@ -189,6 +197,7 @@ function PostEditPanel({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!isOnline) return;
     const trimContent = content.trim();
     if (!trimContent) { setError('Message is required.'); return; }
     const expiresAt = computeExpiresAt();
@@ -328,13 +337,18 @@ function PostEditPanel({
           {error}
         </p>
       )}
+      {!isOnline ? (
+        <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          Posting or editing a notice needs a connection. Reconnect before saving.
+        </p>
+      ) : null}
 
       {/* Submit */}
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" onClick={onClose} disabled={working}>
           Cancel
         </Button>
-        <Button type="submit" className="gap-2" disabled={working}>
+        <Button type="submit" className="gap-2" disabled={working || !isOnline}>
           {working
             ? <Loader2 className="h-4 w-4 animate-spin" />
             : <SendHorizonal className="h-4 w-4" />}

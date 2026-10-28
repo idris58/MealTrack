@@ -45,6 +45,7 @@ import { SyncBadge } from '@/components/sync-badge';
 import { cn } from '@/lib/utils';
 import { runMutation } from '@/lib/run-mutation';
 import { toast } from 'sonner';
+import { useNetworkStatus } from '@/lib/pwa';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DELETE_GRACE_MS = 10 * 1000;
@@ -73,13 +74,14 @@ function inviteTime(value: string) {
 // ── Sub-forms ─────────────────────────────────────────────────────────────────
 function AddMemberForm({ onClose }: { onClose: () => void }) {
   const { addMember } = useMealActions();
+  const { isOnline } = useNetworkStatus();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<z.infer<typeof memberSchema>>({
     resolver: zodResolver(memberSchema),
     defaultValues: { name: '' },
   });
   const onSubmit = async (data: z.infer<typeof memberSchema>) => {
-    if (isSubmitting) return;
+    if (isSubmitting || !isOnline) return;
     setIsSubmitting(true);
     try { await runMutation(async () => { await addMember(data.name); onClose(); }); } finally { setIsSubmitting(false); }
   };
@@ -89,7 +91,8 @@ function AddMemberForm({ onClose }: { onClose: () => void }) {
         <FormField control={form.control} name="name" render={({ field }) => (
           <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Member Name" {...field} /></FormControl><FormMessage /></FormItem>
         )} />
-        <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? 'Creating...' : 'Create Member'}</Button>
+        {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Adding a member needs a connection. Reconnect before saving.</p> : null}
+        <Button type="submit" className="w-full" disabled={isSubmitting || !isOnline}>{isSubmitting ? 'Creating...' : 'Create Member'}</Button>
       </form>
     </Form>
   );

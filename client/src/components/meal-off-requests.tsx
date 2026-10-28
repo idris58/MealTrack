@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { Member } from '@/lib/meal-context';
 import { supabase } from '@/lib/supabase';
 import { triggerMealOffSubmitPush, triggerMealOffDecisionPush } from '@/lib/push-triggers';
+import { useNetworkStatus } from '@/lib/pwa';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,7 @@ function RequestRow({
   memberName,
   isStaff,
   busyId,
+  isOnline,
   onApprove,
   onDecline,
   onCancel,
@@ -73,6 +75,7 @@ function RequestRow({
   memberName?: string;
   isStaff: boolean;
   busyId: string | null;
+  isOnline: boolean;
   onApprove: (request: MealOffRequest) => void;
   onDecline: (request: MealOffRequest) => void;
   onCancel: (request: MealOffRequest) => void;
@@ -106,15 +109,15 @@ function RequestRow({
         <div className="mt-3 flex items-center justify-end gap-2 border-t pt-3">
           {canReview ? (
             <>
-              <Button variant="outline" size="sm" className="gap-1.5" disabled={isBusy} onClick={() => onDecline(request)}>
+              <Button variant="outline" size="sm" className="gap-1.5" disabled={isBusy || !isOnline} onClick={() => onDecline(request)}>
                 {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />} Decline
               </Button>
-              <Button size="sm" className="gap-1.5" disabled={isBusy} onClick={() => onApprove(request)}>
+              <Button size="sm" className="gap-1.5" disabled={isBusy || !isOnline} onClick={() => onApprove(request)}>
                 {isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Approve
               </Button>
             </>
           ) : null}
-          {canCancel ? <Button variant="outline" size="sm" disabled={isBusy} onClick={() => onCancel(request)}>Cancel request</Button> : null}
+          {canCancel ? <Button variant="outline" size="sm" disabled={isBusy || !isOnline} onClick={() => onCancel(request)}>Cancel request</Button> : null}
         </div>
       ) : null}
     </div>
@@ -122,6 +125,7 @@ function RequestRow({
 }
 
 export function MealOffRequests({ activeCycleId, members, profile, canOperateMeals }: MealOffRequestsProps) {
+  const { isOnline } = useNetworkStatus();
   const [requests, setRequests] = useState<MealOffRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -177,6 +181,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
   };
 
   const submitRequest = async () => {
+    if (!isOnline) return;
     if (!linkedMember || !profile.mess_id) return;
     if (endDate < startDate) {
       toast.error('Choose a valid date range', { description: 'The end date cannot be before the start date.' });
@@ -226,6 +231,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
   };
 
   const reviewRequest = async (request: MealOffRequest, status: 'approved' | 'declined') => {
+    if (!isOnline) return;
     setBusyId(request.id);
     const { error } = await supabase
       .from('meal_off_requests')
@@ -245,6 +251,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
   };
 
   const cancelRequest = async (request: MealOffRequest) => {
+    if (!isOnline) return;
     setBusyId(request.id);
     const { error } = await supabase
       .from('meal_off_requests')
@@ -286,12 +293,13 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
               <DialogTitle>Meal-off requests</DialogTitle>
               <p className="text-sm text-muted-foreground">Review upcoming absences before planning meals.</p>
             </DialogHeader>
+            {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Meal-off requests need a connection to approve, decline, or cancel. Reconnect to manage them.</p> : null}
             <div className="max-h-[min(60vh,520px)] space-y-3 overflow-y-auto pr-1">
-              {loading ? <div className="flex h-24 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading requests</div> : pendingRequests.length ? pendingRequests.map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />) : <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No meal-off requests need review.</div>}
+              {loading ? <div className="flex h-24 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading requests</div> : pendingRequests.length ? pendingRequests.map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff isOnline={isOnline} busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />) : <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No meal-off requests need review.</div>}
               {!loading && currentRequests.some((request) => request.status === 'approved') ? (
                 <div className="space-y-2 pt-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Already approved</p>
-                  {currentRequests.filter((request) => request.status === 'approved').map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />)}
+                  {currentRequests.filter((request) => request.status === 'approved').map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff isOnline={isOnline} busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />)}
                 </div>
               ) : null}
             </div>
@@ -307,6 +315,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
               <DialogTitle>Request a meal off</DialogTitle>
               <p className="text-sm leading-5 text-muted-foreground">Choose today or a future date for an upcoming meal. Your request will not change any meal that has already been logged.</p>
             </DialogHeader>
+            {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Sending or cancelling a meal-off request needs a connection. Reconnect before saving.</p> : null}
             <div className="grid gap-5 py-1">
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2"><Label htmlFor="meal-off-start">From</Label><Input id="meal-off-start" type="date" min={earliestDate} value={startDate} onChange={(event) => { setStartDate(event.target.value); if (endDate < event.target.value) setEndDate(event.target.value); }} /></div>
@@ -324,11 +333,11 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
                 </div>
               </div>
               <div className="grid gap-2"><Label htmlFor="meal-off-note">Note <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="meal-off-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={240} placeholder="Travelling, family plans, or anything helpful for the team" className="min-h-[82px] resize-none" /></div>
-              {pendingRequests.length ? <div className="space-y-2 border-t pt-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your active requests</p>{currentRequests.map((request) => <RequestRow key={request.id} request={request} isStaff={false} busyId={busyId} onApprove={() => undefined} onDecline={() => undefined} onCancel={(item) => void cancelRequest(item)} />)}</div> : null}
+              {pendingRequests.length ? <div className="space-y-2 border-t pt-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your active requests</p>{currentRequests.map((request) => <RequestRow key={request.id} request={request} isStaff={false} isOnline={isOnline} busyId={busyId} onApprove={() => undefined} onDecline={() => undefined} onCancel={(item) => void cancelRequest(item)} />)}</div> : null}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button className="gap-1.5" disabled={busyId === 'new'} onClick={() => void submitRequest()}>{busyId === 'new' ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}Send request</Button>
+              <Button className="gap-1.5" disabled={busyId === 'new' || !isOnline} onClick={() => void submitRequest()}>{busyId === 'new' ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}Send request</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

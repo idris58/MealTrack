@@ -141,6 +141,7 @@ function CycleManagementCard() {
   };
 
   const handleCloseConfirm = async () => {
+    if (!isOnline) return;
     setIsClosing(true);
     try { await closeActiveCycle(); setCloseDialogOpen(false); setCloseStep(1); }
     finally { setIsClosing(false); }
@@ -166,6 +167,10 @@ function CycleManagementCard() {
   };
 
   const handleStart = async () => {
+    if (!isOnline) {
+      setStartError('Starting a cycle needs a connection. Reconnect before saving.');
+      return;
+    }
     if (!cycleName.trim()) { setStartError('Cycle name is required.'); return; }
     setIsStarting(true); setStartError(null);
     try {
@@ -267,12 +272,13 @@ function CycleManagementCard() {
                 <Button
                   variant="outline" size="sm"
                   className="gap-2 border-amber-300 text-amber-700 hover:border-amber-400 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                  disabled={!!pendingCycle}
-                  title={pendingCycle ? 'Finish the pending settlement before closing this cycle' : undefined}
+                  disabled={!!pendingCycle || !isOnline}
+                  title={!isOnline ? 'Reconnect to close the current cycle' : pendingCycle ? 'Finish the pending settlement before closing this cycle' : undefined}
                   onClick={() => { setCloseStep(1); setCloseDialogOpen(true); }}
                 >
                   <Archive className="h-4 w-4" />Close Cycle
                 </Button>
+                {!isOnline ? <p role="status" className="mt-2 text-sm text-amber-700 dark:text-amber-300">Closing a cycle needs a connection. Reconnect before closing.</p> : null}
               </div>
             )}
           </div>
@@ -351,9 +357,10 @@ function CycleManagementCard() {
                 <DialogDescription>This action cannot be undone. The cycle will enter pending settlement.</DialogDescription>
               </DialogHeader>
               <p className="text-sm text-muted-foreground py-2">Are you sure you want to close <strong>"{activeCycle?.name}"</strong>? No new cycle will start automatically.</p>
+              {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Closing a cycle needs a connection. Reconnect before closing.</p> : null}
               <div className="flex gap-2 justify-end">
                 <Button variant="ghost" onClick={() => setCloseStep(1)} disabled={isClosing}>Back</Button>
-                <Button variant="destructive" className="gap-2" onClick={() => void handleCloseConfirm()} disabled={isClosing}>
+                <Button variant="destructive" className="gap-2" onClick={() => void handleCloseConfirm()} disabled={isClosing || !isOnline}>
                   {isClosing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
                   {isClosing ? 'Closing…' : 'Yes, Close Cycle'}
                 </Button>
@@ -543,10 +550,11 @@ function CycleManagementCard() {
             })()}
 
             {startError && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">{startError}</p>}
+            {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Starting a cycle needs a connection. Reconnect before saving.</p> : null}
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => setStartDialogOpen(false)} disabled={isStarting}>Cancel</Button>
-            <Button className="gap-2" onClick={() => void handleStart()} disabled={isStarting}>
+            <Button className="gap-2" onClick={() => void handleStart()} disabled={isStarting || !isOnline}>
               {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {isStarting ? 'Starting…' : 'Start Cycle'}
             </Button>
