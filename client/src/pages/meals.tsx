@@ -3,7 +3,7 @@ import { useMealData } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Utensils, UtensilsCrossed, Users, Play } from 'lucide-react';
 import { format, eachDayOfInterval, parseISO, max, startOfDay } from 'date-fns';
 import { Link } from 'wouter';
@@ -11,6 +11,7 @@ import { SyncBadge } from '@/components/sync-badge';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { MealLogTable } from '@/components/meal-log-table';
 import { MealOffRequests } from '@/components/meal-off-requests';
+import { PageHeader } from '@/components/page-header';
 
 function formatMealCount(value: number) {
   const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
@@ -57,19 +58,7 @@ export default function Meals() {
 
   return (
     <div className="space-y-6 h-full flex flex-col">
-      <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 sm:p-7 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
-            <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
-              <Utensils className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold font-heading tracking-tight sm:text-3xl truncate">Meal Logs</h1>
-              <p className="hidden sm:block mt-1 text-sm leading-6 text-muted-foreground">
-                Log daily member meals and view consumption records.
-              </p>
-            </div>
-          </div>
+      <PageHeader icon={Utensils} title="Meal Logs" description="Log daily member meals and view consumption records.">
           {canOperateMeals ? (
             <Dialog
               open={openMeal}
@@ -96,6 +85,7 @@ export default function Meals() {
                   <DialogTitle>
                     {selectedDate ? `Edit Meals for ${format(selectedDate, 'PPP')}` : 'Log Meals by Date'}
                   </DialogTitle>
+                  <DialogDescription>Record meal counts for the selected date.</DialogDescription>
                 </DialogHeader>
                 <MealCountEditor
                   members={members}
@@ -117,8 +107,7 @@ export default function Meals() {
               canOperateMeals={canOperateMeals}
             />
           ) : null}
-        </div>
-      </header>
+      </PageHeader>
 
       {activeCycle && members.length > 0 && mealLogs.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:gap-4">

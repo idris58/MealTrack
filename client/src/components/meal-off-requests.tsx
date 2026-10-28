@@ -9,7 +9,7 @@ import { useNetworkStatus } from '@/lib/pwa';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -291,9 +291,9 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
           <DialogContent size="md">
             <DialogHeader>
               <DialogTitle>Meal-off requests</DialogTitle>
-              <p className="text-sm text-muted-foreground">Review upcoming absences before planning meals.</p>
+              <DialogDescription>Review upcoming absences before planning meals.</DialogDescription>
             </DialogHeader>
-            {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Meal-off requests need a connection to approve, decline, or cancel. Reconnect to manage them.</p> : null}
+            {!isOnline ? <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">Meal-off requests need a connection to approve, decline, or cancel. Reconnect to manage them.</p> : null}
             <div className="max-h-[min(60vh,520px)] space-y-3 overflow-y-auto pr-1">
               {loading ? <div className="flex h-24 items-center justify-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading requests</div> : pendingRequests.length ? pendingRequests.map((request) => <RequestRow key={request.id} request={request} memberName={memberNames.get(request.member_id)} isStaff isOnline={isOnline} busyId={busyId} onApprove={(item) => void reviewRequest(item, 'approved')} onDecline={(item) => void reviewRequest(item, 'declined')} onCancel={(item) => void cancelRequest(item)} />) : <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No meal-off requests need review.</div>}
               {!loading && currentRequests.some((request) => request.status === 'approved') ? (
@@ -313,9 +313,9 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
           <DialogContent size="md">
             <DialogHeader>
               <DialogTitle>Request a meal off</DialogTitle>
-              <p className="text-sm leading-5 text-muted-foreground">Choose today or a future date for an upcoming meal. Your request will not change any meal that has already been logged.</p>
+              <DialogDescription>Choose today or a future date for an upcoming meal. Your request will not change any meal that has already been logged.</DialogDescription>
             </DialogHeader>
-            {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Sending or cancelling a meal-off request needs a connection. Reconnect before saving.</p> : null}
+            {!isOnline ? <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">Sending or cancelling a meal-off request needs a connection. Reconnect before saving.</p> : null}
             <div className="grid gap-5 py-1">
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2"><Label htmlFor="meal-off-start">From</Label><Input id="meal-off-start" type="date" min={earliestDate} value={startDate} onChange={(event) => { setStartDate(event.target.value); if (endDate < event.target.value) setEndDate(event.target.value); }} /></div>

@@ -535,7 +535,7 @@ function PwaUpdateNotifier() {
                 <button
                   type="button"
                   onClick={handleUpdate}
-                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-600 px-3 text-[12px] font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
+                  className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-success px-3 text-[12px] font-semibold text-success-foreground shadow-sm transition-all hover:bg-success/90 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-1"
                 >
                   <RefreshCw className="h-3.5 w-3.5 shrink-0" />
                   Update now

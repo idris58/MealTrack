@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -60,9 +61,9 @@ function IosInstallDialog({
             <DialogTitle className="text-left font-heading text-lg font-bold text-white">
               Install {appName}
             </DialogTitle>
-            <p className="text-left text-sm leading-relaxed text-emerald-100">
+            <DialogDescription className="text-left text-sm leading-relaxed text-emerald-100">
               Add to your home screen for quick access. Previously loaded shared dashboards may remain available offline.
-            </p>
+            </DialogDescription>
           </DialogHeader>
         </div>
 

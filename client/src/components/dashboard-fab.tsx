@@ -47,7 +47,7 @@ export function DashboardFab({ onOpenExpense, onOpenMeal }: DashboardFabProps) {
             id: 'expense',
             label: 'Add Expense',
             icon: ShoppingBag,
-            color: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/25',
+            color: 'bg-success hover:bg-success/90 text-success-foreground shadow-success/25',
             badgeBg: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
             onClick: () => {
               setIsOpen(false);
@@ -77,7 +77,7 @@ export function DashboardFab({ onOpenExpense, onOpenMeal }: DashboardFabProps) {
             id: 'notice',
             label: 'Post Notice',
             icon: Megaphone,
-            color: 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/25',
+            color: 'bg-warning hover:bg-warning/90 text-warning-foreground shadow-warning/25',
             badgeBg: 'bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-200 border-amber-200 dark:border-amber-800',
             onClick: () => {
               setIsOpen(false);

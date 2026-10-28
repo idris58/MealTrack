@@ -9,7 +9,7 @@ import { useMealActions, useMealData, type Member } from '@/lib/meal-context';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils';
 import { runMutation } from '@/lib/run-mutation';
 import { toast } from 'sonner';
 import { useNetworkStatus } from '@/lib/pwa';
+import { PageHeader } from '@/components/page-header';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DELETE_GRACE_MS = 10 * 1000;
@@ -91,7 +92,7 @@ function AddMemberForm({ onClose }: { onClose: () => void }) {
         <FormField control={form.control} name="name" render={({ field }) => (
           <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="Member Name" {...field} /></FormControl><FormMessage /></FormItem>
         )} />
-        {!isOnline ? <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">Adding a member needs a connection. Reconnect before saving.</p> : null}
+        {!isOnline ? <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">Adding a member needs a connection. Reconnect before saving.</p> : null}
         <Button type="submit" className="w-full" disabled={isSubmitting || !isOnline}>{isSubmitting ? 'Creating...' : 'Create Member'}</Button>
       </form>
     </Form>
@@ -459,17 +460,7 @@ export function ManagerMembersView() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 sm:p-7 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-              <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
-                <Users className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-xl font-bold font-heading tracking-tight sm:text-3xl truncate">Members</h1>
-                <p className="hidden sm:block mt-1 text-sm leading-6 text-muted-foreground">Manage mess members and cycle deposits.</p>
-              </div>
-            </div>
+        <PageHeader icon={Users} title="Members" description="Manage mess members and cycle deposits.">
             {canManageMembers ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -488,22 +479,19 @@ export function ManagerMembersView() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
-          </div>
-        </header>
+        </PageHeader>
         {profilesError ? <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{profilesError}</p> : null}
 
         {/* Dialogs */}
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}><DialogContent><DialogHeader><DialogTitle>Add New Member</DialogTitle></DialogHeader><AddMemberForm onClose={() => setIsAddOpen(false)} /></DialogContent></Dialog>
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}><DialogContent><DialogHeader><DialogTitle>Add New Member</DialogTitle><DialogDescription>Add an offline member to the mess roster.</DialogDescription></DialogHeader><AddMemberForm onClose={() => setIsAddOpen(false)} /></DialogContent></Dialog>
 
         <Dialog open={inviteOpen} onOpenChange={(open) => { setInviteOpen(open); if (!open) { setInviteError(null); setInviteTargetMemberId('new'); } }}>
           <DialogContent className="max-w-md w-[calc(100%-2rem)] p-5 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-lg font-semibold">Invite a member</DialogTitle>
+              <DialogDescription>The invite link works once and expires in 7 days. The recipient can create an account or sign in to join.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-1 min-w-0">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                The link works once and expires in 7 days. The recipient can create an account or sign in to join.
-              </p>
               <div className="grid gap-2.5 min-w-0">
                 <button
                   type="button"
@@ -613,7 +601,7 @@ export function ManagerMembersView() {
         </Dialog>
 
         <Dialog open={!!createdInvite} onOpenChange={(open) => !open && setCreatedInvite(null)}>
-          <DialogContent><DialogHeader><DialogTitle>Invite link ready</DialogTitle></DialogHeader>
+          <DialogContent><DialogHeader><DialogTitle>Invite link ready</DialogTitle><DialogDescription>Share this one-time link with its intended recipient before it expires.</DialogDescription></DialogHeader>
             {createdInvite ? <div className="space-y-4">
               <div className="rounded-xl border bg-muted/40 p-4 text-sm">
                 <p className="font-semibold">{createdInvite.target_member_name ? `For ${createdInvite.target_member_name}` : 'For a new member'}</p>
@@ -629,7 +617,7 @@ export function ManagerMembersView() {
         </Dialog>
 
         <Dialog open={inviteManagerOpen} onOpenChange={setInviteManagerOpen}>
-          <DialogContent size="lg"><DialogHeader><DialogTitle>Invite links</DialogTitle></DialogHeader>
+          <DialogContent size="lg"><DialogHeader><DialogTitle>Invite links</DialogTitle><DialogDescription>Manage one-time member invitations, which expire after 7 days.</DialogDescription></DialogHeader>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">Links are one-time and expire after 7 days.</p>
               {inviteError ? <p className="text-sm text-destructive">{inviteError}</p> : null}
@@ -663,8 +651,7 @@ export function ManagerMembersView() {
 
         <Dialog open={archivedMembersOpen} onOpenChange={setArchivedMembersOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle>Archived members</DialogTitle></DialogHeader>
-            <p className="text-sm text-muted-foreground">Historical meal and deposit records are preserved. Restore a member to add them back to the active roster.</p>
+            <DialogHeader><DialogTitle>Archived members</DialogTitle><DialogDescription>Historical meal and deposit records are preserved. Restore a member to add them back to the active roster.</DialogDescription></DialogHeader>
             {visibleArchivedMembers.length === 0 ? (
               <p className="py-5 text-center text-sm text-muted-foreground">No archived members.</p>
             ) : (
@@ -716,7 +703,7 @@ export function ManagerMembersView() {
         )}
 
         <Dialog open={!!depositMemberId} onOpenChange={(open) => !open && setDepositMemberId(null)}>
-          <DialogContent><DialogHeader><DialogTitle>Manage Deposit</DialogTitle></DialogHeader>
+          <DialogContent><DialogHeader><DialogTitle>Manage Deposit</DialogTitle><DialogDescription>Record a payment or adjustment to this member’s cycle balance.</DialogDescription></DialogHeader>
             {depositMemberId && <DepositForm memberId={depositMemberId} onClose={() => setDepositMemberId(null)} />}
           </DialogContent>
         </Dialog>

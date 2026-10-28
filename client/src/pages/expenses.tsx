@@ -6,13 +6,14 @@ import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { ShoppingBag, Zap, ChartPie, Plus, Pencil, DollarSign, Search, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { SyncBadge } from '@/components/sync-badge';
 import { ExpenseForm } from '@/components/expense-form';
+import { PageHeader } from '@/components/page-header';
 
 const DELETE_GRACE_MS = 10 * 1000;
 
@@ -132,19 +133,7 @@ export default function Expenses() {
   return (
     <div className="flex h-full flex-col space-y-5">
       {/* ── Header ── */}
-      <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 sm:p-7 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
-              <ShoppingBag className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold font-heading tracking-tight sm:text-3xl truncate">Expenses</h1>
-              <p className="hidden sm:block mt-1 text-sm leading-6 text-muted-foreground">
-                Track groceries, bazaar costs, and shared mess utility bills.
-              </p>
-            </div>
-          </div>
+      <PageHeader icon={ShoppingBag} title="Expenses" description="Track groceries, bazaar costs, and shared mess utility bills.">
           {canManageExpenses ? (
             <Dialog open={openExpense} onOpenChange={setOpenExpense}>
               <DialogTrigger asChild>
@@ -154,13 +143,12 @@ export default function Expenses() {
                 </Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogHeader><DialogTitle>Add New Expense</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Add New Expense</DialogTitle><DialogDescription>Record a shared meal or utility expense for this cycle.</DialogDescription></DialogHeader>
         <ExpenseForm mode="create" onClose={() => setOpenExpense(false)} />
               </DialogContent>
             </Dialog>
           ) : null}
-        </div>
-      </header>
+      </PageHeader>
 
       {/* ── KPI Summary Cards ── */}
       {activeCycle && allExpenses.length > 0 && (
@@ -320,7 +308,7 @@ export default function Expenses() {
       {/* ── Edit Dialog ── */}
       <Dialog open={!!editingExpense} onOpenChange={(open) => !open && setEditingExpense(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit Expense</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Edit Expense</DialogTitle><DialogDescription>Update the amount, category, date, or note for this expense.</DialogDescription></DialogHeader>
           {editingExpense ? (
             <ExpenseForm
               mode="edit"

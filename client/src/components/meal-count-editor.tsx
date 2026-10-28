@@ -53,7 +53,7 @@ export function MealCountEditor({ members, mealLogs, initialDate, cycleId, onClo
           </div>
         ))}
       </div>
-      <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={editor.isSubmitting}>
+      <Button type="submit" variant="success" className="w-full" disabled={editor.isSubmitting}>
         {editor.isSubmitting ? 'Saving...' : submitLabel}
       </Button>
     </form>

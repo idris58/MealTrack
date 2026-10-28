@@ -33,6 +33,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { useLocation } from 'wouter';
+import { PageHeader } from '@/components/page-header';
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -841,24 +842,11 @@ export default function ChangelogPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      {/* Page header */}
-      <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 sm:p-7 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
-              <ScrollText className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold font-heading tracking-tight sm:text-3xl truncate">Changelog</h1>
-              <p className="hidden sm:block mt-1 text-sm leading-6 text-muted-foreground">
-                {pendingCycle
-                  ? 'Track settlement changes in the pending cycle alongside new active cycle activity.'
-                  : activeCycle
-                    ? 'Track create, update, and delete activity for the current active cycle.'
-                    : 'No active cycle is available yet.'}
-              </p>
-            </div>
-          </div>
+      <PageHeader icon={ScrollText} title="Changelog" description={pendingCycle
+        ? 'Track settlement changes in the pending cycle alongside new active cycle activity.'
+        : activeCycle
+          ? 'Track create, update, and delete activity for the current active cycle.'
+          : 'No active cycle is available yet.'}>
           <Button
             type="button"
             variant="outline"
@@ -875,8 +863,7 @@ export default function ChangelogPage() {
             <ArrowLeft className="h-4 w-4 text-primary" />
             <span>Back</span>
           </Button>
-        </div>
-      </header>
+      </PageHeader>
 
       {/* Filters */}
       <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">

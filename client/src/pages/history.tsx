@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,6 +22,7 @@ import { MealLogTable } from '@/components/meal-log-table';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { ExpenseForm } from '@/components/expense-form';
+import { PageHeader } from '@/components/page-header';
 import { runMutation } from '@/lib/run-mutation';
 
 function formatCurrency(amount: number) {
@@ -575,7 +576,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
 
         <Dialog open={!!depositMember} onOpenChange={(open) => !open && setDepositMember(null)}>
           <DialogContent>
-            <DialogHeader><DialogTitle>Record Settlement</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Record Settlement</DialogTitle><DialogDescription>Record a member payment or adjustment for this cycle.</DialogDescription></DialogHeader>
             {depositMember ? (
               <SettlementForm cycleId={details.cycle.id} memberId={depositMember.id} memberName={depositMember.name} currentBalance={depositMember.balance} onClose={() => setDepositMember(null)} />
             ) : null}
@@ -584,7 +585,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
 
         <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle>{editingExpense ? 'Edit Expense' : 'Add Expense Correction'}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingExpense ? 'Edit Expense' : 'Add Expense Correction'}</DialogTitle><DialogDescription>{editingExpense ? 'Update this cycle expense.' : 'Add an expense adjustment to the pending cycle.'}</DialogDescription></DialogHeader>
             <ExpenseForm
               mode={editingExpense ? 'edit' : 'create'}
               cycleId={details.cycle.id}
@@ -601,7 +602,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
 
         <Dialog open={mealDialogOpen} onOpenChange={setMealDialogOpen}>
           <DialogContent>
-            <DialogHeader><DialogTitle>{mealDate ? `Edit Meals for ${format(mealDate, 'PPP')}` : 'Add Meal Correction'}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{mealDate ? `Edit Meals for ${format(mealDate, 'PPP')}` : 'Add Meal Correction'}</DialogTitle><DialogDescription>Adjust meal counts recorded for this cycle.</DialogDescription></DialogHeader>
             <MealCountEditor
               cycleId={details.cycle.id}
               members={details.members}
@@ -934,21 +935,13 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 sm:p-7 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl sm:rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
-              <History className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold font-heading tracking-tight sm:text-3xl truncate">History</h1>
-              <p className="hidden sm:block mt-1 text-sm leading-6 text-muted-foreground">
-                {profile?.role === 'member'
-                  ? 'Review past cycle meal logs, expenses, deposits, and balances.'
-                  : 'Pending cycles stay editable for settlement and corrections. Closed cycles are read-only.'}
-              </p>
-            </div>
-          </div>
+      <PageHeader
+        icon={History}
+        title="History"
+        description={profile?.role === 'member'
+          ? 'Review past cycle meal logs, expenses, deposits, and balances.'
+          : 'Pending cycles stay editable for settlement and corrections. Closed cycles are read-only.'}
+      >
           {profile?.role !== 'member' ? (
             <Button variant="outline" size="sm" asChild className="gap-1.5 border-border/80 bg-background/80 shadow-sm transition-all hover:bg-background hover:shadow shrink-0 sm:h-9">
               <Link href="/app/changelog">
@@ -957,8 +950,7 @@ export default function HistoryPage() {
               </Link>
             </Button>
           ) : null}
-        </div>
-      </header>
+      </PageHeader>
 
       {pendingCycles.length === 0 && closedCycleRows.length === 0 ? (
         <Card className="border-dashed p-8 sm:p-12 text-center">

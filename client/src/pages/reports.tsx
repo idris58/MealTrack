@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { useMealData } from '@/lib/meal-context';
 import { computeCycleMath } from '@shared/cycle-math';
+import { PageHeader } from '@/components/page-header';
 import { useAuth } from '@/lib/auth-context';
 import { Link, useLocation } from 'wouter';
 
@@ -495,21 +496,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* ── Page header ── */}
-      <header className="overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/[0.11] via-card to-card p-4 shadow-sm sm:p-7">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 sm:h-11 sm:w-11 sm:rounded-2xl">
-              <FileBarChart className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold font-heading tracking-tight sm:text-3xl">Reports</h1>
-              <p className="mt-1 hidden text-sm leading-6 text-muted-foreground sm:block">
-                Review cycle performance, member balances, and downloadable statements.
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PageHeader icon={FileBarChart} title="Reports" description="Review cycle performance, member balances, and downloadable statements." />
 
       {/* ── Control panel ── */}
       <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
