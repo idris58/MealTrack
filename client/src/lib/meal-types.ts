@@ -131,7 +131,7 @@ export type MemberStats = Pick<
   'mealCost' | 'fixedCost' | 'totalCost' | 'balance' | 'mealsEaten'
 >;
 
-export interface MealDataContextType {
+export interface MealDataState {
   members: Member[];
   expenses: Expense[];
   deposits: CycleDeposit[];
@@ -191,5 +191,3 @@ export interface MealActionsContextType {
   discardFailedSync: (id: string) => Promise<void>;
   retryLoadData: () => void;
 }
-
-export type MealContextType = MealDataContextType & MealActionsContextType;

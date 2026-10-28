@@ -29,8 +29,7 @@ import type {
   CycleStatus,
   Expense,
   MealActionsContextType,
-  MealContextType,
-  MealDataContextType,
+  MealDataState,
   MealLog,
   Member,
   SettlementSnapshotEntry,
@@ -49,21 +48,19 @@ export type {
   CycleStatus,
   Expense,
   MealActionsContextType,
-  MealContextType,
-  MealDataContextType,
+  MealDataState,
   MealLog,
   Member,
 } from './meal-types';
 
-export const MealDataContext = createContext<MealDataContextType | undefined>(undefined);
 export const MealActionsContext = createContext<MealActionsContextType | undefined>(undefined);
-type MealRowsData = Pick<MealDataContextType, 'expenses' | 'deposits' | 'mealLogs'>;
-type MealCyclesData = Pick<MealDataContextType, 'cycles' | 'activeCycle' | 'pendingCycle'>;
-type MealCycleDetailsData = Pick<MealDataContextType, 'getCycleDetails' | 'isCycleDetailsLoading' | 'getCycleDetailsError'> & { revision: unknown };
-type MealMembersData = Pick<MealDataContextType, 'members' | 'archivedMembers' | 'getMemberStats'>;
-type MealStatsData = Pick<MealDataContextType, 'stats'>;
-type MealStatusData = Pick<MealDataContextType, 'loading' | 'initialLoading' | 'refreshing' | 'pendingSyncIds' | 'failedSyncOps' | 'dataError'>;
-type MealChangelogData = Pick<MealDataContextType, 'activeCycleChangelogEntries' | 'pendingCycleChangelogEntries' | 'changelogEntries' | 'hasMoreChangelogEntries' | 'changelogLoading'>;
+type MealRowsData = Pick<MealDataState, 'expenses' | 'deposits' | 'mealLogs'>;
+type MealCyclesData = Pick<MealDataState, 'cycles' | 'activeCycle' | 'pendingCycle'>;
+type MealCycleDetailsData = Pick<MealDataState, 'getCycleDetails' | 'isCycleDetailsLoading' | 'getCycleDetailsError'> & { revision: unknown };
+type MealMembersData = Pick<MealDataState, 'members' | 'archivedMembers' | 'getMemberStats'>;
+type MealStatsData = Pick<MealDataState, 'stats'>;
+type MealStatusData = Pick<MealDataState, 'loading' | 'initialLoading' | 'refreshing' | 'pendingSyncIds' | 'failedSyncOps' | 'dataError'>;
+type MealChangelogData = Pick<MealDataState, 'activeCycleChangelogEntries' | 'pendingCycleChangelogEntries' | 'changelogEntries' | 'hasMoreChangelogEntries' | 'changelogLoading'>;
 
 const MealRowsContext = createContext<MealRowsData | undefined>(undefined);
 const MealCyclesContext = createContext<MealCyclesData | undefined>(undefined);
@@ -1222,59 +1219,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     };
   }, [getRequiredCycleId, computedCycleDetails]);
 
-  const dataValue = useMemo<MealDataContextType>(() => ({
-    members,
-    expenses,
-    deposits,
-    mealLogs,
-    cycles,
-    activeCycleChangelogEntries,
-    pendingCycleChangelogEntries,
-    changelogEntries: allChangelogEntries,
-    hasMoreChangelogEntries,
-    changelogLoading,
-    activeCycle,
-    pendingCycle,
-    loading,
-    initialLoading: loading && !hasLoadedDataRef.current,
-    refreshing,
-    stats,
-    pendingSyncIds,
-    failedSyncOps,
-    archivedMembers: archivedMemberRoster.filter((member) => member.archived),
-    dataError,
-    getMemberStats,
-    getCycleDetails: computedCycleDetails.getCycleDetails,
-    isCycleDetailsLoading: cycleLoader.isLoading,
-    getCycleDetailsError: cycleLoader.getError,
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- map identity must invalidate this context; its stable getter reads a ref.
-  }), [
-    members,
-    expenses,
-    deposits,
-    mealLogs,
-    cycles,
-    activeCycleChangelogEntries,
-    pendingCycleChangelogEntries,
-    allChangelogEntries,
-    hasMoreChangelogEntries,
-    changelogLoading,
-    activeCycle,
-    pendingCycle,
-    loading,
-    refreshing,
-    stats,
-    pendingSyncIds,
-    failedSyncOps,
-    archivedMemberRoster,
-    dataError,
-    getMemberStats,
-    computedCycleDetails.getCycleDetails,
-    computedCycleDetails.cycleDetailsById,
-    cycleLoader.isLoading,
-    cycleLoader.getError,
-  ]);
-
   const rowsValue = useMemo<MealRowsData>(() => ({ expenses, deposits, mealLogs }), [expenses, deposits, mealLogs]);
   const cyclesValue = useMemo<MealCyclesData>(() => ({
     cycles,
@@ -1368,8 +1312,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   return (
     <RealtimeEventsContext.Provider value={realtimeEvents}>
       <MealActionsContext.Provider value={actionsValue}>
-        <MealDataContext.Provider value={dataValue}>
-          <MealRowsContext.Provider value={rowsValue}>
+        <MealRowsContext.Provider value={rowsValue}>
             <MealCyclesContext.Provider value={cyclesValue}>
               <MealCycleDetailsContext.Provider value={cycleDetailsValue}>
                 <MealMembersContext.Provider value={membersValue}>
@@ -1383,8 +1326,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
                 </MealMembersContext.Provider>
               </MealCycleDetailsContext.Provider>
             </MealCyclesContext.Provider>
-          </MealRowsContext.Provider>
-        </MealDataContext.Provider>
+        </MealRowsContext.Provider>
       </MealActionsContext.Provider>
     </RealtimeEventsContext.Provider>
   );
@@ -1409,24 +1351,10 @@ export function useRealtimeEvents() {
   return context;
 }
 
-export function useMealData() {
-  const context = useContext(MealDataContext);
-  if (context === undefined) {
-    throw new Error('useMealData must be used within a MealProvider');
-  }
-  return context;
-}
-
 export function useMealActions() {
   const context = useContext(MealActionsContext);
   if (context === undefined) {
     throw new Error('useMealActions must be used within a MealProvider');
   }
   return context;
-}
-
-export function useMeal(): MealContextType {
-  const data = useMealData();
-  const actions = useMealActions();
-  return useMemo(() => ({ ...data, ...actions }), [data, actions]);
 }
