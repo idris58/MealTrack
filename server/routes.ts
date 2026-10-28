@@ -7,6 +7,7 @@ import { log } from "./logger";
 import { isAllowedPushEndpoint } from "./push-endpoint";
 import { computeCycleMath, selectCycleMembers } from "@shared/cycle-math";
 import { verifySupabaseAccessToken } from "./auth-token";
+import { fireAndForget } from "./error-tracking";
 
 /**
  * Wrap an async Express handler so that rejected promises are caught,
@@ -872,7 +873,9 @@ export async function registerRoutes(
     if (error) throw error;
     if (!deposit) return res.status(404).json({ message: "Deposit not found in your mess." });
 
-    void sendDepositPush({ actorUserId: userId, messId, deposit });
+    fireAndForget(sendDepositPush({ actorUserId: userId, messId, deposit }), {
+      task: "sendDepositPush", messId,
+    });
 
     return res.json({ success: true });
   }));
@@ -969,13 +972,13 @@ export async function registerRoutes(
       .map((member) => ({ memberId: member.id, dueAmount: Math.abs(member.balance) }));
 
     if (dueMembers.length > 0) {
-      void sendSettlementPendingPush({
+      fireAndForget(sendSettlementPendingPush({
         actorUserId: userId,
         messId,
         cycleId: cycle.id,
         cycleName: cycle.name,
         dueMembers,
-      });
+      }), { task: "sendSettlementPendingPush", messId, cycleId: cycle.id });
     }
 
     return res.json({ success: true });
@@ -1013,7 +1016,7 @@ export async function registerRoutes(
 
     const memberName = member?.name?.trim() || "A member";
 
-    void sendMealOffRequestSubmittedPush({
+    fireAndForget(sendMealOffRequestSubmittedPush({
       messId,
       actorUserId: userId,
       requestId: request.id,
@@ -1021,7 +1024,7 @@ export async function registerRoutes(
       startDate: request.start_date,
       endDate: request.end_date,
       mealPeriod: request.meal_period,
-    });
+    }), { task: "sendMealOffRequestSubmittedPush", messId, requestId: request.id });
 
     return res.json({ success: true });
   }));
@@ -1045,7 +1048,7 @@ export async function registerRoutes(
     if (error) throw error;
     if (!request) return res.status(404).json({ message: "Reviewed request not found in your mess." });
 
-    void sendMealOffRequestDecidedPush({
+    fireAndForget(sendMealOffRequestDecidedPush({
       actorUserId: userId,
       messId,
       requestId: request.id,
@@ -1054,7 +1057,7 @@ export async function registerRoutes(
       startDate: request.start_date,
       endDate: request.end_date,
       mealPeriod: request.meal_period,
-    });
+    }), { task: "sendMealOffRequestDecidedPush", messId, requestId: request.id });
 
     return res.json({ success: true });
   }));
@@ -1243,9 +1246,13 @@ export async function registerRoutes(
     invalidateSharedPayload(scope);
     broadcastNoticeUpdate(scopeKey(scope), activeNotice);
     // Push to shared-view visitors
-    void sendNoticePushToSharedSubscribers(scope.messId, activeNotice);
+    fireAndForget(sendNoticePushToSharedSubscribers(scope.messId, activeNotice), {
+      task: "sendNoticePushToSharedSubscribers", messId: scope.messId,
+    });
     // Push to all logged-in mess members (main audience)
-    void sendNoticePushToMessMembers(scope.messId, userId, activeNotice);
+    fireAndForget(sendNoticePushToMessMembers(scope.messId, userId, activeNotice), {
+      task: "sendNoticePushToMessMembers", messId: scope.messId,
+    });
 
     return res.json({ activeNotice });
   }));

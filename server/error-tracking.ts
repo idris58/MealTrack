@@ -13,3 +13,16 @@ export function captureServerError(
     console.error("[ServerErrorTracking]", error.message);
   }
 }
+
+/** Handle background promises so routine delivery failures never become
+ * process-level unhandled rejections. */
+export function fireAndForget(
+  promise: Promise<unknown>,
+  context: Record<string, unknown> = {},
+): void {
+  void promise.catch((error: unknown) => {
+    const message = error instanceof Error ? error.stack || error.message : String(error);
+    console.error(`[BackgroundTask] ${message}`);
+    captureServerError(error, { type: "backgroundTask", ...context });
+  });
+}

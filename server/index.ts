@@ -142,7 +142,6 @@ app.use((req, res, next) => {
         : String(reason);
     log(`Unhandled Rejection: ${message}`, "error");
     captureServerError(reason, { type: "unhandledRejection" });
-    process.exit(1);
   });
 
   await initServerErrorTracking();
