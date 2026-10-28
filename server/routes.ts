@@ -5,6 +5,7 @@ import { z } from "zod";
 import { log } from "./logger";
 import { isAllowedPushEndpoint } from "./push-endpoint";
 import { computeCycleMath, selectCycleMembers } from "@shared/cycle-math";
+import { verifySupabaseAccessToken } from "./auth-token";
 
 /**
  * Wrap an async Express handler so that rejected promises are caught,
@@ -149,6 +150,15 @@ const sharedTokenRateLimit = rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { message: "Too many shared-view requests. Please try again shortly." },
+});
+
+const authenticatedApiRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  skip: (req) => !/^Bearer\s+\S+/i.test(req.get("authorization") ?? ""),
+  message: { message: "Too many authenticated requests. Please try again shortly." },
 });
 
 function normalizeShareToken(value: unknown): string {
@@ -512,6 +522,11 @@ async function getAuthenticatedUserId(authHeader: string | undefined): Promise<s
     return null;
   }
 
+  const verifiedUserId = await verifySupabaseAccessToken(token);
+  if (verifiedUserId !== undefined) return verifiedUserId;
+
+  // Legacy projects using the HS256 JWT secret do not publish a verification
+  // key through JWKS, so retain Supabase's server-side verification for them.
   const supabaseAdmin = assertSupabaseAdmin();
   const { data, error } = await supabaseAdmin.auth.getUser(token);
 
@@ -613,6 +628,10 @@ export async function registerRoutes(
 
   app.get("/healthz", (_req, res) => res.status(200).json(healthPayload()));
   app.get("/api/health", (_req, res) => res.status(200).json(healthPayload()));
+
+  // Apply one shared per-IP budget to routes carrying a bearer token. The
+  // trusted ingress configured in server/index.ts supplies the client IP.
+  app.use("/api", authenticatedApiRateLimit);
 
   app.get("/api/push/vapid-public-key", (_req, res) => {
     const publicKey = getVapidPublicKey();
@@ -1180,9 +1199,28 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid authorization token." });
     }
 
-    await requireMessMember(userId);
+    const supabaseAdmin = assertSupabaseAdmin();
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("mess_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (!profile?.mess_id) {
+      return res.status(403).json({ message: "You must belong to a mess to broadcast updates." });
+    }
 
-    const scope = await resolveScopeForUserId(userId);
+    const scope = { messId: profile.mess_id as string };
+    const { data: enabledShareLink, error: shareLinkError } = await supabaseAdmin
+      .from("share_links")
+      .select("token")
+      .eq("mess_id", scope.messId)
+      .eq("is_enabled", true)
+      .limit(1)
+      .maybeSingle();
+    if (shareLinkError) throw shareLinkError;
+    if (!enabledShareLink) return res.json({ data: null, skipped: true });
+
     scheduleSharedBroadcast(scope);
 
     return res.json({ data: null });
