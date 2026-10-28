@@ -217,6 +217,11 @@ function SharedNoticeNotificationButton({ token }: { token: string }) {
   );
 }
 
+function formatLastUpdated(date: Date) {
+  const isToday = new Date().toDateString() === date.toDateString();
+  return isToday ? format(date, "hh:mm a") : format(date, "d MMM, hh:mm a");
+}
+
 function getExpenseEmptyState(tab: "all" | "meal" | "utility") {
   if (tab === "meal") {
     return {
@@ -415,6 +420,7 @@ export default function SharedPage({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [showingCachedData, setShowingCachedData] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
   const [summaryMode, setSummaryMode] = useState<"all" | "single">("all");
   const [selectedMemberId, setSelectedMemberId] = useState("");
@@ -438,35 +444,48 @@ export default function SharedPage({ token }: { token: string }) {
     let disconnected = false;
     const cacheKey = `mealtrack:shared-cache:${token.toUpperCase()}`;
 
-    const readCache = (): SharedPayload | null => {
+    const readCache = (): { payload: SharedPayload; savedAt?: number } | null => {
       try {
         const value = window.localStorage.getItem(cacheKey);
         if (!value) return null;
         const parsed = JSON.parse(value) as { savedAt?: number; payload?: SharedPayload };
         if (!parsed.payload || !Array.isArray(parsed.payload.members) || !parsed.payload.cycle) return null;
-        return parsed.payload;
+        return {
+          payload: parsed.payload,
+          savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : undefined,
+        };
       } catch {
         return null;
       }
     };
 
-    const savePayload = (payload: SharedPayload) => {
+    const savePayload = (payload: SharedPayload, savedAt: number) => {
       try {
-        window.localStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), payload }));
+        window.localStorage.setItem(cacheKey, JSON.stringify({ savedAt, payload }));
       } catch {
         // Keep the online shared view usable if browser storage is unavailable.
       }
     };
 
-    const commitPayload = (payload: SharedPayload, fromCache = false) => {
+    const commitPayload = (payload: SharedPayload, fromCache = false, savedAtTime?: number) => {
       dataRef.current = payload;
       setData(payload);
       setShowingCachedData(fromCache);
-      if (!fromCache) savePayload(payload);
+      const timestamp = savedAtTime ?? Date.now();
+      setLastUpdated(new Date(timestamp));
+      if (!fromCache) savePayload(payload, timestamp);
     };
 
     const loadSharedData = async () => {
-      if (!dataRef.current) setLoading(true);
+      if (!dataRef.current) {
+        const cached = readCache();
+        if (cached) {
+          commitPayload(cached.payload, true, cached.savedAt);
+          setLoading(false);
+        } else {
+          setLoading(true);
+        }
+      }
       try {
         const response = await fetch(`/api/share/${encodeURIComponent(token)}`);
         const body = await response.json().catch(() => null);
@@ -491,9 +510,9 @@ export default function SharedPage({ token }: { token: string }) {
         if (!active) return;
         const status = (caughtError as { status?: number })?.status;
         const canUseCache = status === undefined || status === 429 || status >= 500;
-        const cachedPayload = canUseCache ? readCache() : null;
-        if (cachedPayload) {
-          commitPayload(cachedPayload, true);
+        const cached = canUseCache ? readCache() : null;
+        if (cached) {
+          commitPayload(cached.payload, true, cached.savedAt);
           setError(null);
         } else {
           setError(caughtError instanceof Error ? caughtError.message : "Unable to load shared dashboard.");
@@ -546,7 +565,7 @@ export default function SharedPage({ token }: { token: string }) {
         const payload = JSON.parse(event.data) as { data: SharedPayload | null };
 
         if (!payload.data) {
-          setError("No active or pending cycle is available for this shared view yet.");
+          setError("No cycle is available for this shared view yet.");
           return;
         }
 
@@ -704,6 +723,11 @@ export default function SharedPage({ token }: { token: string }) {
                 <p className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-muted-foreground">
                   {formatCycleStatus(data.cycle.status)}
                 </p>
+                {lastUpdated && (
+                  <span className="text-xs text-muted-foreground">
+                    Last updated {formatLastUpdated(lastUpdated)}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -730,7 +754,7 @@ export default function SharedPage({ token }: { token: string }) {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 text-sm text-muted-foreground">
             <span>
               {showingCachedData
-                ? "Showing the last saved dashboard. Live updates are reconnecting."
+                ? `Showing the last saved dashboard${lastUpdated ? ` (saved at ${formatLastUpdated(lastUpdated)})` : ""}. Live updates are reconnecting.`
                 : "Live updates are disconnected. Reconnecting…"}
             </span>
             <Button variant="outline" size="sm" className="gap-2" onClick={handleRetry}>

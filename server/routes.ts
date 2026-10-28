@@ -401,7 +401,7 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
 async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | null> {
   const supabaseAdmin = assertSupabaseAdmin();
 
-  const { data: cycle, error: cycleError } = await supabaseAdmin
+  let { data: cycle, error: cycleError } = await supabaseAdmin
     .from("cycles")
     .select("id, name, status, started_at, closed_at, members_snapshot, settlement_snapshot")
     .eq(...scopeFilter(scope))
@@ -414,6 +414,26 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
 
   if (cycleError) {
     throw cycleError;
+  }
+
+  if (!cycle) {
+    // When no active or pending cycle exists, fall back to the last closed cycle.
+    const { data: closedCycle, error: closedCycleError } = await supabaseAdmin
+      .from("cycles")
+      .select("id, name, status, started_at, closed_at, members_snapshot, settlement_snapshot")
+      .eq(...scopeFilter(scope))
+      .is("deleted_at", null)
+      .eq("status", "closed")
+      .order("closed_at", { ascending: false, nullsFirst: false })
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (closedCycleError) {
+      throw closedCycleError;
+    }
+
+    cycle = closedCycle;
   }
 
   if (!cycle) {
@@ -1199,7 +1219,7 @@ export async function registerRoutes(
     const data = await getSharedPayloadForScope(scopeFromShareLink(shareLink));
 
     if (!data) {
-      return res.status(404).json({ message: "No active or pending cycle is available for this shared view yet." });
+      return res.status(404).json({ message: "No cycle is available for this shared view yet." });
     }
 
     return res.json(data);
