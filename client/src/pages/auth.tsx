@@ -352,10 +352,10 @@ export default function AuthPage() {
         />
       </div>
 
-      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-12 px-4 py-12 lg:flex-row lg:items-center lg:gap-16 lg:px-8">
+      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col justify-start gap-8 px-4 pb-8 pt-16 sm:justify-center sm:gap-12 sm:py-12 lg:flex-row lg:items-center lg:gap-16 lg:px-8">
 
-        {/* ── Left: Hero section ── */}
-        <section className="max-w-lg space-y-8">
+        {/* ── Left: Hero section (hidden on mobile, shown on lg+) ── */}
+        <section className="hidden max-w-lg space-y-8 lg:block">
           {/* Trust badge */}
           <div className="inline-flex items-center gap-2.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary backdrop-blur-sm">
             <ChefHat className="h-3.5 w-3.5 text-primary" />
@@ -402,7 +402,26 @@ export default function AuthPage() {
           </div>
         </section>
 
-        {/* ── Right: Auth card ── */}
+        {/* Compact mobile hero; desktop uses the full feature section. */}
+        <div className="space-y-3 text-center lg:hidden">
+          <div className="flex items-center justify-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
+              <ChefHat className="h-5 w-5" />
+            </div>
+            <span className="font-heading text-xl font-bold text-primary">MealTrack</span>
+          </div>
+          <h1 className="font-heading text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
+            Meal management,{" "}
+            <span className="bg-gradient-to-r from-primary via-emerald-500 to-teal-500 bg-clip-text text-transparent">
+              made simple.
+            </span>
+          </h1>
+          <p className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
+            Track meals, split expenses, and settle balances — all in one shared workspace.
+          </p>
+        </div>
+
+        {/* ── Auth card ── */}
         <Card className="w-full max-w-md shrink-0 border-border/80 bg-card/85 shadow-xl shadow-primary/5 backdrop-blur-xl transition-shadow hover:shadow-2xl hover:shadow-primary/10 dark:border-white/10 dark:bg-card/50 dark:shadow-black/50">
           <CardHeader className="space-y-5 pb-2">
             {/* Brand */}
