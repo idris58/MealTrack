@@ -218,7 +218,7 @@ function RateTrendWarmup({ totalMeals }: { totalMeals: number }) {
         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
         </div>
-        <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+        <p className="mt-2 text-xs font-medium text-muted-foreground">
           {mealCount(totalMeals)} of {MIN_TREND_MEALS} meals logged
         </p>
       </div>
@@ -413,7 +413,7 @@ export function DashboardAnalytics() {
                 <p className="text-xs text-muted-foreground">Stabilized effective rate over the cycle</p>
               </div>
               {validRates.length > 0 && (
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-md">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-md">
                   <span>Min: <strong className="text-foreground">{preciseCurrency(minRate)}</strong></span>
                   <span className="opacity-40">|</span>
                   <span>Max: <strong className="text-foreground">{preciseCurrency(maxRate)}</strong></span>
@@ -482,7 +482,7 @@ export function DashboardAnalytics() {
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">Meal vs utility costs breakdown across timeline</p>
               </div>
-              <span className="rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {weekly ? 'Weekly Buckets' : 'Daily'}
               </span>
             </CardHeader>
@@ -578,7 +578,7 @@ export function DashboardAnalytics() {
                       </PieChart>
                     </ChartContainer>
                     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Total Spent
                       </span>
                       <strong className="font-heading text-lg font-bold text-foreground">
@@ -603,7 +603,7 @@ export function DashboardAnalytics() {
                         </span>
                         <span className="font-bold text-foreground">{currency(item.value)}</span>
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                         <div className="h-1.5 w-3/4 overflow-hidden rounded-full bg-muted">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${item.name === 'Meal Expenses' ? 'bg-emerald-500' : 'bg-violet-500'}`}
@@ -637,10 +637,10 @@ export function DashboardAnalytics() {
                 onValueChange={(val) => val && setCashMode(val as 'daily' | 'cumulative')}
                 className="rounded-lg bg-muted/50 p-0.5"
               >
-                <ToggleGroupItem value="cumulative" className="h-6 px-2 text-[10px] font-medium">
+                <ToggleGroupItem value="cumulative" className="h-6 px-2 text-xs font-medium">
                   Cumulative
                 </ToggleGroupItem>
-                <ToggleGroupItem value="daily" className="h-6 px-2 text-[10px] font-medium">
+                <ToggleGroupItem value="daily" className="h-6 px-2 text-xs font-medium">
                   Period
                 </ToggleGroupItem>
               </ToggleGroup>
@@ -730,7 +730,7 @@ export function DashboardAnalytics() {
                     <item.icon className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
                       <p className="text-xs font-bold leading-snug">{item.title}</p>
-                      <p className="mt-1 text-[11px] leading-relaxed opacity-85">{item.detail}</p>
+                      <p className="mt-1 text-xs leading-relaxed opacity-85">{item.detail}</p>
                     </div>
                   </div>
                 </div>

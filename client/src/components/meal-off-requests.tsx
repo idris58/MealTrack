@@ -278,7 +278,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
             <Button variant="outline" size="sm" className="ml-auto gap-1.5 shrink-0" aria-label={`Review meal-off requests${pendingRequests.length ? `, ${pendingRequests.length} pending` : ''}`}>
               <ClipboardList className="h-4 w-4" />
               <span className="hidden sm:inline">Review</span>
-              {pendingRequests.length ? <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-[10px]">{pendingRequests.length}</Badge> : null}
+              {pendingRequests.length ? <Badge variant="secondary" className="ml-0.5 px-1.5 py-0 text-xs">{pendingRequests.length}</Badge> : null}
             </Button>
           </DialogTrigger>
           <DialogContent size="md">
@@ -318,7 +318,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
                   {periodOptions.map((option) => (
                     <button key={option.value} type="button" onClick={() => setMealPeriod(option.value)} className={cn('rounded-xl border px-2 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', mealPeriod === option.value ? 'border-primary bg-primary/10 shadow-sm' : 'bg-card hover:bg-accent/50')}>
                       <span className="block text-sm font-semibold">{option.label}</span>
-                      <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{option.helper}</span>
+                      <span className="mt-1 block text-xs leading-4 text-muted-foreground">{option.helper}</span>
                     </button>
                   ))}
                 </div>

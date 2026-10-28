@@ -123,7 +123,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   </div>
 
                   {showDetails && errorInfo && (
-                    <div className="mt-2 pt-2 border-t font-mono text-[11px] text-muted-foreground max-h-40 overflow-auto whitespace-pre-wrap">
+                    <div className="mt-2 pt-2 border-t font-mono text-xs text-muted-foreground max-h-40 overflow-auto whitespace-pre-wrap">
                       {error.stack}
                       {"\n\nComponent Stack:"}
                       {errorInfo.componentStack}

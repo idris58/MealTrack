@@ -820,7 +820,7 @@ function SecuritySettingsCard() {
                       )}
                     />
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>
                       Strength: <strong className="text-foreground">{strength.label}</strong>
                     </span>

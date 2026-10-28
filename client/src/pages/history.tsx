@@ -116,14 +116,14 @@ function SettlementForm({
             <button
               type="button"
               onClick={fillExactAmount}
-              className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/20"
+              className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/20"
             >
               Fill Full Amount
             </button>
           )}
         </div>
         <Input type="number" step="1" placeholder="e.g. 300 or -300" value={amount} onChange={(event) => setAmount(event.target.value)} autoFocus disabled={isSubmitting} />
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Enter a positive number if the member pays you. Enter a negative number if you refund the member.
         </p>
       </div>
@@ -248,7 +248,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
       <div className="flex shrink-0 items-center gap-3">
         <div className="text-right">
           <p className="font-bold">{formatCurrency(expense.amount)}</p>
-          <Badge variant="secondary" className="text-[10px] uppercase">
+          <Badge variant="secondary" className="text-xs uppercase">
             {expense.type}
           </Badge>
         </div>

@@ -32,7 +32,7 @@ export function SyncBadge({ itemId, show, className }: SyncBadgeProps) {
       title="Pending sync — will upload when back online"
       aria-label="Pending sync"
       className={cn(
-        'relative flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-400',
+        'relative flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-400',
         className,
       )}
     >

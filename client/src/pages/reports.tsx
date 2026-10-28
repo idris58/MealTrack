@@ -603,7 +603,7 @@ export default function ReportsPage() {
                 </div>
                 <div>
                   <p className="font-heading text-lg font-bold leading-tight sm:text-xl">MealTrack</p>
-                  <p className="text-[11.5px]" style={{ color: GOLD_SOFT }}>Statement of Meal Accounts</p>
+                  <p className="text-xs" style={{ color: GOLD_SOFT }}>Statement of Meal Accounts</p>
                 </div>
               </div>
               <div className="text-right">
@@ -634,7 +634,7 @@ export default function ReportsPage() {
                 <div style={{ width: `${report.mealPct}%`, backgroundColor: REFUND_GREEN }} />
                 <div style={{ width: `${100 - report.mealPct}%`, backgroundColor: GOLD }} />
               </div>
-              <div className="mt-2 flex items-center justify-between text-[11px]">
+              <div className="mt-2 flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: REFUND_GREEN }}>
                   <Utensils className="h-3 w-3" /> Meal · {currency(report.totalMealExpenses)} ({report.mealPct}%)
                 </span>
@@ -715,7 +715,7 @@ export default function ReportsPage() {
               </table>
             </div>
             {!isLoading && report.rows.length > 0 && (
-              <p className="mt-3 text-[11px] italic" style={{ color: `${INK}80` }}>
+              <p className="mt-3 text-xs italic" style={{ color: `${INK}80` }}>
                 Due is owed to the mess by the member; Refund is owed to the member by the mess.
               </p>
             )}
@@ -724,7 +724,7 @@ export default function ReportsPage() {
           {/* footer signature */}
           <div className="relative border-t px-8 py-5 text-center" style={{ borderColor: HAIRLINE }}>
             <div className="mx-auto mb-2.5 h-px w-14" style={{ backgroundColor: `${GOLD}70` }} />
-            <p className="text-[11px]" style={{ color: `${INK}80` }}>Prepared via MealTrack</p>
+            <p className="text-xs" style={{ color: `${INK}80` }}>Prepared via MealTrack</p>
           </div>
         </div>
       </div>

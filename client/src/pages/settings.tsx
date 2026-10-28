@@ -191,7 +191,7 @@ function CycleManagementCard() {
       <CardHeader className="border-b bg-gradient-to-r from-emerald-500/[0.07] to-transparent p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">Operations</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">Operations</p>
             <CardTitle className="mt-0.5 text-lg font-bold font-heading">Cycle Operations</CardTitle>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">Keep the current meal cycle organised and ready for settlement.</p>
           </div>
@@ -423,7 +423,7 @@ function CycleManagementCard() {
                   <div className="flex items-center gap-2">
                     <Wallet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <label className="text-sm font-medium text-foreground">Carry-Forward Balances</label>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                       Optional
                     </span>
                   </div>
@@ -479,7 +479,7 @@ function CycleManagementCard() {
                           <strong className="text-foreground">{selectedCount}</strong> of {totalEligible} selected
                         </span>
                         {selectedTotal > 0 && isOnline && (
-                          <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                             +{formatCurrency(selectedTotal)}
                           </span>
                         )}
@@ -535,7 +535,7 @@ function CycleManagementCard() {
                     </div>
                   </div>
 
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Unchecked members keep their surplus in the pending cycle and must be settled manually.
                   </p>
                 </div>
@@ -667,7 +667,7 @@ function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) 
       <CardHeader className="border-b bg-gradient-to-r from-sky-500/[0.07] to-transparent p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-400">Access</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-400">Access</p>
             <CardTitle className="mt-0.5 text-lg font-bold font-heading">Public Sharing</CardTitle>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">Control your read-only shared view link and meal code.</p>
           </div>
@@ -768,7 +768,7 @@ function NoticeSettingsCard() {
         <CardHeader className="border-b bg-gradient-to-r from-amber-500/[0.07] to-transparent p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">Communication</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">Communication</p>
               <CardTitle className="mt-0.5 text-lg font-bold font-heading">Notice Board</CardTitle>
               <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
                 Publish a time-limited announcement for all mess members, coordinators and managers.

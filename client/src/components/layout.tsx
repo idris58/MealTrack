@@ -103,6 +103,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
   const { notice } = useNotice();
+  const currentPath = location.split(/[?#]/, 1)[0];
+  const isCurrentPage = (href: string) => currentPath === href;
+  const isHistoryNavActive = (href: string) => isCurrentPage(href)
+    || (href === '/app/history' && currentPath === '/app/changelog');
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -152,7 +156,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   });
 
   const mobileNavItems = isMember ? MEMBER_MOBILE_NAV_ITEMS : MANAGER_MOBILE_NAV_ITEMS;
-  const isMoreActive = !isMember && ['/app/reports', '/app/history', '/app/changelog'].includes(location);
+  const isMoreActive = !isMember && ['/app/reports', '/app/history', '/app/changelog'].includes(currentPath);
 
   const initials = getInitials(profile?.full_name, user?.email);
 
@@ -191,12 +195,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <DropdownMenuSeparator />
 
-        <Link href="/app/profile">
-          <DropdownMenuItem id="header-menu-profile" className="cursor-pointer gap-2">
+        <DropdownMenuItem asChild>
+          <Link href="/app/profile" id="header-menu-profile" className="cursor-pointer gap-2">
             <User className="h-4 w-4" />
             Profile
-          </DropdownMenuItem>
-        </Link>
+          </Link>
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
@@ -226,6 +230,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
+      <a
+        href="#main-content"
+        className="sr-only fixed left-4 top-4 z-[100] rounded-md bg-background px-4 py-3 text-sm font-medium text-foreground shadow-lg focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-primary"
+      >
+        Skip to main content
+      </a>
       <CommandDialog open={isCommandOpen} onOpenChange={setIsCommandOpen}>
         <CommandInput placeholder="Search actions and pages..." />
         <CommandList>
@@ -297,11 +307,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <aside className="hidden h-[calc(100dvh-4rem)] w-64 shrink-0 flex-col border-r bg-card md:sticky md:top-16 md:flex">
           <nav className="flex-1 space-y-2 p-4 pt-6">
             {sidebarNavItems.map((item) => (
-              <Link key={item.href} href={item.href}>
+              <Link key={item.href} href={item.href} aria-current={isHistoryNavActive(item.href) ? 'page' : undefined}>
                 <div
                   className={cn(
                     'flex cursor-pointer items-center gap-3 rounded-md px-4 py-3 transition-colors',
-                    location === item.href
+                    isHistoryNavActive(item.href)
                       ? 'bg-primary/10 font-medium text-primary'
                       : 'text-muted-foreground hover:bg-muted',
                   )}
@@ -315,7 +325,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main Content */}
-        <main className="min-w-0 flex-1 overflow-y-auto">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto focus:outline-none">
           <div className="container mx-auto max-w-5xl p-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:p-8 md:pb-8">
             {children}
           </div>
@@ -330,9 +340,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       >
         <div className="grid h-[54px] w-full grid-cols-6 items-center">
           {mobileNavItems.map((item) => {
-            const isActive = location === item.href;
+            const isActive = isHistoryNavActive(item.href);
             return (
-              <Link key={item.href} href={item.href} className="flex h-full min-w-0 w-full items-center justify-center">
+              <Link key={item.href} href={item.href} aria-current={isActive ? 'page' : undefined} className="flex h-full min-w-0 w-full items-center justify-center">
                 <div
                   className={cn(
                     'flex h-full w-full min-w-0 flex-col items-center justify-center py-1 font-medium transition-colors select-none',
@@ -351,7 +361,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </div>
                   <span
                     className={cn(
-                      'mt-0.5 w-full truncate text-center leading-tight tracking-tight text-[10px]',
+                      'mt-0.5 w-full truncate text-center leading-tight tracking-tight text-xs',
                       isActive ? 'font-bold text-primary' : 'font-medium text-muted-foreground'
                     )}
                   >
@@ -366,6 +376,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               id="mobile-nav-more-btn"
+              aria-current={isMoreActive ? 'page' : undefined}
               onClick={() => setIsMoreSheetOpen(true)}
               className="flex h-full min-w-0 w-full flex-col items-center justify-center py-1 font-medium transition-colors select-none text-muted-foreground hover:text-foreground"
             >
@@ -379,7 +390,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </div>
               <span
                 className={cn(
-                  'mt-0.5 w-full truncate text-center leading-tight tracking-tight text-[10px]',
+                  'mt-0.5 w-full truncate text-center leading-tight tracking-tight text-xs',
                   isMoreActive ? 'font-bold text-primary' : 'font-medium text-muted-foreground'
                 )}
               >
@@ -402,11 +413,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </SheetHeader>
             <div className="space-y-2 pt-1">
               {MORE_ITEMS.map((item) => {
-                const isActive = location === item.href; 
+                const isActive = isCurrentPage(item.href);
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={isActive ? 'page' : undefined}
                     onClick={() => setIsMoreSheetOpen(false)}
                     className={cn(
                       'flex items-center justify-between rounded-xl border p-3 transition-colors',

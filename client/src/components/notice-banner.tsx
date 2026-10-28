@@ -77,7 +77,7 @@ export function NoticeBanner() {
           <button
             type="button"
             onClick={() => setShowReadDialog(true)}
-            className="ml-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-300 dark:hover:bg-amber-800/60 transition-colors"
+            className="ml-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-300 dark:hover:bg-amber-800/60 transition-colors"
           >
             View
           </button>
@@ -158,7 +158,7 @@ export function NoticeBanner() {
           </button>
 
           {/* Expiry chip */}
-          <span className="hidden shrink-0 rounded-full border border-amber-200 bg-amber-100/80 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-700 dark:bg-amber-800/40 dark:text-amber-300 lg:inline-flex">
+          <span className="hidden shrink-0 rounded-full border border-amber-200 bg-amber-100/80 px-2 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-700 dark:bg-amber-800/40 dark:text-amber-300 lg:inline-flex">
             Expires {expiryText}
           </span>
 

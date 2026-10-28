@@ -385,7 +385,7 @@ function ActorAvatar({ actor }: { actor?: ChangelogActor | null }) {
   if (!actor) {
     return (
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted ring-2 ring-background">
-        <span className="text-[10px] font-semibold text-muted-foreground">SYS</span>
+        <span className="text-xs font-semibold text-muted-foreground">SYS</span>
       </div>
     );
   }
@@ -499,7 +499,7 @@ function MealDiff({ changes }: { changes: ChangelogChange[] }) {
           </div>
         );
       })}
-      <p className="pt-1 text-right text-[11px] text-muted-foreground">
+      <p className="pt-1 text-right text-xs text-muted-foreground">
         Net {formatSignedMealCount(net)} meals · {rows.length} {rows.length === 1 ? 'member' : 'members'}
       </p>
     </div>
@@ -519,7 +519,7 @@ function EditChainHistory({ entries }: { entries: ChangelogEntry[] }) {
               <time
                 dateTime={edit.createdAt}
                 title={format(timestamp, "MMM d, yyyy 'at' h:mm a")}
-                className="text-[11px] text-muted-foreground"
+                className="text-xs text-muted-foreground"
               >
                 {formatDistanceToNow(timestamp, { addSuffix: true })}
               </time>
@@ -625,11 +625,11 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
               </div>
               {/* Right: badges */}
               <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                <Badge variant="outline" className={cn('gap-1 border text-[11px]', entityStyle.border)}>
+                <Badge variant="outline" className={cn('gap-1 border text-xs', entityStyle.border)}>
                   <EntityIcon className={cn('h-3 w-3', entityStyle.color)} />
                   {entityStyle.label}
                 </Badge>
-                <Badge variant="outline" className={cn('border text-[11px]', badgeClass)}>
+                <Badge variant="outline" className={cn('border text-xs', badgeClass)}>
                   {badgeLabel}
                 </Badge>
               </div>
@@ -645,7 +645,7 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
               </div>
 
               <div className="flex items-center gap-3">
-                <span title={exactTime} className="text-[11px] text-muted-foreground">
+                <span title={exactTime} className="text-xs text-muted-foreground">
                   {relativeTime}
                 </span>
                 {detailed.length > 0 && (
@@ -668,7 +668,7 @@ function ChangelogCard({ entry }: { entry: DisplayChangelogEntry }) {
           {/* Expanded details */}
           {open && detailed.length > 0 && (
             <div id={detailsId} className="border-t bg-muted/30 px-4 py-3 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Change Details
               </p>
               <div className="space-y-2">

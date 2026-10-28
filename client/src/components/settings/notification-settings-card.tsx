@@ -102,7 +102,7 @@ export function NotificationSettingsCard() {
         <CardHeader className="border-b bg-gradient-to-r from-violet-500/[0.07] to-transparent p-5 sm:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-violet-600 dark:text-violet-400">Reminders</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-600 dark:text-violet-400">Reminders</p>
               <CardTitle className="mt-0.5 text-lg font-bold font-heading">Push Notifications</CardTitle>
               <p className="mt-1 text-xs sm:text-sm text-muted-foreground">Manage your notification categories and reminder schedule.</p>
             </div>
@@ -121,7 +121,7 @@ export function NotificationSettingsCard() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-foreground">Notifications blocked by browser</p>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
                     This browser has blocked notifications. Change permission in your browser settings to get notifications.
                   </p>
                 </div>

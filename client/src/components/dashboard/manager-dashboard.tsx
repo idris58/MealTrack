@@ -57,7 +57,7 @@ export function ManagerDashboard() {
               </CardTitle>
               <span
                 className={cn(
-                  'rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide backdrop-blur-md',
+                  'rounded-full px-2 py-0.5 text-xs font-semibold tracking-wide backdrop-blur-md',
                   stats.remainingCash >= 0
                     ? 'bg-emerald-400/20 text-emerald-100 border border-emerald-300/30'
                     : 'bg-rose-500/30 text-rose-100 border border-rose-400/40'
@@ -80,7 +80,7 @@ export function ManagerDashboard() {
 
             {/* Fund deployment progress bar */}
             <div className="space-y-1">
-              <div className="flex justify-between text-[10px] text-emerald-100/80 font-medium">
+              <div className="flex justify-between text-xs text-emerald-100/80 font-medium">
                 <span>Deployed: {formatCurrency(totalSpent)}</span>
                 <span>{spentPct}% utilized</span>
               </div>
@@ -96,7 +96,7 @@ export function ManagerDashboard() {
             <div className="grid grid-cols-2 gap-2.5 pt-0.5">
               <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Meal Cost</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Meal Cost</p>
                   <span className="rounded-md bg-emerald-400/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-100">
                     {mealPct}%
                   </span>
@@ -108,7 +108,7 @@ export function ManagerDashboard() {
 
               <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-md shadow-xs transition-colors hover:bg-white/15">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-100">Utility Cost</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Utility Cost</p>
                   <span className="rounded-md bg-purple-400/20 px-1.5 py-0.2 text-[9px] font-bold text-purple-100">
                     {fixedPct}%
                   </span>

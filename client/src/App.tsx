@@ -166,14 +166,14 @@ function NotificationOnboardingToast() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-foreground leading-snug">Stay updated with MealTrack</p>
-                  <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed">
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
                     Get reminders &amp; mess updates delivered instantly.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleDismiss}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   aria-label="Dismiss"
                 >
                   <X className="h-3 w-3" />
@@ -517,14 +517,14 @@ function PwaUpdateNotifier() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-foreground leading-snug">Update available</p>
-                  <p className="mt-0.5 text-[11.5px] text-muted-foreground leading-relaxed">
+                  <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
                     A new version of MealTrack is ready with the latest fixes &amp; features.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleLater}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   aria-label="Dismiss"
                 >
                   <X className="h-3 w-3" />

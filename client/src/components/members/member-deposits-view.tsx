@@ -500,7 +500,7 @@ export function MemberDepositsView() {
               <div key={s.label} className="min-w-0 px-3 py-3.5 sm:px-5">
                 <dt className="text-xs text-white/55">{s.label}</dt>
                 <dd className="mt-0.5 break-words font-heading text-lg font-semibold tabular-nums">{s.value}</dd>
-                <p className="break-words text-[11px] text-white/45">{s.sub}</p>
+                <p className="break-words text-xs text-white/45">{s.sub}</p>
               </div>
             ))}
           </dl>

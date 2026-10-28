@@ -208,7 +208,7 @@ function FundsRing({ pct, tone }: { pct: number; tone: 'good' | 'warn' | 'bad' }
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
         <span className="font-heading text-3xl font-bold tabular-nums leading-none">{Math.round(clamped)}%</span>
-        <span className="mt-1 text-[11px] text-white/70">of deposits used</span>
+        <span className="mt-1 text-xs text-white/70">of deposits used</span>
       </div>
     </div>
   );
@@ -235,7 +235,7 @@ function SplitDonut({ meal, fixed }: { meal: number; fixed: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="font-heading text-lg font-semibold tabular-nums leading-none">{money(total, 0)}</span>
-        <span className="mt-0.5 text-[10px] text-muted-foreground">your cost</span>
+        <span className="mt-0.5 text-xs text-muted-foreground">your cost</span>
       </div>
     </div>
   );
@@ -459,7 +459,7 @@ export function MemberDashboard() {
             <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg', accent)}><Icon className="h-4 w-4" /></span>
             <p className="mt-3 text-xs text-muted-foreground">{label}</p>
             <p className="mt-0.5 truncate font-heading text-xl font-semibold tabular-nums sm:text-2xl">{value}</p>
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">{sub}</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{sub}</p>
           </div>
         ))}
       </div>
@@ -490,20 +490,20 @@ export function MemberDashboard() {
           <div className="flex h-28 items-end gap-2" role="img" aria-label="Meals per day for the last 7 days">
             {view.week.map(({ date, count }) => (
               <div key={dayKey(date)} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-                <span className="text-[11px] font-medium tabular-nums text-muted-foreground">{count > 0 ? meals(count) : ''}</span>
+                <span className="text-xs font-medium tabular-nums text-muted-foreground">{count > 0 ? meals(count) : ''}</span>
                 <div className="flex w-full flex-1 items-end rounded-lg bg-muted/50">
                   <div
                     className={cn('w-full rounded-lg transition-[height] duration-500', isToday(date) ? 'bg-emerald-500' : 'bg-emerald-500/55')}
                     style={{ height: `${count > 0 ? Math.max(12, (count / weekMax) * 100) : 0}%` }}
                   />
                 </div>
-                <span className={cn('text-[11px]', isToday(date) ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{format(date, 'EEE')}</span>
+                <span className={cn('text-xs', isToday(date) ? 'font-semibold text-foreground' : 'text-muted-foreground')}>{format(date, 'EEE')}</span>
               </div>
             ))}
           </div>
 
           <div className="mt-6">
-            <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-[10px] text-muted-foreground">
+            <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-xs text-muted-foreground">
               {['Sa', 'Su', 'Mo', 'Tu', 'We', 'Th', 'Fr'].map((d) => <span key={d}>{d}</span>)}
             </div>
             <div className="grid grid-cols-7 gap-1.5">
@@ -519,7 +519,7 @@ export function MemberDashboard() {
                 />
               ))}
             </div>
-            <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+            <div className="mt-3 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
               Fewer
               {[0, 0.5, 1.5, 2.5, 3].map((n) => <i key={n} className={cn('h-2.5 w-2.5 rounded-sm', heatClass(n))} />)}
               More

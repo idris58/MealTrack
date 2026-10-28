@@ -1014,7 +1014,7 @@ export default function SharedPage({ token }: { token: string }) {
                                 <p className="font-heading font-bold">
                                   {formatCurrency(expense.amount)}
                                 </p>
-                                <Badge variant="secondary" className="text-[10px] uppercase">
+                                <Badge variant="secondary" className="text-xs uppercase">
                                   {expense.type}
                                 </Badge>
                               </div>

@@ -41,7 +41,7 @@ const currentYear = new Date().getFullYear();
 const dayLabel = (d: Date) => format(d, d.getFullYear() === currentYear ? 'dd MMM' : 'dd MMM yyyy');
 
 function heat(count: number) {
-  if (count <= 0) return 'text-muted-foreground/35';
+  if (count <= 0) return 'text-muted-foreground/70';
   if (count < 1) return 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200';
   if (count < 2) return 'bg-emerald-500/20 text-emerald-900 dark:text-emerald-100';
   if (count < 3) return 'bg-emerald-500/35 text-emerald-950 dark:text-emerald-50';
@@ -269,12 +269,12 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
                         today ? 'border-primary bg-primary text-primary-foreground' : 'bg-background',
                       )}
                     >
-                      <span className="text-[10px] font-medium leading-none opacity-80">{presentation.weekday}</span>
+                      <span className="text-xs font-medium leading-none opacity-80">{presentation.weekday}</span>
                       <span className="mt-0.5 font-heading text-lg font-bold leading-none">{presentation.dayNumber}</span>
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      {showAll && <p className="mb-1 text-[11px] text-muted-foreground">{presentation.label}</p>}
+                      {showAll && <p className="mb-1 text-xs text-muted-foreground">{presentation.label}</p>}
                       {total === 0 ? (
                         <p className="pt-2.5 text-sm text-muted-foreground">
                           {onDayClick ? 'Nothing logged. Tap to add meals.' : 'Nothing logged'}
@@ -299,7 +299,7 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
                             })}
                           </div>
                           {absent > 0 && !focusId && (
-                            <p className="mt-1.5 text-[11px] text-muted-foreground">{absent} not eating</p>
+                            <p className="mt-1.5 text-xs text-muted-foreground">{absent} not eating</p>
                           )}
                         </>
                       )}
@@ -340,10 +340,10 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
                     )}
                   >
                     <div className="flex flex-col items-center gap-1">
-                      <Avatar className="h-6 w-6 text-[10px]">
+                      <Avatar className="h-6 w-6 text-xs">
                         <AvatarFallback>{initials(m)}</AvatarFallback>
                       </Avatar>
-                      <span className="w-16 truncate text-[11px] font-semibold">{m.name.split(' ')[0]}</span>
+                      <span className="w-16 truncate text-xs font-semibold">{m.name.split(' ')[0]}</span>
                     </div>
                   </th>
                 ))}
@@ -359,7 +359,7 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
                   <tr key={dk} onClick={() => onDayClick?.(day)} className={cn('group', onDayClick && 'cursor-pointer', tintedRows && index % 2 === 1 && 'bg-muted/20')}>
                     <td className={cn('sticky left-0 z-10 whitespace-nowrap border-b border-r bg-card px-4 py-2.5 group-hover:bg-muted', isToday(day) && 'border-l-2 border-l-primary')}>
                       <span className={cn('block font-medium leading-tight', isToday(day) && 'text-primary')}>{presentation.label}</span>
-                      <span className="block text-[10px] text-muted-foreground">{presentation.weekdayLong}</span>
+                      <span className="block text-xs text-muted-foreground">{presentation.weekdayLong}</span>
                     </td>
                     {shownMembers.map((m) => {
                       const log = lookup.get(cellKey(dk, m.id));

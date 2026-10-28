@@ -411,7 +411,7 @@ export default function AuthPage() {
                 <ChefHat className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary">MealTrack</p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">MealTrack</p>
                 <CardTitle className="mt-0.5 text-xl font-bold font-heading text-foreground">{title}</CardTitle>
               </div>
             </div>

@@ -50,7 +50,7 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
         ) : null}
         <div className="text-right">
           <p className="font-heading text-sm font-bold sm:text-base">৳{expense.amount.toFixed(0)}</p>
-          <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+          <Badge variant="secondary" className="text-xs uppercase tracking-wider">
             {expense.type === 'meal' ? 'Meal' : 'Utility'}
           </Badge>
         </div>

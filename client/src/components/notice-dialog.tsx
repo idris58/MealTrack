@@ -104,7 +104,7 @@ function ReadPanel({ onEdit, onClose }: { onEdit: () => void; onClose: () => voi
               Notice
             </h3>
             {notice.createdAt && (
-              <p className="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">
+              <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
                 Posted {formatDistanceToNow(parseISO(notice.createdAt), { addSuffix: true })}
               </p>
             )}
@@ -234,7 +234,7 @@ function PostEditPanel({
           className="resize-none"
           maxLength={800}
         />
-        <p className="text-right text-[11px] text-muted-foreground">{content.length}/800</p>
+        <p className="text-right text-xs text-muted-foreground">{content.length}/800</p>
       </div>
 
       {/* Expiry section */}
