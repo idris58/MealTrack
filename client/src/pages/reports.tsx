@@ -122,7 +122,10 @@ export default function ReportsPage() {
     }
   }, [profile?.role, setLocation]);
 
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [previewHeight, setPreviewHeight] = useState<number>(0);
   const today = startOfDay(new Date());
   const [from, setFrom] = useState(() => activeCycle?.startedAt ? startOfDay(new Date(activeCycle.startedAt)) : today);
   const [to, setTo] = useState(() => today);
@@ -173,6 +176,38 @@ export default function ReportsPage() {
       remainingCash: math.stats.remainingCash,
     };
   }, [details, from, to, fromKey, toKey]);
+
+  useEffect(() => {
+    const container = previewContainerRef.current;
+    const preview = previewRef.current;
+    if (!container || !preview) return;
+
+    const updateScale = () => {
+      const containerWidth = container.clientWidth;
+      const targetWidth = 820;
+      if (containerWidth > 0 && containerWidth < targetWidth) {
+        setScale(containerWidth / targetWidth);
+      } else {
+        setScale(1);
+      }
+      if (previewRef.current) {
+        setPreviewHeight(previewRef.current.offsetHeight);
+      }
+    };
+
+    updateScale();
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateScale();
+    });
+
+    resizeObserver.observe(container);
+    resizeObserver.observe(preview);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [report, isLoading]);
 
   const rangeLabel = format(from, 'dd MMM yyyy') + ' – ' + format(to, 'dd MMM yyyy');
   const dayCount = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000));
@@ -558,14 +593,31 @@ export default function ReportsPage() {
 
       {/* ── Statement preview ── */}
       <div
-        className="mx-auto max-w-4xl overflow-x-auto rounded-3xl p-4 pb-6 sm:p-8"
+        className="mx-auto max-w-4xl rounded-3xl p-3 pb-6 sm:p-8"
         style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, rgba(14,36,32,0.06), transparent 60%)' }}
       >
-        <div
-          ref={previewRef}
-          className="relative min-w-[820px] overflow-hidden rounded-2xl shadow-[0_28px_70px_-24px_rgba(14,36,32,0.45)] ring-1 ring-black/5"
-          style={{ backgroundColor: PAPER, color: INK }}
-        >
+        <div ref={previewContainerRef} className="w-full overflow-hidden">
+          <div
+            style={{
+              height: scale < 1 && previewHeight > 0 ? `${Math.ceil(previewHeight * scale)}px` : undefined,
+              width: '100%',
+              display: 'flex',
+              justifyContent: scale < 1 ? 'flex-start' : 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 820,
+                transform: scale < 1 ? `scale(${scale})` : undefined,
+                transformOrigin: 'top left',
+                flexShrink: 0,
+              }}
+            >
+              <div
+                ref={previewRef}
+                className="relative w-[820px] overflow-hidden rounded-2xl shadow-[0_28px_70px_-24px_rgba(14,36,32,0.45)] ring-1 ring-black/5"
+                style={{ backgroundColor: PAPER, color: INK }}
+              >
           {/* faint watermark monogram */}
           <div
             aria-hidden
@@ -712,6 +764,9 @@ export default function ReportsPage() {
           <div className="relative border-t px-8 py-5 text-center" style={{ borderColor: HAIRLINE }}>
             <div className="mx-auto mb-2.5 h-px w-14" style={{ backgroundColor: `${GOLD}70` }} />
             <p className="text-xs" style={{ color: `${INK}80` }}>Prepared via MealTrack</p>
+          </div>
+        </div>
+            </div>
           </div>
         </div>
       </div>

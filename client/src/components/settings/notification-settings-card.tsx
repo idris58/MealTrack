@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BellRing,
@@ -32,9 +32,17 @@ export function NotificationSettingsCard() {
   const noticesEnabled = preferences?.categories?.notices !== false;
   const mealRemindersEnabled = preferences?.categories?.mealReminders !== false;
 
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (preferences?.reminderTime) setReminderTime(preferences.reminderTime);
   }, [preferences?.reminderTime]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
 
   const savePreferences = async (patch: Partial<NotificationPreferences>, successMessage = 'Notification preferences saved.') => {
     setPreferencesSaving(true);
@@ -48,6 +56,26 @@ export function NotificationSettingsCard() {
       setPreferencesError(saveError instanceof Error ? saveError.message : 'Unable to save reminder preferences.');
     } finally {
       setPreferencesSaving(false);
+    }
+  };
+
+  const handleReminderTimeChange = (newTime: string) => {
+    setReminderTime(newTime);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    if (!newTime || newTime === preferences?.reminderTime || !/^\d{2}:\d{2}$/.test(newTime)) return;
+
+    debounceTimerRef.current = setTimeout(() => {
+      void savePreferences({ reminderTime: newTime }, 'Reminder time saved.');
+    }, 800);
+  };
+
+  const handleReminderTimeBlur = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (reminderTime && reminderTime !== preferences?.reminderTime && /^\d{2}:\d{2}$/.test(reminderTime)) {
+      void savePreferences({ reminderTime }, 'Reminder time saved.');
     }
   };
 
@@ -199,27 +227,28 @@ export function NotificationSettingsCard() {
                     />
                   </div>
                   <label className="block space-y-1 text-xs font-medium">
-                    Reminder time <span className="font-normal text-muted-foreground">(Dhaka time)</span>
+                    <span className="flex items-center justify-between">
+                      <span>
+                        Reminder time <span className="font-normal text-muted-foreground">(Dhaka time)</span>
+                      </span>
+                      {preferencesSaving && (
+                        <span className="flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+                        </span>
+                      )}
+                    </span>
                     <input
                       type="time"
                       value={reminderTime}
-                      disabled={isBlocked || !globalEnabled || !mealRemindersEnabled || preferencesLoading || preferencesSaving}
-                      onChange={(event) => setReminderTime(event.target.value)}
+                      disabled={isBlocked || !globalEnabled || !mealRemindersEnabled || preferencesLoading}
+                      onChange={(event) => handleReminderTimeChange(event.target.value)}
+                      onBlur={handleReminderTimeBlur}
                       className="mt-1 flex h-10 w-full rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                     />
                   </label>
                   <p className="text-xs text-muted-foreground">
                     Next reminder: {!isBlocked && globalEnabled && mealRemindersEnabled ? nextRun : isBlocked ? 'Notifications blocked by browser.' : 'Enable meal reminders to schedule.'}
                   </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => void savePreferences({ reminderTime }, 'Reminder time saved.')}
-                    disabled={isBlocked || preferencesLoading || preferencesSaving}
-                  >
-                    {preferencesSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Save time
-                  </Button>
                 </>
               )}
             </div>
