@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { useMealData, type CycleDeposit, type Expense, type MealLog } from '@/lib/meal-context';
+import { useMealCycles, useMealMembers, useMealRows, useMealStats, type CycleDeposit, type Expense, type MealLog } from '@/lib/meal-context';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
 const chartConfig: ChartConfig = {
@@ -312,7 +312,10 @@ function buildInsights(
 }
 
 export function DashboardAnalytics() {
-  const { activeCycle, stats, expenses, deposits, mealLogs, members, getMemberStats } = useMealData();
+  const { activeCycle } = useMealCycles();
+  const { stats } = useMealStats();
+  const { expenses, deposits, mealLogs } = useMealRows();
+  const { members, getMemberStats } = useMealMembers();
   const [cashMode, setCashMode] = useState<'daily' | 'cumulative'>('cumulative');
   const [viewFilter, setViewFilter] = useState<'all' | 'costs' | 'cash'>('all');
 

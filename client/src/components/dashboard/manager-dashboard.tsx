@@ -1,4 +1,5 @@
-import { useMealData } from '@/lib/meal-context';
+import { useMealMembers, useMealRows, useMealStats } from '@/lib/meal-context';
+import { formatCurrency, formatMealCount } from '@/lib/display-format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ArrowUpRight,
@@ -18,17 +19,10 @@ import { MealCountEditor } from '@/components/meal-count-editor';
 import { ExpenseForm } from '@/components/expense-form';
 import { DashboardAnalytics } from '@/components/dashboard-analytics';
 
-function formatMealCount(value: number) {
-  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
-  return rounded.toString();
-}
-
-function formatCurrency(amount: number) {
-  return `৳${amount.toFixed(2)}`;
-}
-
 export function ManagerDashboard() {
-  const { stats, members, mealLogs } = useMealData();
+  const { stats } = useMealStats();
+  const { members } = useMealMembers();
+  const { mealLogs } = useMealRows();
   const [openExpense, setOpenExpense] = useState(false);
   const [openMeal, setOpenMeal] = useState(false);
 

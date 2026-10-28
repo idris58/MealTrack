@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
-import { useMealActions, useMealData, Expense } from '@/lib/meal-context';
+import { useMealActions, useMealCycles, useMealRows, Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -63,7 +63,8 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
 type TabFilter = 'all' | 'meal' | 'utility';
 
 export default function Expenses() {
-  const { expenses, activeCycle } = useMealData();
+  const { expenses } = useMealRows();
+  const { activeCycle } = useMealCycles();
   const { restoreExpense } = useMealActions();
   const { canManageExpenses, profile } = useAuth();
   const isMember = profile?.role === 'member';

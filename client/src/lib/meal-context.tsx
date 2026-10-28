@@ -15,7 +15,7 @@ import { useDeposits } from '@/hooks/use-deposits';
 import { useExpenses } from '@/hooks/use-expenses';
 import { useMealLogs } from '@/hooks/use-meal-logs';
 import { useCycles } from '@/hooks/use-cycles';
-import { useCycleDetails } from '@/hooks/use-cycle-details';
+import { useCycleDetails as useComputedCycleDetails } from '@/hooks/use-cycle-details';
 import { useCycleLoader } from '@/hooks/use-cycle-loader';
 import { useMealScopeLoader } from '@/hooks/use-meal-scope-loader';
 import { useAuth } from '@/lib/auth-context';
@@ -57,6 +57,21 @@ export type {
 
 export const MealDataContext = createContext<MealDataContextType | undefined>(undefined);
 export const MealActionsContext = createContext<MealActionsContextType | undefined>(undefined);
+type MealRowsData = Pick<MealDataContextType, 'expenses' | 'deposits' | 'mealLogs'>;
+type MealCyclesData = Pick<MealDataContextType, 'cycles' | 'activeCycle' | 'pendingCycle'>;
+type MealCycleDetailsData = Pick<MealDataContextType, 'getCycleDetails' | 'isCycleDetailsLoading' | 'getCycleDetailsError'> & { revision: unknown };
+type MealMembersData = Pick<MealDataContextType, 'members' | 'archivedMembers' | 'getMemberStats'>;
+type MealStatsData = Pick<MealDataContextType, 'stats'>;
+type MealStatusData = Pick<MealDataContextType, 'loading' | 'initialLoading' | 'refreshing' | 'pendingSyncIds' | 'failedSyncOps' | 'dataError'>;
+type MealChangelogData = Pick<MealDataContextType, 'activeCycleChangelogEntries' | 'pendingCycleChangelogEntries' | 'changelogEntries' | 'hasMoreChangelogEntries' | 'changelogLoading'>;
+
+const MealRowsContext = createContext<MealRowsData | undefined>(undefined);
+const MealCyclesContext = createContext<MealCyclesData | undefined>(undefined);
+const MealCycleDetailsContext = createContext<MealCycleDetailsData | undefined>(undefined);
+const MealMembersContext = createContext<MealMembersData | undefined>(undefined);
+const MealStatsContext = createContext<MealStatsData | undefined>(undefined);
+const MealStatusContext = createContext<MealStatusData | undefined>(undefined);
+const MealChangelogContext = createContext<MealChangelogData | undefined>(undefined);
 
 type RealtimeEvents = { notices: number; mealOffRequests: number; profiles: number };
 const RealtimeEventsContext = createContext<RealtimeEvents | undefined>(undefined);
@@ -283,6 +298,41 @@ function mapDepositRows(rows: CycleDepositRow[]): CycleDeposit[] {
   }));
 }
 
+async function fetchCycleRowsForScope(messId: string, cycleIds: string[]) {
+  if (!cycleIds.length) return { deposits: [] as CycleDeposit[], expenses: [] as Expense[], mealLogs: [] as MealLog[] };
+
+  const [depositsResult, expensesResult] = await Promise.all([
+    supabase.from('cycle_deposits')
+      .select('id, cycle_id, member_id, amount, kind, note, created_at')
+      .eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
+    supabase.from('expenses')
+      .select('id, cycle_id, amount, description, type, date, paid_by, updated_at')
+      .eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
+  ]);
+  if (depositsResult.error) throw depositsResult.error;
+  if (expensesResult.error) throw expensesResult.error;
+
+  const mealLogRows: MealLogRow[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.from('meal_logs')
+      .select('id, cycle_id, member_id, date, count, updated_at')
+      .eq('mess_id', messId).in('cycle_id', cycleIds)
+      .order('date', { ascending: false }).order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const page = (data || []) as MealLogRow[];
+    mealLogRows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return {
+    deposits: mapDepositRows((depositsResult.data || []) as CycleDepositRow[]),
+    expenses: mapExpenseRows((expensesResult.data || []) as ExpenseRow[]),
+    mealLogs: mapMealLogRows(mealLogRows),
+  };
+}
+
 function toAvatar(name: string, fallback?: string | null) {
   return fallback || name.substring(0, 2).toUpperCase();
 }
@@ -402,7 +452,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     return [...snapshotMembers, ...archivedHistoryMembers];
   }, [cycles, memberRoster, archivedMemberRoster, historyMemberIdsByCycle]);
 
-  const computedCycleDetails = useCycleDetails({
+  const computedCycleDetails = useComputedCycleDetails({
     cycles,
     loadedCycleIds,
     membersForCycle: getCycleMembers,
@@ -412,86 +462,13 @@ export function MealProvider({ children }: { children: ReactNode }) {
   });
 
   const fetchCycleRows = useCallback(async (cycleId: string) => {
-    if (!userId || !messId) {
-      return null;
-    }
-
-    const [depositsResult, expensesResult] = await Promise.all([
-      supabase
-        .from('cycle_deposits')
-        .select('id, cycle_id, member_id, amount, kind, note, created_at')
-        .eq('mess_id', messId)
-        .eq('cycle_id', cycleId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('expenses')
-        .select('id, cycle_id, amount, description, type, date, paid_by, updated_at')
-        .eq('mess_id', messId)
-        .eq('cycle_id', cycleId)
-        .is('deleted_at', null)
-        .order('date', { ascending: false }),
-    ]);
-
-    if (depositsResult.error) throw depositsResult.error;
-    if (expensesResult.error) throw expensesResult.error;
-    const mealLogRows: MealLogRow[] = [];
-    const mealLogPageSize = 1000;
-    for (let offset = 0; ; offset += mealLogPageSize) {
-      const { data, error } = await supabase
-        .from('meal_logs')
-        .select('id, cycle_id, member_id, date, count, updated_at')
-        .eq('mess_id', messId)
-        .eq('cycle_id', cycleId)
-        .order('date', { ascending: false })
-        .order('id', { ascending: true })
-        .range(offset, offset + mealLogPageSize - 1);
-      if (error) throw error;
-      const page = (data || []) as MealLogRow[];
-      mealLogRows.push(...page);
-      if (page.length < mealLogPageSize) break;
-    }
-
-    return {
-      deposits: mapDepositRows((depositsResult.data || []) as CycleDepositRow[]),
-      expenses: mapExpenseRows((expensesResult.data || []) as ExpenseRow[]),
-      mealLogs: mapMealLogRows(mealLogRows),
-    };
+    if (!userId || !messId) return null;
+    return fetchCycleRowsForScope(messId, [cycleId]);
   }, [userId, messId]);
 
   const fetchCycleRowsForCycles = useCallback(async (cycleIds: string[]) => {
-    if (!userId || !messId || cycleIds.length === 0) {
-      return { deposits: [] as CycleDeposit[], expenses: [] as Expense[], mealLogs: [] as MealLog[] };
-    }
-
-    const [depositsResult, expensesResult] = await Promise.all([
-      supabase.from('cycle_deposits').select('id, cycle_id, member_id, amount, kind, note, created_at').eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
-      supabase.from('expenses').select('id, cycle_id, amount, description, type, date, paid_by, updated_at').eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
-    ]);
-    if (depositsResult.error) throw depositsResult.error;
-    if (expensesResult.error) throw expensesResult.error;
-
-    const mealLogRows: MealLogRow[] = [];
-    const mealLogPageSize = 1000;
-    for (let offset = 0; ; offset += mealLogPageSize) {
-      const { data, error } = await supabase
-        .from('meal_logs')
-        .select('id, cycle_id, member_id, date, count, updated_at')
-        .eq('mess_id', messId)
-        .in('cycle_id', cycleIds)
-        .order('date', { ascending: false })
-        .order('id', { ascending: true })
-        .range(offset, offset + mealLogPageSize - 1);
-      if (error) throw error;
-      const page = (data || []) as MealLogRow[];
-      mealLogRows.push(...page);
-      if (page.length < mealLogPageSize) break;
-    }
-
-    return {
-      deposits: mapDepositRows((depositsResult.data || []) as CycleDepositRow[]),
-      expenses: mapExpenseRows((expensesResult.data || []) as ExpenseRow[]),
-      mealLogs: mapMealLogRows(mealLogRows),
-    };
+    if (!userId || !messId) return { deposits: [], expenses: [], mealLogs: [] };
+    return fetchCycleRowsForScope(messId, cycleIds);
   }, [userId, messId]);
 
   const cycleLoader = useCycleLoader({
@@ -1284,6 +1261,42 @@ export function MealProvider({ children }: { children: ReactNode }) {
     cycleLoader.getError,
   ]);
 
+  const rowsValue = useMemo<MealRowsData>(() => ({ expenses, deposits, mealLogs }), [expenses, deposits, mealLogs]);
+  const cyclesValue = useMemo<MealCyclesData>(() => ({
+    cycles,
+    activeCycle,
+    pendingCycle,
+  }), [cycles, activeCycle, pendingCycle]);
+  const cycleDetailsValue = useMemo<MealCycleDetailsData>(() => ({
+    getCycleDetails: computedCycleDetails.getCycleDetails,
+    isCycleDetailsLoading: cycleLoader.isLoading,
+    getCycleDetailsError: cycleLoader.getError,
+    revision: computedCycleDetails.cycleDetailsById,
+  // Cycle detail consumers need to re-render when cached details change, while
+  // navigation and cycle list consumers stay isolated from meal-row updates.
+  }), [computedCycleDetails.getCycleDetails, computedCycleDetails.cycleDetailsById, cycleLoader.isLoading, cycleLoader.getError]);
+  const membersValue = useMemo<MealMembersData>(() => ({
+    members,
+    archivedMembers: archivedMemberRoster.filter((member) => member.archived),
+    getMemberStats,
+  }), [members, archivedMemberRoster, getMemberStats]);
+  const statsValue = useMemo<MealStatsData>(() => ({ stats }), [stats]);
+  const statusValue = useMemo<MealStatusData>(() => ({
+    loading,
+    initialLoading: loading && !hasLoadedDataRef.current,
+    refreshing,
+    pendingSyncIds,
+    failedSyncOps,
+    dataError,
+  }), [loading, refreshing, pendingSyncIds, failedSyncOps, dataError]);
+  const changelogValue = useMemo<MealChangelogData>(() => ({
+    activeCycleChangelogEntries,
+    pendingCycleChangelogEntries,
+    changelogEntries: allChangelogEntries,
+    hasMoreChangelogEntries,
+    changelogLoading,
+  }), [activeCycleChangelogEntries, pendingCycleChangelogEntries, allChangelogEntries, hasMoreChangelogEntries, changelogLoading]);
+
   const actionsValue = useMemo<MealActionsContextType>(() => ({
     addMember: memberActions.addMember,
     updateMember: memberActions.updateMember,
@@ -1342,12 +1355,39 @@ export function MealProvider({ children }: { children: ReactNode }) {
     <RealtimeEventsContext.Provider value={realtimeEvents}>
       <MealActionsContext.Provider value={actionsValue}>
         <MealDataContext.Provider value={dataValue}>
-          {children}
+          <MealRowsContext.Provider value={rowsValue}>
+            <MealCyclesContext.Provider value={cyclesValue}>
+              <MealCycleDetailsContext.Provider value={cycleDetailsValue}>
+                <MealMembersContext.Provider value={membersValue}>
+                  <MealStatsContext.Provider value={statsValue}>
+                    <MealStatusContext.Provider value={statusValue}>
+                      <MealChangelogContext.Provider value={changelogValue}>
+                        {children}
+                      </MealChangelogContext.Provider>
+                    </MealStatusContext.Provider>
+                  </MealStatsContext.Provider>
+                </MealMembersContext.Provider>
+              </MealCycleDetailsContext.Provider>
+            </MealCyclesContext.Provider>
+          </MealRowsContext.Provider>
         </MealDataContext.Provider>
       </MealActionsContext.Provider>
     </RealtimeEventsContext.Provider>
   );
 }
+
+function requireMealContext<T>(context: T | undefined, name: string): T {
+  if (context === undefined) throw new Error(`${name} must be used within a MealProvider`);
+  return context;
+}
+
+export const useMealRows = () => requireMealContext(useContext(MealRowsContext), 'useMealRows');
+export const useMealCycles = () => requireMealContext(useContext(MealCyclesContext), 'useMealCycles');
+export const useCycleDetails = () => requireMealContext(useContext(MealCycleDetailsContext), 'useCycleDetails');
+export const useMealMembers = () => requireMealContext(useContext(MealMembersContext), 'useMealMembers');
+export const useMealStats = () => requireMealContext(useContext(MealStatsContext), 'useMealStats');
+export const useMealStatus = () => requireMealContext(useContext(MealStatusContext), 'useMealStatus');
+export const useMealChangelog = () => requireMealContext(useContext(MealChangelogContext), 'useMealChangelog');
 
 export function useRealtimeEvents() {
   const context = useContext(RealtimeEventsContext);

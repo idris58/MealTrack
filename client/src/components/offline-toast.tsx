@@ -19,7 +19,7 @@ import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { WifiOff, CloudUpload, AlertTriangle } from 'lucide-react';
 import { useNetworkStatus } from '@/lib/pwa';
-import { useMealActions, useMealData } from '@/lib/meal-context';
+import { useMealActions, useMealStatus } from '@/lib/meal-context';
 
 const OFFLINE_TOAST_ID = 'mealtrack-offline-status';
 
@@ -40,7 +40,7 @@ async function requestBackgroundSync() {
 
 export function OfflineToastManager() {
   const { isOnline } = useNetworkStatus();
-  const { failedSyncOps } = useMealData();
+  const { failedSyncOps } = useMealStatus();
   const { triggerSync, retryFailedSync, discardFailedSync } = useMealActions();
   const prevOnlineRef = useRef(isOnline);
   const hasMountedRef = useRef(false);

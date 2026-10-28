@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSharedPushNotifications } from "@/lib/push-notifications";
 import { useMarqueeDuration } from "@/hooks/use-marquee-duration";
 import { cn } from "@/lib/utils";
+import { formatMealCount, formatWholeCurrency as formatCurrency } from "@/lib/display-format";
 import { MealLogTable } from "@/components/meal-log-table";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -90,17 +91,8 @@ type SharedPayload = {
   } | null;
 };
 
-function formatCurrency(amount: number) {
-  return `\u09F3${amount.toFixed(2)}`;
-}
-
 function formatBalance(amount: number) {
   return `\u09F3${Math.round(Math.abs(amount))}`;
-}
-
-function formatMealCount(value: number) {
-  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
-  return rounded.toString();
 }
 
 function formatCycleStatus(status: SharedPayload["cycle"]["status"]) {

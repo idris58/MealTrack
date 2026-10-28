@@ -23,14 +23,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import {
   useMealActions,
-  useMealData,
+  useMealChangelog,
+  useMealCycles,
   type ChangelogAction,
   type ChangelogActor,
   type ChangelogChange,
   type ChangelogEntityType,
   type ChangelogEntry,
 } from '@/lib/meal-context';
-import { cn } from '@/lib/utils';
+import { formatCurrency, formatMealCount } from '@/lib/display-format';
+import { cn, getInitials } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { useLocation } from 'wouter';
 import { PageHeader } from '@/components/page-header';
@@ -57,11 +59,6 @@ const ENTITY_FILTERS: {
 ];
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number) {
-  const abs = Math.abs(value).toFixed(2);
-  return value < 0 ? `-৳${abs}` : `৳${abs}`;
-}
 
 function formatValue(value: string | number | boolean | null | undefined): string {
   if (typeof value === 'string') {
@@ -142,12 +139,8 @@ function mealCount(value: ChangelogChange['from'] | ChangelogChange['to']) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function formatMealCount(value: number) {
-  return formatValue(value);
-}
-
 function formatSignedMealCount(value: number) {
-  return `${value >= 0 ? '+' : ''}${formatMealCount(value)}`;
+  return `${value >= 0 ? '+' : ''}${formatMealCount(value, 2)}`;
 }
 
 function getEntrySummary(entry: ChangelogEntry): string {
@@ -323,12 +316,6 @@ function getDetailedChanges(entry: ChangelogEntry): ChangelogChange[] {
   return entry.changes.filter((c) => c.field !== 'members_changed');
 }
 
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
 function groupEntriesByDay(entries: ChangelogEntry[]) {
   const groups = new Map<string, { label: string; entries: ChangelogEntry[] }>();
 
@@ -483,9 +470,9 @@ function MealDiff({ changes }: { changes: ChangelogChange[] }) {
           <div key={change.field} className="flex items-center justify-between gap-3 rounded-lg bg-background px-3 py-1.5 text-xs">
             <span className="min-w-0 truncate font-medium">{change.label}</span>
             <span className="flex shrink-0 items-center gap-2 tabular-nums">
-              <span className="text-muted-foreground line-through">{formatMealCount(from)}</span>
+              <span className="text-muted-foreground line-through">{formatMealCount(from, 2)}</span>
               <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
-              <b>{formatMealCount(to)}</b>
+              <b>{formatMealCount(to, 2)}</b>
               <span className={cn(
                 'rounded px-1.5 font-semibold',
                 delta > 0
@@ -804,14 +791,13 @@ function ChangelogSection({
 export default function ChangelogPage() {
   const [, setLocation] = useLocation();
   const { profile } = useAuth();
+  const { activeCycle, pendingCycle } = useMealCycles();
   const {
-    activeCycle,
     activeCycleChangelogEntries,
-    pendingCycle,
     pendingCycleChangelogEntries,
     hasMoreChangelogEntries,
     changelogLoading,
-  } = useMealData();
+  } = useMealChangelog();
   const { loadMoreChangelogEntries } = useMealActions();
 
   const [actionFilter, setActionFilter] = useState<ChangelogAction | 'all'>('all');

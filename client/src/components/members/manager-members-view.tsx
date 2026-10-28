@@ -5,7 +5,8 @@
  * deposit modal, and soft-delete / undo.
  */
 
-import { useMealActions, useMealData, useRealtimeEvents, type Member } from '@/lib/meal-context';
+import { useMealActions, useMealCycles, useMealMembers, useRealtimeEvents, type Member } from '@/lib/meal-context';
+import { formatMealCount } from '@/lib/display-format';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -52,11 +53,6 @@ import { PageHeader } from '@/components/page-header';
 const DELETE_GRACE_MS = 10 * 1000;
 
 const memberSchema = z.object({ name: z.string().min(2, 'Name is required') });
-
-function formatMealCount(value: number) {
-  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
-  return rounded.toString();
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type MemberStatsSnapshot = { mealCost: number; fixedCost: number; totalCost: number; balance: number; mealsEaten: number };
@@ -335,7 +331,8 @@ function SortableMemberCard({
 
 // ── Main Manager Members View ─────────────────────────────────────────────────
 export function ManagerMembersView() {
-  const { members, archivedMembers, getMemberStats, activeCycle } = useMealData();
+  const { members, archivedMembers, getMemberStats } = useMealMembers();
+  const { activeCycle } = useMealCycles();
   const { removeMember, restoreMember, reorderMembers } = useMealActions();
   const { profiles: profilesRevision } = useRealtimeEvents();
   const sensors = useSensors(

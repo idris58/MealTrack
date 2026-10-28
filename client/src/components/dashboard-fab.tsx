@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
-import { useMealData } from '@/lib/meal-context';
+import { useMealCycles } from '@/lib/meal-context';
 import { NoticeDialog } from '@/components/notice-dialog';
 
 interface DashboardFabProps {
@@ -30,7 +30,7 @@ export function DashboardFab({ onOpenExpense, onOpenMeal }: DashboardFabProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showNoticeDialog, setShowNoticeDialog] = useState(false);
   const { profile, canManageExpenses, canOperateMeals } = useAuth();
-  const { activeCycle } = useMealData();
+  const { activeCycle } = useMealCycles();
 
   const canPostNotice =
     profile?.role === 'manager' || profile?.role === 'coordinator';

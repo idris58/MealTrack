@@ -14,7 +14,7 @@
  *  7. Activity         – your latest deposits and the mess's latest expenses
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Link } from 'wouter';
 import {
   addDays,
@@ -54,7 +54,10 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
-import { useMealData, type CycleDeposit } from '@/lib/meal-context';
+import { useMealCycles, useMealMembers, useMealRows, useMealStats } from '@/lib/meal-context';
+import { useCountUp } from '@/hooks/use-count-up';
+import { formatMealCount, formatMoney as money } from '@/lib/display-format';
+import { getDepositDisplayKind } from '@/lib/deposit-display-kind';
 import { useNotice } from '@/lib/notice-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -62,12 +65,6 @@ import { cn } from '@/lib/utils';
 // ─────────────────────────────────────────────────────────────────────────────
 // Formatting helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-const money = (n: number, digits = 2) =>
-  `৳${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-
-const meals = (n: number) => `${Math.round((n + Number.EPSILON) * 1000) / 1000}`;
-const dayKey = (d: Date) => format(d, 'yyyy-MM-dd');
 
 function greeting(): { text: string; Icon: LucideIcon } {
   const h = new Date().getHours();
@@ -89,35 +86,11 @@ function relativeDay(iso: string) {
   }
 }
 
-function depositKind(d: CycleDeposit): 'deposit' | 'refund' | 'carry' {
-  if (d.kind === 'carry_forward') return 'carry';
-  if (d.kind === 'refund' || d.kind === 'correction' || d.amount < 0) return 'refund';
-  return 'deposit';
-}
+const dayKey = (date: Date) => format(date, 'yyyy-MM-dd');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion: a single count-up on the balance figure (respects reduced motion)
 // ─────────────────────────────────────────────────────────────────────────────
-
-function useCountUp(target: number, duration = 900) {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setValue(target);
-      return;
-    }
-    let raf = 0;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - start) / duration);
-      setValue(target * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
-  return value;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small building blocks
@@ -247,7 +220,10 @@ function SplitDonut({ meal, fixed }: { meal: number; fixed: number }) {
 
 export function MemberDashboard() {
   const { profile } = useAuth();
-  const { members, mealLogs, deposits, expenses, stats, activeCycle, getMemberStats } = useMealData();
+  const { members, getMemberStats } = useMealMembers();
+  const { mealLogs, deposits, expenses } = useMealRows();
+  const { activeCycle } = useMealCycles();
+  const { stats } = useMealStats();
   const { notice } = useNotice();
 
   const displayName = profile?.full_name?.trim() || 'Member';
@@ -323,7 +299,7 @@ export function MemberDashboard() {
     };
   }, [me, activeCycle, deposits, mealLogs, members, stats, getMemberStats]);
 
-  const balanceShown = useCountUp(view?.balance ?? 0);
+  const balanceShown = useCountUp(view?.balance ?? 0, 900);
 
   // ── Guard states ───────────────────────────────────────────────────────────
   const Header = (
@@ -403,15 +379,15 @@ export function MemberDashboard() {
   const vsAvg = view.avgMeals > 0 ? Math.round(((me.mealsEaten - view.avgMeals) / view.avgMeals) * 100) : 0;
 
   const glance: Array<{ label: string; value: string; sub: string; icon: LucideIcon; accent: string }> = [
-    { label: 'Meals eaten', value: meals(me.mealsEaten), sub: `${meals(view.weekTotal)} in the last 7 days`, icon: Utensils, accent: 'text-emerald-600 bg-emerald-500/10' },
+    { label: 'Meals eaten', value: formatMealCount(me.mealsEaten), sub: `${formatMealCount(view.weekTotal)} in the last 7 days`, icon: Utensils, accent: 'text-emerald-600 bg-emerald-500/10' },
     { label: 'Meal rate', value: money(stats.currentMealRate), sub: 'Per meal, this cycle', icon: TrendingUp, accent: 'text-sky-600 bg-sky-500/10' },
     { label: 'Deposited', value: money(view.deposited, 0), sub: `${view.mine.filter((d) => d.amount > 0).length} payment${view.mine.filter((d) => d.amount > 0).length === 1 ? '' : 's'}`, icon: Wallet, accent: 'text-violet-600 bg-violet-500/10' },
-    { label: 'Today', value: view.todayMeals > 0 ? meals(view.todayMeals) : 'None yet', sub: view.todayMeals > 0 ? 'Logged for you' : 'Nothing logged', icon: CalendarDays, accent: 'text-amber-600 bg-amber-500/10' },
+    { label: 'Today', value: view.todayMeals > 0 ? formatMealCount(view.todayMeals) : 'None yet', sub: view.todayMeals > 0 ? 'Logged for you' : 'Nothing logged', icon: CalendarDays, accent: 'text-amber-600 bg-amber-500/10' },
   ];
 
   const insights: Array<{ icon: LucideIcon; text: string }> = [
     { icon: Flame, text: view.streak > 1 ? `${view.streak}-day meal streak.` : view.streak === 1 ? 'You ate in the mess today.' : 'No meals logged recently.' },
-    { icon: TrendingUp, text: view.avgMeals > 0 ? `${Math.abs(vsAvg)}% ${vsAvg >= 0 ? 'above' : 'below'} the mess average of ${meals(view.avgMeals)} meals.` : 'The mess average will show once meals are logged.' },
+    { icon: TrendingUp, text: view.avgMeals > 0 ? `${Math.abs(vsAvg)}% ${vsAvg >= 0 ? 'above' : 'below'} the mess average of ${formatMealCount(view.avgMeals)} meals.` : 'The mess average will show once meals are logged.' },
     { icon: Receipt, text: `You pay ${money(view.dailyMealCost)} a day on meals, plus a ${money(view.fixedCost, 0)} utility share.` },
   ];
 
@@ -490,7 +466,7 @@ export function MemberDashboard() {
           <div className="flex h-28 items-end gap-2" role="img" aria-label="Meals per day for the last 7 days">
             {view.week.map(({ date, count }) => (
               <div key={dayKey(date)} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-                <span className="text-xs font-medium tabular-nums text-muted-foreground">{count > 0 ? meals(count) : ''}</span>
+                <span className="text-xs font-medium tabular-nums text-muted-foreground">{count > 0 ? formatMealCount(count) : ''}</span>
                 <div className="flex w-full flex-1 items-end rounded-lg bg-muted/50">
                   <div
                     className={cn('w-full rounded-lg transition-[height] duration-500', isToday(date) ? 'bg-emerald-500' : 'bg-emerald-500/55')}
@@ -510,7 +486,7 @@ export function MemberDashboard() {
               {view.cells.map(({ date, count, future, outside }) => (
                 <div
                   key={dayKey(date)}
-                  title={future ? undefined : `${format(date, 'EEE d MMM')}: ${count > 0 ? `${meals(count)} meal${count === 1 ? '' : 's'}` : 'no meals'}`}
+                  title={future ? undefined : `${format(date, 'EEE d MMM')}: ${count > 0 ? `${formatMealCount(count)} meal${count === 1 ? '' : 's'}` : 'no meals'}`}
                   className={cn(
                     'aspect-square rounded-md',
                     future ? 'invisible' : outside ? 'border border-dashed bg-transparent' : heatClass(count),
@@ -560,7 +536,7 @@ export function MemberDashboard() {
           ) : (
             <ul className="divide-y">
               {recentDeposits.map((d) => {
-                const kind = depositKind(d);
+                const kind = getDepositDisplayKind(d);
                 const out = kind === 'refund' || d.amount < 0;
                 const Icon = kind === 'carry' ? Repeat2 : out ? ArrowDownLeft : ArrowUpRight;
                 return (

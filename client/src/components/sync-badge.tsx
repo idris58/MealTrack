@@ -7,7 +7,7 @@
  */
 
 import { CloudUpload } from 'lucide-react';
-import { useMealData } from '@/lib/meal-context';
+import { useMealStatus } from '@/lib/meal-context';
 import { cn } from '@/lib/utils';
 
 interface SyncBadgeProps {
@@ -17,7 +17,7 @@ interface SyncBadgeProps {
 }
 
 export function SyncBadge({ itemId, show, className }: SyncBadgeProps) {
-  const { pendingSyncIds } = useMealData();
+  const { pendingSyncIds } = useMealStatus();
 
   const isPending =
     show === true ||

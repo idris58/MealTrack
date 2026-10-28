@@ -20,7 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { useMealData } from '@/lib/meal-context';
+import { useCycleDetails, useMealCycles, useMealStatus } from '@/lib/meal-context';
 import { computeCycleMath } from '@shared/cycle-math';
 import { PageHeader } from '@/components/page-header';
 import { useAuth } from '@/lib/auth-context';
@@ -112,7 +112,9 @@ function MetaCell({ label, value }: { label: string; value: string }) {
 }
 
 export default function ReportsPage() {
-  const { activeCycle, getCycleDetails, loading } = useMealData();
+  const { activeCycle } = useMealCycles();
+  const { getCycleDetails } = useCycleDetails();
+  const { loading } = useMealStatus();
   const { profile } = useAuth();
   const [, setLocation] = useLocation();
 

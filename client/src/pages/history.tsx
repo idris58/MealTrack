@@ -4,7 +4,8 @@ import { eachDayOfInterval, format, parseISO, startOfDay } from 'date-fns';
 import { Archive, Check, ChevronDown, History, Lock, Pencil, Plus, ScrollText, ShoppingBag, Trash2, Utensils, Wallet, Zap, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { Link } from 'wouter';
 
-import { useMealActions, useMealData, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
+import { useCycleDetails, useMealActions, useMealCycles, type Cycle, type CycleDetails, type Expense } from '@/lib/meal-context';
+import { formatCurrency, formatMealCount } from '@/lib/display-format';
 import { useAuth } from '@/lib/auth-context';
 import { cleanCurrencyFloat, computeSettlementSummary } from '@/lib/settlement-math';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -25,17 +26,8 @@ import { ExpenseForm } from '@/components/expense-form';
 import { PageHeader } from '@/components/page-header';
 import { runMutation } from '@/lib/run-mutation';
 
-function formatCurrency(amount: number) {
-  return `৳${amount.toFixed(2)}`;
-}
-
 function formatBalance(amount: number) {
   return `${amount >= 0 ? '+' : '-'}${Math.round(Math.abs(amount))}`;
-}
-
-function formatMealCount(value: number) {
-  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
-  return rounded.toString();
 }
 
 const DELETE_GRACE_MS = 10 * 1000;
@@ -630,7 +622,7 @@ function ClosedCycleCard({
   isExpanded: boolean;
   onDeleted?: (details: CycleDetails) => void;
 }) {
-  const { getCycleDetails, isCycleDetailsLoading, getCycleDetailsError } = useMealData();
+  const { getCycleDetails, isCycleDetailsLoading, getCycleDetailsError } = useCycleDetails();
   const { loadCycleDetails, deleteCycle } = useMealActions();
   const { canManageCycles } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -892,7 +884,8 @@ function StatCard({
 }
 
 export default function HistoryPage() {
-  const { cycles, getCycleDetails } = useMealData();
+  const { cycles } = useMealCycles();
+  const { getCycleDetails } = useCycleDetails();
   const { restoreCycle } = useMealActions();
   const { profile } = useAuth();
 

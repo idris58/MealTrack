@@ -37,17 +37,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/lib/auth-context';
 import { RoleBadge } from '@/components/role-badge';
 import { supabase } from '@/lib/supabase';
-import { cn } from '@/lib/utils';
+import { cn, getInitials } from '@/lib/utils';
 import { getPasswordStrength } from '@/components/password-strength-indicator';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function getInitials(name?: string | null, email?: string | null): string {
-  const source = name ?? email ?? '';
-  const parts = source.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return source.slice(0, 2).toUpperCase();
-}
 
 // ─── Mess info types ─────────────────────────────────────────────────────────
 

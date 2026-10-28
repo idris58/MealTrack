@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   addDays,
   differenceInCalendarDays,
@@ -33,7 +33,10 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
-import { useMealData, type CycleDeposit } from '@/lib/meal-context';
+import { useMealCycles, useMealMembers, useMealRows, useMealStats, type CycleDeposit } from '@/lib/meal-context';
+import { useCountUp } from '@/hooks/use-count-up';
+import { formatMoney as money, formatSignedMoney as signed } from '@/lib/display-format';
+import { getDepositDisplayKind, type DepositDisplayKind } from '@/lib/deposit-display-kind';
 import { computeMemberCosts } from '@shared/cycle-math';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,19 +46,7 @@ import { cn } from '@/lib/utils';
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const money = (n: number, digits = 2) =>
-  `৳${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-const signed = (n: number, digits = 2) => `${n < 0 ? '−' : '+'}${money(n, digits)}`;
-const dayKey = (d: Date) => format(d, 'yyyy-MM-dd');
-const roundUp10 = (n: number) => Math.ceil(n / 10) * 10;
-
-type Kind = 'deposit' | 'refund' | 'carry';
-
-function kindOf(d: CycleDeposit): Kind {
-  if (d.kind === 'carry_forward') return 'carry';
-  if (d.kind === 'refund' || d.kind === 'correction' || d.amount < 0) return 'refund';
-  return 'deposit';
-}
+type Kind = DepositDisplayKind;
 
 const KIND_META: Record<Kind, { label: string; fallback: string; icon: LucideIcon; tint: string }> = {
   deposit: { label: 'Deposit', fallback: 'Deposit', icon: ArrowUpRight, tint: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
@@ -77,25 +68,8 @@ function safeParse(iso: string) {
   }
 }
 
-function useCountUp(target: number, duration = 800) {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setValue(target);
-      return;
-    }
-    let raf = 0;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - start) / duration);
-      setValue(target * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
-  return value;
-}
+const dayKey = (date: Date) => format(date, 'yyyy-MM-dd');
+const roundUp10 = (value: number) => Math.ceil(value / 10) * 10;
 
 async function copyText(text: string, success: string) {
   try {
@@ -158,7 +132,7 @@ function LedgerRow({
   open: boolean;
   onToggle: () => void;
 }) {
-  const kind = kindOf(deposit);
+  const kind = getDepositDisplayKind(deposit);
   const meta = KIND_META[kind];
   const Icon = meta.icon;
   const when = safeParse(deposit.createdAt);
@@ -245,7 +219,10 @@ type Filter = 'all' | Kind;
 
 export function MemberDepositsView() {
   const { profile } = useAuth();
-  const { members, deposits, mealLogs, activeCycle, stats, getMemberStats } = useMealData();
+  const { members, getMemberStats } = useMealMembers();
+  const { deposits, mealLogs } = useMealRows();
+  const { activeCycle } = useMealCycles();
+  const { stats } = useMealStats();
 
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
@@ -276,8 +253,8 @@ export function MemberDepositsView() {
     }
 
     const net = acc;
-    const paidIn = mine.filter((d) => kindOf(d) === 'deposit' && d.amount > 0).reduce((s, d) => s + d.amount, 0);
-    const carriedIn = mine.filter((d) => kindOf(d) === 'carry' && d.amount > 0).reduce((s, d) => s + d.amount, 0);
+    const paidIn = mine.filter((d) => getDepositDisplayKind(d) === 'deposit' && d.amount > 0).reduce((s, d) => s + d.amount, 0);
+    const carriedIn = mine.filter((d) => getDepositDisplayKind(d) === 'carry' && d.amount > 0).reduce((s, d) => s + d.amount, 0);
     const takenOut = mine.filter((d) => d.amount < 0).reduce((s, d) => s + Math.abs(d.amount), 0);
     const payments = mine.filter((d) => d.amount > 0).length;
     const lastPayment = [...chrono].reverse().find((d) => d.amount > 0) ?? null;
@@ -320,7 +297,7 @@ export function MemberDepositsView() {
     if (!v) return [];
     const q = query.trim().toLowerCase();
     const list = v.mine
-      .filter((d) => filter === 'all' || kindOf(d) === filter)
+      .filter((d) => filter === 'all' || getDepositDisplayKind(d) === filter)
       .filter((d) => !q || (d.note ?? '').toLowerCase().includes(q) || String(Math.abs(d.amount)).includes(q))
       .sort((a, b) => (newestFirst ? 1 : -1) * (+safeParse(b.createdAt) - +safeParse(a.createdAt)));
 
@@ -342,7 +319,7 @@ export function MemberDepositsView() {
     if (!v || !activeCycle) return '';
     const rows = [...v.mine]
       .sort((a, b) => +safeParse(b.createdAt) - +safeParse(a.createdAt))
-      .map((d) => `${format(safeParse(d.createdAt), 'd MMM yyyy, h:mm a')}  ${d.note?.trim() || KIND_META[kindOf(d)].fallback}  ${signed(d.amount)}`);
+      .map((d) => `${format(safeParse(d.createdAt), 'd MMM yyyy, h:mm a')}  ${d.note?.trim() || KIND_META[getDepositDisplayKind(d)].fallback}  ${signed(d.amount)}`);
     return [
       'MealTrack deposit statement',
       `Member: ${profile?.full_name ?? ''}`,
@@ -380,7 +357,7 @@ export function MemberDepositsView() {
         .sort((a, b) => +safeParse(a.createdAt) - +safeParse(b.createdAt))
         .map((d) => {
           const t = safeParse(d.createdAt);
-          return [format(t, 'yyyy-MM-dd'), format(t, 'HH:mm'), esc(KIND_META[kindOf(d)].label), esc(d.note ?? ''), d.amount.toFixed(2), (v.running.get(d.id) ?? 0).toFixed(2)].join(',');
+          return [format(t, 'yyyy-MM-dd'), format(t, 'HH:mm'), esc(KIND_META[getDepositDisplayKind(d)].label), esc(d.note ?? ''), d.amount.toFixed(2), (v.running.get(d.id) ?? 0).toFixed(2)].join(',');
         }),
     ];
     const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
@@ -436,9 +413,9 @@ export function MemberDepositsView() {
 
   const tabs: Array<{ key: Filter; label: string; count: number }> = [
     { key: 'all', label: 'All', count: v.mine.length },
-    { key: 'deposit', label: 'Deposits', count: v.mine.filter((d) => kindOf(d) === 'deposit').length },
-    { key: 'refund', label: 'Refunds', count: v.mine.filter((d) => kindOf(d) === 'refund').length },
-    { key: 'carry', label: 'Carry-forward', count: v.mine.filter((d) => kindOf(d) === 'carry').length },
+    { key: 'deposit', label: 'Deposits', count: v.mine.filter((d) => getDepositDisplayKind(d) === 'deposit').length },
+    { key: 'refund', label: 'Refunds', count: v.mine.filter((d) => getDepositDisplayKind(d) === 'refund').length },
+    { key: 'carry', label: 'Carry-forward', count: v.mine.filter((d) => getDepositDisplayKind(d) === 'carry').length },
   ];
 
   return (

@@ -23,7 +23,7 @@ import { PwaInstallButton } from '@/components/pwa-install-button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/lib/auth-context';
-import { cn } from '@/lib/utils';
+import { cn, getInitials } from '@/lib/utils';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useNotice } from '@/lib/notice-context';
 import { NoticeBanner } from '@/components/notice-banner';
@@ -84,16 +84,6 @@ const MORE_ITEMS = [
   { icon: History, label: 'History', href: '/app/history', desc: 'Archived cycles, settlements & ledger' },
   { icon: Sparkles, label: 'Changelog', href: '/app/changelog', desc: 'Recent features and updates' },
 ];
-
-/** Returns up to two uppercase initials from a display name or email. */
-function getInitials(name?: string | null, email?: string | null): string {
-  const source = name ?? email ?? '';
-  const parts = source.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-  return source.slice(0, 2).toUpperCase();
-}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useMealData } from '@/lib/meal-context';
+import { useMealCycles, useMealMembers, useMealRows } from '@/lib/meal-context';
+import { formatMealCount } from '@/lib/display-format';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -13,13 +14,10 @@ import { MealLogTable } from '@/components/meal-log-table';
 import { MealOffRequests } from '@/components/meal-off-requests';
 import { PageHeader } from '@/components/page-header';
 
-function formatMealCount(value: number) {
-  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
-  return rounded.toString();
-}
-
 export default function Meals() {
-  const { members, mealLogs, activeCycle } = useMealData();
+  const { members } = useMealMembers();
+  const { mealLogs } = useMealRows();
+  const { activeCycle } = useMealCycles();
   const { canOperateMeals, profile } = useAuth();
   const isMember = profile?.role === 'member';
   const [openMeal, setOpenMeal] = useState(false);

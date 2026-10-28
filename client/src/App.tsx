@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth, AuthProvider } from "@/lib/auth-context";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import { MealProvider, useMealActions, useMealData } from "@/lib/meal-context";
+import { MealProvider, useMealActions, useMealStatus } from "@/lib/meal-context";
 import { NoticeProvider } from "@/lib/notice-context";
 import { OfflineToastManager } from "@/components/offline-toast";
 import { AppBadgeManager } from "@/components/app-badge-manager";
@@ -68,7 +68,7 @@ function AppLoadingSkeleton({ message }: { message: string }) {
 }
 
 function Router() {
-  const { initialLoading, dataError } = useMealData();
+  const { initialLoading, dataError } = useMealStatus();
   const { retryLoadData } = useMealActions();
   const [location] = useLocation();
 

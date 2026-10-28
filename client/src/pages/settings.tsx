@@ -38,7 +38,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/auth-context';
-import { useMealActions, useMealData } from '@/lib/meal-context';
+import { useCycleDetails, useMealActions, useMealCycles, useMealMembers, useMealStats } from '@/lib/meal-context';
+import { formatCurrency, formatMealCount } from '@/lib/display-format';
 import { NotificationSettingsCard } from '@/components/settings/notification-settings-card';
 import { useNotice } from '@/lib/notice-context';
 import { NoticeDialog } from '@/components/notice-dialog';
@@ -63,15 +64,6 @@ function createShareToken() {
   const randomValues = new Uint8Array(SHARE_TOKEN_LENGTH);
   crypto.getRandomValues(randomValues);
   return Array.from(randomValues, (value) => SHARE_TOKEN_ALPHABET[value % SHARE_TOKEN_ALPHABET.length]).join('');
-}
-
-function formatCurrency(amount: number) {
-  return `৳${amount.toFixed(0)}`;
-}
-
-function formatMealCount(value: number) {
-  const rounded = Math.round((value + Number.EPSILON) * 1000) / 1000;
-  return rounded.toString();
 }
 
 // ── Section Navigation ───────────────────────────────────────────────────────
@@ -101,10 +93,10 @@ function SettingsNavigation({ canManageCycles, canViewSharing }: { canManageCycl
 // ── Cycle Management Card ─────────────────────────────────────────────────────
 
 function CycleManagementCard() {
-  const {
-    activeCycle, pendingCycle, stats, members,
-    getCycleDetails,
-  } = useMealData();
+  const { activeCycle, pendingCycle } = useMealCycles();
+  const { getCycleDetails } = useCycleDetails();
+  const { stats } = useMealStats();
+  const { members } = useMealMembers();
   const { closeActiveCycle, renameActiveCycle, startNewCycle, suggestCycleName, loadCycleDetails } = useMealActions();
   const { canManageCycles } = useAuth();
   const { isOnline } = useNetworkStatus();
