@@ -59,6 +59,7 @@ export const MealDataContext = createContext<MealDataContextType | undefined>(un
 export const MealActionsContext = createContext<MealActionsContextType | undefined>(undefined);
 
 const SOFT_DELETE_GRACE_MS = 10 * 1000;
+const MAX_OFFLINE_CYCLES = 6;
 
 type MemberRow = {
   id: string;
@@ -715,21 +716,48 @@ export function MealProvider({ children }: { children: ReactNode }) {
   React.useEffect(() => {
     if (!userId || !messId || !hasLoadedDataRef.current || loadedScopeRef.current !== `${userId}:${messId}`) return;
     const cacheKey = `mealtrack-data-cache-${userId}-${messId}`;
-    const timeoutId = window.setTimeout(() => {
+    let timeoutId: number | null = null;
+    let idleCallbackId: number | null = null;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const persistSnapshot = () => {
+      const pinnedCycles = cycles
+        .filter((cycle) => cycle.status === 'active' || cycle.status === 'pending')
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+      const recentCycles = cycles
+        .filter((cycle) => cycle.status !== 'active' && cycle.status !== 'pending')
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+      const cachedCycles = [...pinnedCycles, ...recentCycles]
+        .slice(0, MAX_OFFLINE_CYCLES)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+      const cachedCycleIds = new Set(cachedCycles.map((cycle) => cycle.id));
+
       void writeOfflineSnapshot(cacheKey, {
         members: memberRoster,
         archivedMembers: archivedMemberRoster,
-        cycles,
-        deposits: allDeposits,
-        expenses: allExpenses,
-        mealLogs: allMealLogs,
-        changelog: allChangelogEntries,
-        loadedCycleIds: Array.from(loadedCycleIds),
+        cycles: cachedCycles,
+        deposits: allDeposits.filter((deposit) => cachedCycleIds.has(deposit.cycleId)),
+        expenses: allExpenses.filter((expense) => cachedCycleIds.has(expense.cycleId)),
+        mealLogs: allMealLogs.filter((mealLog) => cachedCycleIds.has(mealLog.cycleId)),
+        changelog: allChangelogEntries.filter((entry) => cachedCycleIds.has(entry.cycleId)),
+        loadedCycleIds: Array.from(loadedCycleIds).filter((cycleId) => cachedCycleIds.has(cycleId)),
       }).catch(() => {
-        // Quota exceeded or private browsing — non-fatal.
+        // Cache can be unavailable or over quota; persistence is best-effort.
       });
-    }, 300);
-    return () => window.clearTimeout(timeoutId);
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      idleCallbackId = idleWindow.requestIdleCallback(persistSnapshot, { timeout: 2000 });
+    } else {
+      timeoutId = window.setTimeout(persistSnapshot, 1000);
+    }
+
+    return () => {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (idleCallbackId !== null) idleWindow.cancelIdleCallback?.(idleCallbackId);
+    };
   }, [userId, messId, memberRoster, archivedMemberRoster, cycles, allDeposits, allExpenses, allMealLogs, allChangelogEntries, loadedCycleIds]);
 
   const clearDataError = useCallback(() => {
