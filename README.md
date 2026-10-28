@@ -62,6 +62,7 @@ VAPID_PUBLIC_KEY=your_web_push_vapid_public_key
 VAPID_PRIVATE_KEY=your_web_push_vapid_private_key
 VAPID_SUBJECT=mailto:admin@example.com
 NOTIFICATION_TIMEZONE=Asia/Dhaka
+MEAL_REMINDER_CRON_SECRET=generate_a_long_random_secret
 PORT=5000
 ```
 
@@ -71,7 +72,10 @@ Notes:
 - `SUPABASE_SERVICE_ROLE_KEY` is required by the Express server for public share-link reads.
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are required for Web Push notifications.
 - `NOTIFICATION_TIMEZONE` controls the daily meal reminder schedule and defaults to `Asia/Dhaka`.
+- `MEAL_REMINDER_CRON_SECRET` authenticates the Supabase Cron request that triggers meal reminders.
 - Never expose `SUPABASE_SERVICE_ROLE_KEY` in client code.
+
+Meal reminders are scheduled by Supabase Cron and sent by the server endpoint. After deploying the server, configure the Cron job and Vault secrets in Supabase using the deployment SQL instructions.
 
 ## Supabase Setup
 

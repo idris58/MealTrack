@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import rateLimit from "express-rate-limit";
+import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { log } from "./logger";
 import { isAllowedPushEndpoint } from "./push-endpoint";
@@ -81,6 +82,7 @@ const uuidBodySchema = (key: string, label: string) => z.object({
 import { assertSupabaseAdmin } from "./supabase-admin";
 import {
   getVapidPublicKey,
+  sendMealLogReminders,
   isPushConfigured,
   removePushSubscription,
   sendNoticePushToSharedSubscribers,
@@ -159,6 +161,14 @@ const authenticatedApiRateLimit = rateLimit({
   legacyHeaders: false,
   skip: (req) => !/^Bearer\s+\S+/i.test(req.get("authorization") ?? ""),
   message: { message: "Too many authenticated requests. Please try again shortly." },
+});
+
+const mealReminderCronRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { message: "Too many reminder job requests." },
 });
 
 function normalizeShareToken(value: unknown): string {
@@ -411,7 +421,7 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
 async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | null> {
   const supabaseAdmin = assertSupabaseAdmin();
 
-  let { data: cycle, error: cycleError } = await supabaseAdmin
+  const { data: initialCycle, error: cycleError } = await supabaseAdmin
     .from("cycles")
     .select("id, name, status, started_at, closed_at, members_snapshot, settlement_snapshot")
     .eq(...scopeFilter(scope))
@@ -426,6 +436,7 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
     throw cycleError;
   }
 
+  let cycle = initialCycle;
   if (!cycle) {
     // When no active or pending cycle exists, fall back to the last closed cycle.
     const { data: closedCycle, error: closedCycleError } = await supabaseAdmin
@@ -632,6 +643,21 @@ export async function registerRoutes(
   // Apply one shared per-IP budget to routes carrying a bearer token. The
   // trusted ingress configured in server/index.ts supplies the client IP.
   app.use("/api", authenticatedApiRateLimit);
+
+  app.post("/api/internal/cron/meal-log-reminders", mealReminderCronRateLimit, asyncHandler(async (req, res) => {
+    const expectedSecret = process.env.MEAL_REMINDER_CRON_SECRET;
+    const suppliedSecret = req.get("x-mealtrack-cron-secret") ?? "";
+    if (!expectedSecret) {
+      return res.status(503).json({ message: "Meal reminder cron is not configured." });
+    }
+    const expectedBytes = Buffer.from(expectedSecret);
+    const suppliedBytes = Buffer.from(suppliedSecret);
+    if (expectedBytes.length !== suppliedBytes.length || !timingSafeEqual(expectedBytes, suppliedBytes)) {
+      return res.status(401).json({ message: "Invalid cron authorization." });
+    }
+    await sendMealLogReminders();
+    return res.json({ ok: true });
+  }));
 
   app.get("/api/push/vapid-public-key", (_req, res) => {
     const publicKey = getVapidPublicKey();

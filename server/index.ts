@@ -5,7 +5,7 @@ import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { startMealReminderScheduler, startNotificationDeliveryCleanupScheduler, startSoftDeleteCleanupScheduler } from "./push";
+import { startNotificationDeliveryCleanupScheduler, startSoftDeleteCleanupScheduler } from "./push";
 import { log } from "./logger";
 import { initServerErrorTracking, captureServerError } from "./error-tracking";
 
@@ -108,7 +108,6 @@ app.use((req, res, next) => {
   app.use("/api", (_req, res) => {
     res.status(404).json({ message: "API route not found." });
   });
-  startMealReminderScheduler();
   startNotificationDeliveryCleanupScheduler();
   startSoftDeleteCleanupScheduler();
 

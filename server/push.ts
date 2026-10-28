@@ -29,20 +29,6 @@ type PushSubscriptionRow = {
   auth: string;
 };
 
-type ActiveCycleRow = {
-  id: string;
-  user_id: string;
-  mess_id: string | null;
-};
-
-type ReminderProfileRow = {
-  id: string;
-  mess_id: string | null;
-  role: "manager" | "coordinator" | "member";
-  reminder_time: string | null;
-  notification_preferences: unknown;
-};
-
 type NotificationPreferences = {
   global?: boolean;
   categories?: {
@@ -779,159 +765,46 @@ export async function sendMealOffRequestDecidedPush({
   );
 }
 
-function getLocalDateTime(timeZone: string, now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const values = new Map(parts.map((part) => [part.type, part.value]));
-  return {
-    date: `${values.get("year")}-${values.get("month")}-${values.get("day")}`,
-    time: `${values.get("hour")}:${values.get("minute")}`,
-  };
-}
-
-function safeLocalDateTime(timeZone: string | null | undefined, now = new Date()) {
-  try {
-    return getLocalDateTime(timeZone || DEFAULT_TIMEZONE, now);
-  } catch {
-    return getLocalDateTime(DEFAULT_TIMEZONE, now);
-  }
-}
-
-function isReminderDue(currentTime: string, configuredTime: string) {
-  const [currentHour, currentMinute] = currentTime.split(":").map(Number);
-  const [configuredHour, configuredMinute] = configuredTime.split(":").map(Number);
-  if (![currentHour, currentMinute, configuredHour, configuredMinute].every(Number.isFinite)) return false;
-
-  const currentTotal = currentHour * 60 + currentMinute;
-  const configuredTotal = configuredHour * 60 + configuredMinute;
-  // A missed cron tick should not suppress the reminder for the rest of the
-  // day. notification_deliveries deduplicates repeated scheduler runs.
-  const elapsed = currentTotal - configuredTotal;
-  return elapsed >= 0;
-}
+type MealReminderDeliveryRow = PushSubscriptionRow & {
+  profile_id: string;
+  mess_id: string | null;
+  cycle_id: string;
+  dedupe_key: string;
+};
 
 export async function sendMealLogReminders() {
-  if (!ensureVapidConfigured()) {
-    return;
-  }
+  if (!ensureVapidConfigured()) return;
 
   const supabase = assertSupabaseAdmin();
-  const { data: activeCycles, error: cyclesError } = await supabase
-    .from("cycles")
-    .select("id, user_id, mess_id")
-    .eq("status", "active");
-
-  if (cyclesError) {
-    console.error("Error loading active cycles for reminders:", cyclesError);
-    return;
+  const { data, error } = await supabase.rpc("claim_meal_log_reminders", {
+    timezone_input: DEFAULT_TIMEZONE,
+  });
+  if (error) {
+    throw new Error(`Error claiming meal reminders: ${error.message}`);
   }
 
-  const cycles = (activeCycles || []) as ActiveCycleRow[];
-  if (cycles.length === 0) return;
-
-  const now = new Date();
-  const local = safeLocalDateTime(DEFAULT_TIMEZONE, now);
-  const messIds = Array.from(new Set(cycles.map((cycle) => cycle.mess_id).filter((id): id is string => Boolean(id))));
-  const legacyUserIds = cycles.filter((cycle) => !cycle.mess_id).map((cycle) => cycle.user_id);
-  let profilesQuery = supabase
-    .from("profiles")
-    .select("id, mess_id, role, reminder_time, notification_preferences")
-    .lte("reminder_time", `${local.time}:00`);
-  if (messIds.length > 0 || legacyUserIds.length > 0) {
-    const filters = [
-      ...(messIds.length > 0 ? [`mess_id.in.(${messIds.join(",")})`] : []),
-      ...(legacyUserIds.length > 0 ? [`id.in.(${legacyUserIds.join(",")})`] : []),
-    ];
-    profilesQuery = profilesQuery.or(filters.join(","));
-  }
-  const { data: dueProfiles, error: profilesError } = await profilesQuery;
-  if (profilesError) {
-    console.error("Error loading profiles due for meal reminders:", profilesError);
-    return;
+  const deliveries = new Map<string, { userId: string; cycleId: string; dedupeKey: string; rows: PushSubscriptionRow[] }>();
+  for (const row of (data || []) as MealReminderDeliveryRow[]) {
+    const key = `${row.user_id}:${row.cycle_id}`;
+    const delivery = deliveries.get(key) ?? {
+      userId: row.user_id,
+      cycleId: row.cycle_id,
+      dedupeKey: row.dedupe_key,
+      rows: [],
+    };
+    delivery.rows.push(row);
+    deliveries.set(key, delivery);
   }
 
-  const profiles = (dueProfiles || []).filter((profile: ReminderProfileRow) =>
-    (profile.role === "manager" || profile.role === "coordinator") &&
-    allowsNotification(profile.notification_preferences, "mealReminders") &&
-    isReminderDue(local.time, (profile.reminder_time || "22:00").slice(0, 5)),
-  ) as ReminderProfileRow[];
-  if (profiles.length === 0) return;
-
-  const profileIds = profiles.map((profile) => profile.id);
-  const { data: subscriptions, error: subscriptionError } = await supabase
-    .from("push_subscriptions")
-    .select("id, user_id, endpoint, p256dh, auth")
-    .in("user_id", profileIds)
-    .eq("audience", "main");
-  if (subscriptionError) {
-    console.error("Error loading main push subscriptions:", subscriptionError);
-    return;
-  }
-  const subscriptionsByUser = new Map<string, PushSubscriptionRow[]>();
-  for (const row of (subscriptions || []) as PushSubscriptionRow[]) {
-    const rows = subscriptionsByUser.get(row.user_id) || [];
-    rows.push(row);
-    subscriptionsByUser.set(row.user_id, rows);
-  }
-
-  const cycleIds = cycles.map((cycle) => cycle.id);
-  const mealLogsQuery = supabase
-    .from("meal_logs")
-    .select("cycle_id, mess_id, user_id")
-    .in("cycle_id", cycleIds)
-    .eq("date", local.date);
-  const { data: mealLogs, error: mealLogsError } = await mealLogsQuery;
-  if (mealLogsError) {
-    console.error("Error checking today's meal logs:", mealLogsError);
-    return;
-  }
-  const loggedCycleIds = new Set((mealLogs || []).map((row: { cycle_id: string }) => row.cycle_id));
-
-  const reminderDedupeKeys = Array.from(new Set(
-    cycles.filter((cycle) => !loggedCycleIds.has(cycle.id)).map((cycle) => `${local.date}:${cycle.id}`),
-  ));
-  if (reminderDedupeKeys.length === 0) return;
-  const { data: existingDeliveries, error: deliveryLookupError } = await supabase
-    .from("notification_deliveries")
-    .select("user_id, dedupe_key")
-    .in("user_id", profileIds)
-    .eq("type", "meal_log_reminder")
-    .in("dedupe_key", reminderDedupeKeys);
-  if (deliveryLookupError) {
-    console.error("Error checking existing meal reminder deliveries:", deliveryLookupError);
-    return;
-  }
-  const deliveredPairs = new Set((existingDeliveries || []).map((row: { user_id: string; dedupe_key: string }) => `${row.user_id}:${row.dedupe_key}`));
-
-  for (const cycle of cycles) {
-    if (loggedCycleIds.has(cycle.id)) continue;
-    const cycleProfiles = profiles.filter((profile) =>
-      cycle.mess_id ? profile.mess_id === cycle.mess_id : profile.id === cycle.user_id,
-    );
-    for (const profile of cycleProfiles) {
-      const rows = subscriptionsByUser.get(profile.id) || [];
-      if (rows.length === 0) continue;
-      const dedupeKey = `${local.date}:${cycle.id}`;
-      if (deliveredPairs.has(`${profile.id}:${dedupeKey}`)) continue;
-      const deliveryRecorded = await recordDelivery(profile.id, "meal_log_reminder", dedupeKey).catch((error) => {
-        console.error("Error recording meal reminder delivery:", error);
-        return false;
-      });
-      if (!deliveryRecorded) continue;
-      const failedUserIds = await sendPushToRows(rows, {
-        title: "Meal log reminder",
-        body: "Today's meal has not been logged yet.",
-        url: "/app/meals",
-        tag: `meal-log-reminder-${local.date}-${cycle.id}`,
-      }, { ttlSeconds: 15 * 60 });
-      if (failedUserIds.has(profile.id)) await removeDelivery(profile.id, "meal_log_reminder", dedupeKey);
+  for (const delivery of Array.from(deliveries.values())) {
+    const failedUserIds = await sendPushToRows(delivery.rows, {
+      title: "Meal log reminder",
+      body: "Today's meal has not been logged yet.",
+      url: "/app/meals",
+      tag: `meal-log-reminder-${delivery.dedupeKey}`,
+    }, { ttlSeconds: 15 * 60 });
+    if (failedUserIds.has(delivery.userId)) {
+      await removeDelivery(delivery.userId, "meal_log_reminder", delivery.dedupeKey);
     }
   }
 }
@@ -957,22 +830,6 @@ export async function cleanupExpiredNotices() {
     .delete()
     .lte("expires_at", new Date().toISOString());
   if (error) console.error("Error deleting expired notices:", error);
-}
-
-export function startMealReminderScheduler() {
-  if (!supabaseAdmin) {
-    console.warn("Meal reminder scheduler disabled. Missing Supabase service role client.");
-    return;
-  }
-
-  cron.schedule(
-    "* * * * *",
-    () => {
-      void sendMealLogReminders().catch((error) => {
-        console.error("Meal reminder scheduler run failed:", error);
-      });
-    },
-  );
 }
 
 export function startNotificationDeliveryCleanupScheduler() {

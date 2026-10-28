@@ -1277,3 +1277,82 @@ $$;
 revoke all on function public.save_meal_logs(uuid, date, jsonb, jsonb) from public;
 grant execute on function public.save_meal_logs(uuid, date, jsonb, jsonb) to authenticated;
 
+-- Atomically claim due meal reminders and return their push subscriptions.
+-- This keeps candidate filtering, today's-log checks, and deduplication inside
+-- Postgres so the server never sends large .in(...) queries through PostgREST.
+create or replace function public.claim_meal_log_reminders(timezone_input text)
+returns table (
+  id uuid,
+  user_id uuid,
+  profile_id uuid,
+  mess_id uuid,
+  cycle_id uuid,
+  dedupe_key text,
+  endpoint text,
+  p256dh text,
+  auth text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with local_clock as (
+    select (statement_timestamp() at time zone timezone_input)::date as local_date,
+           (statement_timestamp() at time zone timezone_input)::time as local_time
+  ),
+  candidate_cycles as (
+    select c.id, c.mess_id, c.user_id, clock.local_date, clock.local_time
+    from public.cycles c
+    cross join local_clock clock
+    where c.status = 'active'
+      and c.deleted_at is null
+  ),
+  eligible as (
+    select distinct
+      p.id as user_id,
+      p.id as profile_id,
+      c.mess_id,
+      c.id as cycle_id,
+      to_char(c.local_date, 'YYYY-MM-DD') || ':' || c.id::text as dedupe_key
+    from candidate_cycles c
+    join public.profiles p
+      on (c.mess_id is not null and p.mess_id = c.mess_id)
+      or (c.mess_id is null and p.id = c.user_id)
+    where p.role in ('manager', 'coordinator')
+      and p.reminder_time <= c.local_time
+      and p.notification_preferences->>'global' is distinct from 'false'
+      and p.notification_preferences->'categories'->>'mealReminders' is distinct from 'false'
+      and exists (
+        select 1 from public.push_subscriptions s
+        where s.user_id = p.id and s.audience = 'main'
+      )
+      and not exists (
+        select 1 from public.meal_logs ml
+        where ml.mess_id is not distinct from c.mess_id
+          and ml.cycle_id = c.id
+          and ml.date = c.local_date
+      )
+      and not exists (
+        select 1 from public.notification_deliveries d
+        where d.user_id = p.id
+          and d.type = 'meal_log_reminder'
+          and d.dedupe_key = to_char(c.local_date, 'YYYY-MM-DD') || ':' || c.id::text
+      )
+  ),
+  claimed as (
+    insert into public.notification_deliveries (user_id, type, dedupe_key, mess_id, profile_id)
+    select e.user_id, 'meal_log_reminder', e.dedupe_key, e.mess_id, e.profile_id
+    from eligible e
+    on conflict (user_id, type, dedupe_key) do nothing
+    returning notification_deliveries.user_id, notification_deliveries.dedupe_key
+  )
+  select s.id, e.user_id, e.profile_id, e.mess_id, e.cycle_id, e.dedupe_key,
+         s.endpoint, s.p256dh, s.auth
+  from claimed c
+  join eligible e on e.user_id = c.user_id and e.dedupe_key = c.dedupe_key
+  join public.push_subscriptions s on s.user_id = e.user_id and s.audience = 'main';
+$$;
+
+revoke all on function public.claim_meal_log_reminders(text) from public, anon, authenticated;
+grant execute on function public.claim_meal_log_reminders(text) to service_role;
+
