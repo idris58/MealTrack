@@ -122,6 +122,24 @@ type MealDataSnapshot = {
   loadedCycleIds?: string[];
 };
 
+type RealtimeRowPayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: Record<string, unknown>;
+  old: Record<string, unknown>;
+};
+
+function upsertById<T extends { id: string }>(rows: T[], row: T): T[] {
+  const index = rows.findIndex((item) => item.id === row.id);
+  if (index === -1) return [...rows, row];
+  const next = [...rows];
+  next[index] = row;
+  return next;
+}
+
+function removeById<T extends { id: string }>(rows: T[], id: string): T[] {
+  return rows.filter((row) => row.id !== id);
+}
+
 function mapExpenseRows(rows: ExpenseRow[]): Expense[] {
   return rows
     .filter((expense) => Boolean(expense.cycle_id))
@@ -726,6 +744,94 @@ export function MealProvider({ children }: { children: ReactNode }) {
     void broadcastSharedUpdate();
   }, []);
 
+  const applyMemberRealtime = useCallback((payload: RealtimeRowPayload) => {
+    const id = String((payload.eventType === 'DELETE' ? payload.old : payload.new).id ?? '');
+    if (!id) return;
+    if (payload.eventType === 'DELETE') {
+      setMemberRoster((rows) => removeById(rows, id));
+      setArchivedMemberRoster((rows) => removeById(rows, id));
+      return;
+    }
+
+    const row = payload.new as unknown as MemberRow & { mess_id?: string };
+    if (row.mess_id !== messId) return;
+    const member: Member = {
+      id: row.id,
+      name: row.name,
+      deposit: 0,
+      mealsEaten: 0,
+      avatar: toAvatar(row.name, row.avatar),
+      profileId: row.profile_id ?? null,
+      createdAt: row.created_at ?? null,
+      deletedAt: row.deleted_at ?? null,
+      archived: Boolean(row.deleted_at && !row.delete_expires_at),
+    };
+    if (row.deleted_at) {
+      setMemberRoster((rows) => removeById(rows, row.id));
+      setArchivedMemberRoster((rows) => upsertById(rows, member));
+    } else {
+      setArchivedMemberRoster((rows) => removeById(rows, row.id));
+      setMemberRoster((rows) => upsertById(rows, member));
+    }
+  }, [messId]);
+
+  const applyCycleRealtime = useCallback((payload: RealtimeRowPayload) => {
+    const id = String((payload.eventType === 'DELETE' ? payload.old : payload.new).id ?? '');
+    if (!id) return;
+    if (payload.eventType === 'DELETE') {
+      setCycles((rows) => removeById(rows, id));
+      return;
+    }
+
+    const row = payload.new as unknown as CycleRow & { mess_id?: string; deleted_at?: string | null };
+    if (row.mess_id !== messId) return;
+    if (row.deleted_at) {
+      setCycles((rows) => removeById(rows, row.id));
+      return;
+    }
+    const cycle: Cycle = {
+      id: row.id,
+      name: row.name || getDefaultCycleBaseName(row.started_at),
+      status: row.status,
+      startedAt: row.started_at,
+      closedAt: row.closed_at,
+      finalizedAt: row.finalized_at,
+      membersSnapshot: row.members_snapshot,
+      settlementSnapshot: row.settlement_snapshot,
+    };
+    setCycles((rows) => upsertById(rows, cycle).sort((a, b) => b.startedAt.localeCompare(a.startedAt)));
+  }, [messId]);
+
+  const applyCycleRowRealtime = useCallback((table: 'cycle_deposits' | 'expenses' | 'meal_logs', payload: RealtimeRowPayload) => {
+    const source = payload.eventType === 'DELETE' ? payload.old : payload.new;
+    const id = String(source.id ?? '');
+    if (!id) return;
+    if (payload.eventType === 'DELETE') {
+      if (table === 'cycle_deposits') setAllDeposits((rows) => removeById(rows, id));
+      else if (table === 'expenses') setAllExpenses((rows) => removeById(rows, id));
+      else setAllMealLogs((rows) => removeById(rows, id));
+      return;
+    }
+
+    if (table === 'cycle_deposits') {
+      const row = payload.new as unknown as CycleDepositRow & { mess_id?: string };
+      if (row.mess_id !== messId) return;
+      setAllDeposits((rows) => upsertById(rows, mapDepositRows([row])[0]));
+    } else if (table === 'expenses') {
+      const row = payload.new as unknown as ExpenseRow & { mess_id?: string; deleted_at?: string | null };
+      if (row.mess_id !== messId) return;
+      if (row.deleted_at) {
+        setAllExpenses((rows) => removeById(rows, row.id));
+        return;
+      }
+      setAllExpenses((rows) => upsertById(rows, mapExpenseRows([row])[0]));
+    } else {
+      const row = payload.new as unknown as MealLogRow & { mess_id?: string };
+      if (row.mess_id !== messId) return;
+      setAllMealLogs((rows) => upsertById(rows, mapMealLogRows([row])[0]));
+    }
+  }, [messId]);
+
   useMealScopeLoader({
     userId,
     messId,
@@ -741,7 +847,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     let refreshTimer: number | null = null;
     let hasSubscribed = false;
-    const scheduleRefresh = () => {
+    const scheduleRecoveryRefresh = () => {
       if (!navigator.onLine || document.visibilityState !== 'visible') return;
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
@@ -753,30 +859,30 @@ export function MealProvider({ children }: { children: ReactNode }) {
     const channel = supabase.channel(`meal-data-${userId}-${messId}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'members', filter: `mess_id=eq.${messId}`,
-      }, scheduleRefresh)
+      }, (payload) => applyMemberRealtime(payload as unknown as RealtimeRowPayload))
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'cycles', filter: `mess_id=eq.${messId}`,
-      }, scheduleRefresh);
+      }, (payload) => applyCycleRealtime(payload as unknown as RealtimeRowPayload));
 
     const cycleIds = [activeCycle?.id, pendingCycle?.id].filter((id): id is string => Boolean(id));
     for (const cycleId of cycleIds) {
       for (const table of ['cycle_deposits', 'expenses', 'meal_logs'] as const) {
         channel.on('postgres_changes', {
           event: '*', schema: 'public', table, filter: `cycle_id=eq.${cycleId}`,
-        }, scheduleRefresh);
+        }, (payload) => applyCycleRowRealtime(table, payload as unknown as RealtimeRowPayload));
       }
     }
 
     channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        if (hasSubscribed) scheduleRefresh();
+        if (hasSubscribed) scheduleRecoveryRefresh();
         hasSubscribed = true;
       }
     });
 
-    const handleOnline = () => scheduleRefresh();
+    const handleOnline = () => scheduleRecoveryRefresh();
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') scheduleRefresh();
+      if (document.visibilityState === 'visible') scheduleRecoveryRefresh();
     };
     window.addEventListener('online', handleOnline);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -787,7 +893,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       void supabase.removeChannel(channel);
     };
-  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData]);
+  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData, applyMemberRealtime, applyCycleRealtime, applyCycleRowRealtime]);
 
   const retryLoadData = useCallback(() => {
     if (userId && messId) {
