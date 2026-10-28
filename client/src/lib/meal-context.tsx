@@ -860,6 +860,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
 
     let refreshTimer: number | null = null;
     let hasSubscribed = false;
+    let channelSubscribed = false;
+    let hiddenAt: number | null = document.visibilityState === 'hidden' ? Date.now() : null;
     const scheduleRecoveryRefresh = () => {
       if (!navigator.onLine || document.visibilityState !== 'visible') return;
       setRealtimeEvents((previous) => ({
@@ -906,12 +908,24 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (status === 'SUBSCRIBED') {
         if (hasSubscribed) scheduleRecoveryRefresh();
         hasSubscribed = true;
+        channelSubscribed = true;
+      } else {
+        channelSubscribed = false;
       }
     });
 
-    const handleOnline = () => scheduleRecoveryRefresh();
+    const handleOnline = () => {
+      if (!channelSubscribed) scheduleRecoveryRefresh();
+    };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') scheduleRecoveryRefresh();
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+
+      const wasHiddenLongEnough = hiddenAt !== null && Date.now() - hiddenAt > 60_000;
+      hiddenAt = null;
+      if (wasHiddenLongEnough || !channelSubscribed) scheduleRecoveryRefresh();
     };
     window.addEventListener('online', handleOnline);
     document.addEventListener('visibilitychange', handleVisibilityChange);

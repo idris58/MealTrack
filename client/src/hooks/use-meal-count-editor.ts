@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
 
 import { useMealActions, type MealLog, type Member } from '@/lib/meal-context';
@@ -20,6 +20,11 @@ export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, on
   const [date, setDate] = useState<Date>(initialDate ?? new Date());
   const [mealCounts, setMealCounts] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const dirtyMembersRef = useRef(new Set<string>());
+  const membersRef = useRef(members);
+  const mealLogsRef = useRef(mealLogs);
+  membersRef.current = members;
+  mealLogsRef.current = mealLogs;
 
   useEffect(() => {
     setDate(initialDate ?? new Date());
@@ -27,13 +32,28 @@ export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, on
 
   useEffect(() => {
     const dateKey = format(date, 'yyyy-MM-dd');
-    setMealCounts(Object.fromEntries(members.map((member) => {
-      const log = mealLogs.find((entry) => entry.memberId === member.id && entry.date === dateKey);
+    dirtyMembersRef.current.clear();
+    setMealCounts(Object.fromEntries(membersRef.current.map((member) => {
+      const log = mealLogsRef.current.find((entry) => entry.memberId === member.id && entry.date === dateKey);
       return [member.id, log ? String(log.count) : '0'];
     })));
+  }, [date]);
+
+  useEffect(() => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    setMealCounts((previous) => {
+      const next = { ...previous };
+      for (const member of members) {
+        if (dirtyMembersRef.current.has(member.id)) continue;
+        const log = mealLogs.find((entry) => entry.memberId === member.id && entry.date === dateKey);
+        next[member.id] = log ? String(log.count) : '0';
+      }
+      return next;
+    });
   }, [date, mealLogs, members]);
 
   const updateCount = (memberId: string, delta: number) => {
+    dirtyMembersRef.current.add(memberId);
     setMealCounts((previous) => {
       const current = Number.parseFloat(normalizeBengaliDigits(previous[memberId] || '0'));
       return { ...previous, [memberId]: String(Math.max(0, (Number.isFinite(current) ? current : 0) + delta)) };
@@ -41,7 +61,10 @@ export function useMealCountEditor({ members, mealLogs, initialDate, cycleId, on
   };
 
   const setMealCount = (memberId: string, value: string) => {
-    if (validMealCount.test(value)) setMealCounts((previous) => ({ ...previous, [memberId]: value }));
+    if (validMealCount.test(value)) {
+      dirtyMembersRef.current.add(memberId);
+      setMealCounts((previous) => ({ ...previous, [memberId]: value }));
+    }
   };
 
   const save = async () => {
