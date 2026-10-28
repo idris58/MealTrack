@@ -48,6 +48,29 @@ const pdfCurrency = (amount: number) => `Tk ${amount.toFixed(2)}`;
 const pdfCurrencyInt = (amount: number) => `Tk ${Math.round(amount)}`;
 const fileDate = (date: Date) => format(date, 'yyyy-MM-dd');
 
+let bengaliFontBase64Promise: Promise<string> | null = null;
+
+function getBengaliFontBase64() {
+  if (!bengaliFontBase64Promise) {
+    bengaliFontBase64Promise = (async () => {
+      const response = await fetch('/fonts/HindSiliguri-Regular.ttf');
+      if (!response.ok) throw new Error('Could not load the Bengali font for the PDF export.');
+
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      let binary = '';
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...Array.from(bytes.subarray(offset, offset + 0x8000)));
+      }
+      return btoa(binary);
+    })().catch((error: unknown) => {
+      bengaliFontBase64Promise = null;
+      throw error;
+    });
+  }
+
+  return bengaliFontBase64Promise;
+}
+
 function download(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -240,14 +263,7 @@ export default function ReportsPage() {
     const sandRgb: [number, number, number] = [188, 158, 96];
 
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const bengaliFontResponse = await fetch('/fonts/HindSiliguri-Regular.ttf');
-    if (!bengaliFontResponse.ok) throw new Error('Could not load the Bengali font for the PDF export.');
-    const bengaliFontBytes = new Uint8Array(await bengaliFontResponse.arrayBuffer());
-    let bengaliFontBinary = '';
-    for (let offset = 0; offset < bengaliFontBytes.length; offset += 0x8000) {
-      bengaliFontBinary += String.fromCharCode(...Array.from(bengaliFontBytes.subarray(offset, offset + 0x8000)));
-    }
-    doc.addFileToVFS('HindSiliguri-Regular.ttf', btoa(bengaliFontBinary));
+    doc.addFileToVFS('HindSiliguri-Regular.ttf', await getBengaliFontBase64());
     doc.addFont('HindSiliguri-Regular.ttf', 'HindSiliguri', 'normal');
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 40;
