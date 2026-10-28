@@ -57,6 +57,22 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("/node_modules/")) return;
+
+          if (/\/(react|react-dom|scheduler)\//.test(id)) return "react-vendor";
+          if (id.includes("/@supabase/")) return "supabase-vendor";
+          if (id.includes("/recharts/") || /\/node_modules\/(d3-[^/]+|internmap)\//.test(id)) return "charts-vendor";
+          if (id.includes("/date-fns/")) return "date-vendor";
+          if (id.includes("/react-hook-form/") || id.includes("/@hookform/")) return "forms-vendor";
+          if (id.includes("/@radix-ui/")) return "radix-vendor";
+
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     host: "0.0.0.0",
