@@ -2,7 +2,7 @@ import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
 import helmet from "helmet";
-import { registerRoutes } from "./routes";
+import { closeSharedEventStreams, registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startNotificationDeliveryCleanupScheduler, startSoftDeleteCleanupScheduler } from "./push";
@@ -14,6 +14,49 @@ const app = express();
 // which would let clients spoof their address via X-Forwarded-For.
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
+let shutdownStarted = false;
+let shutdownExitCode = 0;
+const cronTasks: Array<{ stop: () => void }> = [];
+
+function shutdown(exitCode = 0) {
+  if (shutdownStarted) {
+    if (exitCode !== 0) shutdownExitCode = exitCode;
+    return;
+  }
+
+  shutdownStarted = true;
+  shutdownExitCode = exitCode;
+  app.locals.isShuttingDown = true;
+  log(`Received shutdown request; draining server with exit code ${exitCode}.`);
+
+  for (const task of cronTasks) task.stop();
+  closeSharedEventStreams();
+
+  if (!httpServer.listening) {
+    process.exit(shutdownExitCode);
+    return;
+  }
+
+  const forceExitTimer = setTimeout(() => {
+    log("Graceful shutdown timed out; closing remaining HTTP connections.", "error");
+    httpServer.closeAllConnections();
+    process.exit(1);
+  }, 10_000);
+
+  httpServer.close((error) => {
+    clearTimeout(forceExitTimer);
+    if (error) {
+      log(`Error while closing HTTP server: ${error.message}`, "error");
+      shutdownExitCode = 1;
+    }
+    log("HTTP server stopped.");
+    process.exit(shutdownExitCode);
+  });
+  httpServer.closeIdleConnections();
+}
+
+process.on("SIGTERM", () => shutdown(0));
+process.on("SIGINT", () => shutdown(0));
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL
   ? new URL(process.env.VITE_SUPABASE_URL)
@@ -89,9 +132,7 @@ app.use((req, res, next) => {
   process.on("uncaughtException", (err) => {
     log(`Uncaught Exception: ${err.stack || err.message}`, "error");
     captureServerError(err, { type: "uncaughtException" });
-    // Let the process stay alive — Express can still serve requests.
-    // If you want a hard restart in orchestrated environments, swap to:
-    //   process.exit(1);
+    process.exit(1);
   });
 
   process.on("unhandledRejection", (reason) => {
@@ -101,6 +142,7 @@ app.use((req, res, next) => {
         : String(reason);
     log(`Unhandled Rejection: ${message}`, "error");
     captureServerError(reason, { type: "unhandledRejection" });
+    process.exit(1);
   });
 
   await initServerErrorTracking();
@@ -108,8 +150,10 @@ app.use((req, res, next) => {
   app.use("/api", (_req, res) => {
     res.status(404).json({ message: "API route not found." });
   });
-  startNotificationDeliveryCleanupScheduler();
-  startSoftDeleteCleanupScheduler();
+  const notificationCleanupTask = startNotificationDeliveryCleanupScheduler();
+  const softDeleteCleanupTask = startSoftDeleteCleanupScheduler();
+  if (notificationCleanupTask) cronTasks.push(notificationCleanupTask);
+  if (softDeleteCleanupTask) cronTasks.push(softDeleteCleanupTask);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

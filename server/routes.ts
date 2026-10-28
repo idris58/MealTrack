@@ -325,6 +325,16 @@ function removeShareEventClient(key: string, res: Response) {
   }
 }
 
+export function closeSharedEventStreams() {
+  for (const timer of Array.from(sharedBroadcastTimers.values())) clearTimeout(timer);
+  sharedBroadcastTimers.clear();
+
+  for (const clients of Array.from(shareEventClients.values())) {
+    for (const client of Array.from(clients)) client.end();
+  }
+  shareEventClients.clear();
+}
+
 function sendShareEvent(res: Response, event: string, payload: unknown) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -628,17 +638,39 @@ export async function registerRoutes(
   // ── Health-check endpoints ───────────────────────────────────────────────
   // Lightweight probes for load-balancers, uptime monitors, and CI smoke tests.
   // Registered before any middleware that might reject requests (auth, etc.).
-  function healthPayload() {
+  function healthPayload(database: "ok" | "unavailable") {
     return {
-      status: "ok",
+      status: database === "ok" ? "ok" : "error",
+      database,
       timestamp: new Date().toISOString(),
       uptime: Math.floor(process.uptime()),
       environment: process.env.NODE_ENV ?? "development",
     };
   }
 
-  app.get("/healthz", (_req, res) => res.status(200).json(healthPayload()));
-  app.get("/api/health", (_req, res) => res.status(200).json(healthPayload()));
+  const healthCheck = async (_req: Request, res: Response) => {
+    if (app.locals.isShuttingDown) return res.status(503).json(healthPayload("unavailable"));
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3_000);
+    try {
+      const { error } = await assertSupabaseAdmin()
+        .from("profiles")
+        .select("id")
+        .limit(1)
+        .abortSignal(controller.signal);
+      if (error) throw error;
+      return res.status(200).json(healthPayload("ok"));
+    } catch (error) {
+      log(`Health check database probe failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+      return res.status(503).json(healthPayload("unavailable"));
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  app.get("/healthz", healthCheck);
+  app.get("/api/health", healthCheck);
 
   // Apply one shared per-IP budget to routes carrying a bearer token. The
   // trusted ingress configured in server/index.ts supplies the client IP.

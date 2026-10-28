@@ -835,13 +835,13 @@ export async function cleanupExpiredNotices() {
 export function startNotificationDeliveryCleanupScheduler() {
   if (!supabaseAdmin) {
     console.warn("Notification delivery cleanup disabled. Missing Supabase service role client.");
-    return;
+    return null;
   }
 
   void cleanupOldNotificationDeliveries();
   void cleanupExpiredNotices();
 
-  cron.schedule("0 * * * *", () => {
+  return cron.schedule("0 * * * *", () => {
     void cleanupOldNotificationDeliveries();
     void cleanupExpiredNotices();
   });
@@ -917,12 +917,12 @@ export async function cleanupExpiredSoftDeletes() {
 export function startSoftDeleteCleanupScheduler() {
   if (!supabaseAdmin) {
     console.warn("Soft-delete cleanup disabled. Missing Supabase service role client.");
-    return;
+    return null;
   }
 
   void cleanupExpiredSoftDeletes();
 
-  cron.schedule("*/10 * * * *", () => {
+  return cron.schedule("*/10 * * * *", () => {
     void cleanupExpiredSoftDeletes();
   });
 }
