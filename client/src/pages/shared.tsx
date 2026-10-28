@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { usePushNotifications } from "@/lib/push-notifications";
+import { useSharedPushNotifications } from "@/lib/push-notifications";
 import { useMarqueeDuration } from "@/hooks/use-marquee-duration";
 import { cn } from "@/lib/utils";
 import { MealLogTable } from "@/components/meal-log-table";
@@ -184,7 +184,7 @@ function SharedNoticeNotificationButton({ token }: { token: string }) {
     working,
     subscribe,
     unsubscribe,
-  } = usePushNotifications({ mode: "shared", shareToken: token });
+  } = useSharedPushNotifications({ shareToken: token });
 
   if (!supported || status === "denied") {
     return null;

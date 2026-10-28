@@ -5,7 +5,7 @@
  * deposit modal, and soft-delete / undo.
  */
 
-import { useMealActions, useMealData, type Member } from '@/lib/meal-context';
+import { useMealActions, useMealData, useRealtimeEvents, type Member } from '@/lib/meal-context';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -337,6 +337,7 @@ function SortableMemberCard({
 export function ManagerMembersView() {
   const { members, archivedMembers, getMemberStats, activeCycle } = useMealData();
   const { removeMember, restoreMember, reorderMembers } = useMealActions();
+  const { profiles: profilesRevision } = useRealtimeEvents();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
@@ -346,7 +347,7 @@ export function ManagerMembersView() {
   const [depositMemberId, setDepositMemberId] = useState<string | null>(null);
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
   const [deletedMembers, setDeletedMembers] = useState<DeletedMemberGhost[]>([]);
-  const { user, profile, canManageMembers, canManageRoles, canManageDeposits } = useAuth();
+  const { user, canManageMembers, canManageRoles, canManageDeposits } = useAuth();
   const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string; email: string; role: 'manager' | 'coordinator' | 'member' }>>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
@@ -429,31 +430,7 @@ export function ManagerMembersView() {
 
   useEffect(() => {
     void loadProfiles();
-  }, [loadProfiles, linkedProfileIdsKey]);
-
-  // Realtime subscription: keep profiles & roles updated when anyone in the mess links an account or changes role
-  useEffect(() => {
-    if (!profile?.mess_id) return;
-    const channel = supabase
-      .channel(`manager-profiles-${profile.mess_id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles',
-          filter: `mess_id=eq.${profile.mess_id}`,
-        },
-        () => {
-          void loadProfiles();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [profile?.mess_id, loadProfiles]);
+  }, [loadProfiles, linkedProfileIdsKey, profilesRevision]);
 
   const toggleCoordinator = async (profileId: string, role: 'coordinator' | 'member') => {
     if (!canManageRoles || roleUpdating) return;

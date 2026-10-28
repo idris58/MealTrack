@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { supabase } from "@/lib/supabase";
 
@@ -147,7 +147,7 @@ async function syncSubscription({ mode, shareToken, subscription }: { mode: Push
   if (!response.ok) throw new Error(body?.message || "Unable to enable notifications.");
 }
 
-export function usePushNotifications({
+function usePushNotificationsController({
   mode,
   shareToken,
 }: {
@@ -337,4 +337,22 @@ export function usePushNotifications({
     refreshSubscriptionState,
     ensureExistingSubscription,
   };
+}
+
+type PushNotificationsState = ReturnType<typeof usePushNotificationsController>;
+const MainPushNotificationsContext = createContext<PushNotificationsState | null>(null);
+
+export function PushNotificationsProvider({ children }: { children: ReactNode }) {
+  const pushNotifications = usePushNotificationsController({ mode: "main" });
+  return createElement(MainPushNotificationsContext.Provider, { value: pushNotifications }, children);
+}
+
+export function useMainPushNotifications() {
+  const context = useContext(MainPushNotificationsContext);
+  if (!context) throw new Error("useMainPushNotifications must be used within PushNotificationsProvider");
+  return context;
+}
+
+export function useSharedPushNotifications({ shareToken }: { shareToken: string }) {
+  return usePushNotificationsController({ mode: "shared", shareToken });
 }

@@ -13,7 +13,7 @@ import { NoticeProvider } from "@/lib/notice-context";
 import { OfflineToastManager } from "@/components/offline-toast";
 import { AppBadgeManager } from "@/components/app-badge-manager";
 import { supabase } from "@/lib/supabase";
-import { usePushNotifications } from "@/lib/push-notifications";
+import { PushNotificationsProvider, useMainPushNotifications } from "@/lib/push-notifications";
 import { NotificationPreferencesProvider, useNotificationPreferences } from "@/lib/notification-preferences-context";
 import { ErrorBoundary } from "@/components/error-boundary";
 const AuthPage = lazy(() => import("@/pages/auth"));
@@ -117,7 +117,7 @@ function Router() {
 }
 
 function NotificationOnboardingToast() {
-  const { supported, permission, hasSubscription, working, subscribe } = usePushNotifications({ mode: "main" });
+  const { supported, permission, hasSubscription, working, subscribe } = useMainPushNotifications();
   const { user } = useAuth();
   const { preferences, loading: preferencesLoading } = useNotificationPreferences();
   const toastId = useRef<string | number | null>(null);
@@ -446,12 +446,14 @@ function AppShell() {
 
   return (
     <MealProvider>
-      <NoticeProvider>
-        <AppBadgeManager />
-        <OfflineToastManager />
-        <NotificationOnboardingToast />
-        <Router />
-      </NoticeProvider>
+      <PushNotificationsProvider>
+        <NoticeProvider>
+          <AppBadgeManager />
+          <OfflineToastManager />
+          <NotificationOnboardingToast />
+          <Router />
+        </NoticeProvider>
+      </PushNotificationsProvider>
     </MealProvider>
   );
 }

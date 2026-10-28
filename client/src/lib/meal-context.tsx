@@ -58,6 +58,9 @@ export type {
 export const MealDataContext = createContext<MealDataContextType | undefined>(undefined);
 export const MealActionsContext = createContext<MealActionsContextType | undefined>(undefined);
 
+type RealtimeEvents = { notices: number; mealOffRequests: number; profiles: number };
+const RealtimeEventsContext = createContext<RealtimeEvents | undefined>(undefined);
+
 const SOFT_DELETE_GRACE_MS = 10 * 1000;
 const MAX_OFFLINE_CYCLES = 6;
 
@@ -307,6 +310,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [allMealLogs, setAllMealLogs] = useState<MealLog[]>([]);
   const [allDeposits, setAllDeposits] = useState<CycleDeposit[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvents>({ notices: 0, mealOffRequests: 0, profiles: 0 });
   const [loadedCycleIds, setLoadedCycleIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -772,6 +776,10 @@ export function MealProvider({ children }: { children: ReactNode }) {
     void broadcastSharedUpdate();
   }, []);
 
+  const notifyRealtimeCollection = useCallback((collection: keyof RealtimeEvents) => {
+    setRealtimeEvents((previous) => ({ ...previous, [collection]: previous[collection] + 1 }));
+  }, []);
+
   const applyMemberRealtime = useCallback((payload: RealtimeRowPayload) => {
     const id = String((payload.eventType === 'DELETE' ? payload.old : payload.new).id ?? '');
     if (!id) return;
@@ -877,6 +885,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
     let hasSubscribed = false;
     const scheduleRecoveryRefresh = () => {
       if (!navigator.onLine || document.visibilityState !== 'visible') return;
+      setRealtimeEvents((previous) => ({
+        notices: previous.notices + 1,
+        mealOffRequests: previous.mealOffRequests + 1,
+        profiles: previous.profiles + 1,
+      }));
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         refreshTimer = null;
@@ -891,6 +904,17 @@ export function MealProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'cycles', filter: `mess_id=eq.${messId}`,
       }, (payload) => applyCycleRealtime(payload as unknown as RealtimeRowPayload));
+
+    channel
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'notices', filter: `mess_id=eq.${messId}`,
+      }, () => notifyRealtimeCollection('notices'))
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'meal_off_requests', filter: `mess_id=eq.${messId}`,
+      }, () => notifyRealtimeCollection('mealOffRequests'))
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'profiles', filter: `mess_id=eq.${messId}`,
+      }, () => notifyRealtimeCollection('profiles'));
 
     const cycleIds = [activeCycle?.id, pendingCycle?.id].filter((id): id is string => Boolean(id));
     for (const cycleId of cycleIds) {
@@ -921,7 +945,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       void supabase.removeChannel(channel);
     };
-  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData, applyMemberRealtime, applyCycleRealtime, applyCycleRowRealtime]);
+  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData, applyMemberRealtime, applyCycleRealtime, applyCycleRowRealtime, notifyRealtimeCollection]);
 
   const retryLoadData = useCallback(() => {
     if (userId && messId) {
@@ -1315,12 +1339,20 @@ export function MealProvider({ children }: { children: ReactNode }) {
   ]);
 
   return (
-    <MealActionsContext.Provider value={actionsValue}>
-      <MealDataContext.Provider value={dataValue}>
-        {children}
-      </MealDataContext.Provider>
-    </MealActionsContext.Provider>
+    <RealtimeEventsContext.Provider value={realtimeEvents}>
+      <MealActionsContext.Provider value={actionsValue}>
+        <MealDataContext.Provider value={dataValue}>
+          {children}
+        </MealDataContext.Provider>
+      </MealActionsContext.Provider>
+    </RealtimeEventsContext.Provider>
   );
+}
+
+export function useRealtimeEvents() {
+  const context = useContext(RealtimeEventsContext);
+  if (context === undefined) throw new Error('useRealtimeEvents must be used within a MealProvider');
+  return context;
 }
 
 export function useMealData() {

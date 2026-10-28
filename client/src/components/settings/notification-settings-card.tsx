@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { usePushNotifications } from '@/lib/push-notifications';
+import { useMainPushNotifications } from '@/lib/push-notifications';
 import type { NotificationPreferences } from '@/lib/notification-preferences';
 import { useNotificationPreferences } from '@/lib/notification-preferences-context';
 import { useAuth } from '@/lib/auth-context';
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 export function NotificationSettingsCard() {
   const { profile } = useAuth();
   const canManageMealReminders = profile?.role === 'manager' || profile?.role === 'coordinator';
-  const { supported, permission, error, message, subscribe, refreshSubscriptionState } = usePushNotifications({ mode: 'main' });
+  const { supported, permission, error, message, subscribe, refreshSubscriptionState } = useMainPushNotifications();
   const { preferences, loading: preferencesLoading, save: savePreferencesToServer } = useNotificationPreferences();
   const [reminderTime, setReminderTime] = useState('22:00');
   const [preferencesSaving, setPreferencesSaving] = useState(false);

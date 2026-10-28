@@ -3,6 +3,7 @@ import { format, parseISO, startOfDay } from 'date-fns';
 import { CalendarDays, Check, ClipboardList, Loader2, MessageSquareText, Plus, UtensilsCrossed, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Member } from '@/lib/meal-context';
+import { useRealtimeEvents } from '@/lib/meal-context';
 import { supabase } from '@/lib/supabase';
 import { triggerMealOffSubmitPush, triggerMealOffDecisionPush } from '@/lib/push-triggers';
 import { useNetworkStatus } from '@/lib/pwa';
@@ -125,6 +126,7 @@ function RequestRow({
 }
 
 export function MealOffRequests({ activeCycleId, members, profile, canOperateMeals }: MealOffRequestsProps) {
+  const { mealOffRequests: mealOffRequestsRevision } = useRealtimeEvents();
   const { isOnline } = useNetworkStatus();
   const [requests, setRequests] = useState<MealOffRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,7 +164,7 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
 
   useEffect(() => {
     void loadRequests();
-  }, [loadRequests]);
+  }, [loadRequests, mealOffRequestsRevision]);
 
   useEffect(() => {
     const nextDay = startOfDay(new Date());
@@ -227,7 +229,6 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
     }
     setDialogOpen(false);
     resetForm();
-    void loadRequests();
   };
 
   const reviewRequest = async (request: MealOffRequest, status: 'approved' | 'declined') => {
@@ -247,7 +248,6 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
     void triggerMealOffDecisionPush({
       requestId: request.id,
     });
-    void loadRequests();
   };
 
   const cancelRequest = async (request: MealOffRequest) => {
@@ -264,7 +264,6 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
       return;
     }
     toast.success('Request cancelled');
-    void loadRequests();
   };
 
   const visibleRequests = canOperateMeals ? requests : requests.filter((request) => request.requested_by_profile_id === profile.id);

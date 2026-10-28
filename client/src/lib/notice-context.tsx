@@ -20,7 +20,8 @@ import React, {
 } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth-context';
-import { isPast, parseISO } from 'date-fns';
+import { useRealtimeEvents } from './meal-context';
+import { parseISO } from 'date-fns';
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
@@ -96,6 +97,7 @@ function pruneDismissedNoticeKeys(activeNotice: Notice | null) {
 
 export function NoticeProvider({ children }: { children: ReactNode }) {
   const { user, profile, session } = useAuth();
+  const { notices: noticeRevision } = useRealtimeEvents();
   const [notice, setNotice] = useState<Notice | null>(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
@@ -213,7 +215,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     void load();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, profile?.mess_id]);
+  }, [user?.id, profile?.mess_id, noticeRevision]);
 
   useEffect(() => {
     if (loading) return;
@@ -221,52 +223,6 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
   }, [loading, notice]);
 
   // ── Supabase Realtime ─────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const channel = supabase
-      .channel(`notices-realtime-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notices',
-          // If we have a mess_id filter we add it; otherwise we let RLS handle it
-          ...(profile?.mess_id ? { filter: `mess_id=eq.${profile.mess_id}` } : {}),
-        },
-        (payload) => {
-          const { eventType, new: newRow, old: oldRow } = payload;
-
-          if (eventType === 'DELETE') {
-            setNotice((prev) => {
-              const deletedId = (oldRow as any)?.id;
-              return prev?.id === deletedId ? null : prev;
-            });
-            return;
-          }
-
-          const row = newRow as any;
-          if (!row?.id) return;
-
-          // Ignore if already expired
-          if (isPast(parseISO(row.expires_at))) {
-            setNotice((prev) => (prev?.id === row.id ? null : prev));
-            return;
-          }
-
-          const n = rowToNotice(row);
-          setNotice(n);
-          checkDismissed(n);
-          scheduleExpiry(n);
-        },
-      )
-      .subscribe();
-
-    return () => { void supabase.removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, profile?.mess_id]);
 
   // ── Cleanup expiry timer ───────────────────────────────────────────────────────
 
