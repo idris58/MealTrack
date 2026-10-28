@@ -20,7 +20,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
-  Check, ChevronDown, Clipboard, Clock3, Copy, GripVertical, Link2, Link2Off,
+  AlertTriangle, Check, ChevronDown, Clipboard, Clock3, Copy, GripVertical, Link2, Link2Off,
   Plus, RotateCcw, Send, ShieldCheck, Trash2, Wallet, Users, UserPlus,
 } from 'lucide-react';
 import {
@@ -31,7 +31,7 @@ import {
   SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
@@ -99,35 +99,105 @@ function AddMemberForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-function DepositForm({ memberId, onClose }: { memberId: string; onClose: () => void }) {
+const LARGE_DEPOSIT_THRESHOLD = 3000;
+
+function DepositForm({ memberId, memberName, onClose }: { memberId: string; memberName?: string; onClose: () => void }) {
   const { addDeposit } = useMealActions();
   const [amount, setAmount] = useState('');
   const [mode, setMode] = useState<'add' | 'deduct'>('add');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmLarge, setShowConfirmLarge] = useState(false);
+
+  const executeDeposit = async (val: number) => {
+    setIsSubmitting(true);
+    const signedAmount = mode === 'deduct' ? -Math.abs(val) : Math.abs(val);
+    try {
+      await runMutation(async () => {
+        await addDeposit(memberId, signedAmount, undefined, undefined, mode === 'deduct' ? 'refund' : 'deposit');
+        onClose();
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     const val = parseFloat(amount);
     if (!isNaN(val) && val !== 0) {
-      setIsSubmitting(true);
-      const signedAmount = mode === 'deduct' ? -Math.abs(val) : Math.abs(val);
-      try { await runMutation(async () => { await addDeposit(memberId, signedAmount, undefined, undefined, mode === 'deduct' ? 'refund' : 'deposit'); onClose(); }); }
-      finally { setIsSubmitting(false); }
+      if (Math.abs(val) >= LARGE_DEPOSIT_THRESHOLD && !showConfirmLarge) {
+        setShowConfirmLarge(true);
+        return;
+      }
+      await executeDeposit(val);
     }
   };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAmount(e.target.value);
+    if (showConfirmLarge) setShowConfirmLarge(false);
+  };
+
+  const handleModeChange = (nextMode: 'add' | 'deduct') => {
+    setMode(nextMode);
+    if (showConfirmLarge) setShowConfirmLarge(false);
+  };
+
+  const parsedVal = parseFloat(amount);
+  const isLarge = !isNaN(parsedVal) && Math.abs(parsedVal) >= LARGE_DEPOSIT_THRESHOLD;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-4">
       <div className="grid grid-cols-2 gap-2">
-        <Button type="button" variant={mode === 'add' ? 'default' : 'outline'} onClick={() => setMode('add')} disabled={isSubmitting}>Add</Button>
-        <Button type="button" variant={mode === 'deduct' ? 'destructive' : 'outline'} onClick={() => setMode('deduct')} disabled={isSubmitting}>Deduct</Button>
+        <Button type="button" variant={mode === 'add' ? 'default' : 'outline'} onClick={() => handleModeChange('add')} disabled={isSubmitting}>Add</Button>
+        <Button type="button" variant={mode === 'deduct' ? 'destructive' : 'outline'} onClick={() => handleModeChange('deduct')} disabled={isSubmitting}>Deduct</Button>
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">Amount {mode === 'deduct' ? '(deduction)' : '(deposit)'}</label>
-        <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus disabled={isSubmitting} />
+        <Input type="number" step="any" placeholder="0.00" value={amount} onChange={handleAmountChange} autoFocus disabled={isSubmitting} />
       </div>
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? 'Saving...' : mode === 'deduct' ? 'Deduct Amount' : 'Add Deposit'}
-      </Button>
+
+      {showConfirmLarge && isLarge ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-3 text-sm">
+          <div className="flex items-start gap-2.5 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div className="space-y-1">
+              <p className="font-semibold text-sm">Confirm unusually large amount</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                You are about to {mode === 'deduct' ? 'deduct' : 'record a deposit of'}{' '}
+                <strong className="text-foreground">৳{Math.abs(parsedVal).toLocaleString()}</strong>
+                {memberName ? ` for ${memberName}` : ''}. Are you sure this amount is correct?
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-0.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowConfirmLarge(false)}
+              disabled={isSubmitting}
+            >
+              Edit Amount
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-medium"
+              disabled={isSubmitting}
+              onClick={() => void executeDeposit(parsedVal)}
+            >
+              {isSubmitting ? 'Saving...' : 'Yes, Confirm'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving...' : mode === 'deduct' ? 'Deduct Amount' : 'Add Deposit'}
+        </Button>
+      )}
     </form>
   );
 }
@@ -212,14 +282,14 @@ function MemberCard({
             </span>
           </div>
 
-          {(onDeposit || canManageRoles) ? (
+          {(onDeposit || (canManageRoles && onCoordinatorAction && profileRole !== 'manager')) ? (
             <div className="flex items-center gap-2 pt-1">
               {onDeposit ? (
                 depositDisabled ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span tabIndex={0} className={cn('inline-flex', canManageRoles ? 'shrink-0' : 'w-full')}>
-                        <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', canManageRoles ? 'shrink-0' : 'w-full')} disabled>
+                      <span tabIndex={0} className={cn('inline-flex', (canManageRoles && onCoordinatorAction && profileRole !== 'manager') ? 'shrink-0' : 'w-full')}>
+                        <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', (canManageRoles && onCoordinatorAction && profileRole !== 'manager') ? 'shrink-0' : 'w-full')} disabled>
                           <Wallet className="h-4 w-4 shrink-0" /><span>Deposit</span>
                         </Button>
                       </span>
@@ -227,29 +297,16 @@ function MemberCard({
                     <TooltipContent>Start a cycle first to record this member&apos;s deposits.</TooltipContent>
                   </Tooltip>
                 ) : (
-                  <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', canManageRoles ? 'shrink-0' : 'w-full')} onClick={onDeposit}>
+                  <Button variant="outline" className={cn('gap-1.5 px-2.5 sm:px-3', (canManageRoles && onCoordinatorAction && profileRole !== 'manager') ? 'shrink-0' : 'w-full')} onClick={onDeposit}>
                     <Wallet className="h-4 w-4 shrink-0" /><span>Deposit</span>
                   </Button>
                 )
               ) : null}
-              {canManageRoles ? (
-                onCoordinatorAction && profileRole !== 'manager' ? (
-                  <Button variant="outline" className="min-w-0 flex-1 gap-1.5 px-2.5 sm:px-3 text-xs sm:text-sm" onClick={onCoordinatorAction}>
-                    <ShieldCheck className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{profileRole === 'coordinator' ? 'Remove Coordinator' : 'Make Coordinator'}</span>
-                  </Button>
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="min-w-0 flex-1">
-                        <Button variant="outline" className="w-full gap-1.5 px-2.5 sm:px-3 text-xs sm:text-sm" disabled>
-                          <ShieldCheck className="h-4 w-4 shrink-0" /><span className="truncate">Unavailable</span>
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Action available only for linked accounts</TooltipContent>
-                  </Tooltip>
-                )
+              {canManageRoles && onCoordinatorAction && profileRole !== 'manager' ? (
+                <Button variant="outline" className="min-w-0 flex-1 gap-1.5 px-2.5 sm:px-3 text-xs sm:text-sm" onClick={onCoordinatorAction}>
+                  <ShieldCheck className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{profileRole === 'coordinator' ? 'Remove Coordinator' : 'Make Coordinator'}</span>
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -289,7 +346,7 @@ export function ManagerMembersView() {
   const [depositMemberId, setDepositMemberId] = useState<string | null>(null);
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
   const [deletedMembers, setDeletedMembers] = useState<DeletedMemberGhost[]>([]);
-  const { user, canManageMembers, canManageRoles, canManageDeposits } = useAuth();
+  const { user, profile, canManageMembers, canManageRoles, canManageDeposits } = useAuth();
   const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string; email: string; role: 'manager' | 'coordinator' | 'member' }>>([]);
   const [profilesError, setProfilesError] = useState<string | null>(null);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
@@ -349,26 +406,54 @@ export function ManagerMembersView() {
     });
   };
 
-  useEffect(() => {
-    let active = true;
+  const loadProfiles = useCallback(async () => {
     if (!user) return;
-    setProfilesError(null);
-    void (async () => {
-      try {
-        const profilesResult = await supabase.from('profiles').select('id, full_name, email, role').order('full_name');
-        if (!active) return;
-        if (profilesResult.error) {
-          setProfilesError(`Could not load member roles: ${profilesResult.error.message}`);
-          return;
-        }
-        setProfiles((profilesResult.data ?? []).filter((profile) => profile.id !== user.id));
-      } catch (error) {
-        if (!active) return;
-        setProfilesError(error instanceof Error ? error.message : 'Could not load member roles. Please try again.');
+    try {
+      const profilesResult = await supabase.from('profiles').select('id, full_name, email, role').order('full_name');
+      if (profilesResult.error) {
+        setProfilesError(`Could not load member roles: ${profilesResult.error.message}`);
+        return;
       }
-    })();
-    return () => { active = false; };
-  }, [user?.id]);
+      setProfilesError(null);
+      setProfiles((profilesResult.data ?? []).filter((p) => p.id !== user.id));
+    } catch (error) {
+      setProfilesError(error instanceof Error ? error.message : 'Could not load member roles. Please try again.');
+    }
+  }, [user]);
+
+  // Track the set of linked profile IDs in the roster so profiles are re-fetched when a member is newly linked
+  const linkedProfileIdsKey = useMemo(
+    () => members.map((m) => m.profileId || '').filter(Boolean).sort().join(','),
+    [members],
+  );
+
+  useEffect(() => {
+    void loadProfiles();
+  }, [loadProfiles, linkedProfileIdsKey]);
+
+  // Realtime subscription: keep profiles & roles updated when anyone in the mess links an account or changes role
+  useEffect(() => {
+    if (!profile?.mess_id) return;
+    const channel = supabase
+      .channel(`manager-profiles-${profile.mess_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `mess_id=eq.${profile.mess_id}`,
+        },
+        () => {
+          void loadProfiles();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [profile?.mess_id, loadProfiles]);
 
   const toggleCoordinator = async (profileId: string, role: 'coordinator' | 'member') => {
     if (!canManageRoles || roleUpdating) return;
@@ -461,24 +546,24 @@ export function ManagerMembersView() {
     <TooltipProvider>
       <div className="space-y-6">
         <PageHeader icon={Users} title="Members" description="Manage mess members and cycle deposits.">
-            {canManageMembers ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" className="shrink-0 gap-1.5 whitespace-nowrap shadow-sm sm:h-9">
-                    <Plus className="h-4 w-4" /><span className="hidden sm:inline">Manage </span>Member<ChevronDown className="h-3.5 w-3.5 opacity-80" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-52">
-                  <DropdownMenuItem onSelect={() => { setInviteError(null); setInviteOpen(true); }}><Send className="h-4 w-4" />Invite Member</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setIsAddOpen(true)}><Plus className="h-4 w-4" />Add Offline Member</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => setArchivedMembersOpen(true)} disabled={visibleArchivedMembers.length === 0}>
-                    <RotateCcw className="h-4 w-4" />Archived Members{visibleArchivedMembers.length ? ` (${visibleArchivedMembers.length})` : ''}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setInviteManagerOpen(true)}><Clipboard className="h-4 w-4" />Manage Invite Links</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
+          {canManageMembers ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="shrink-0 gap-1.5 whitespace-nowrap shadow-sm sm:h-9">
+                  <Plus className="h-4 w-4" /><span className="hidden sm:inline">Manage </span>Member<ChevronDown className="h-3.5 w-3.5 opacity-80" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-52">
+                <DropdownMenuItem onSelect={() => { setInviteError(null); setInviteOpen(true); }}><Send className="h-4 w-4" />Invite Member</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setIsAddOpen(true)}><Plus className="h-4 w-4" />Add Offline Member</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setArchivedMembersOpen(true)} disabled={visibleArchivedMembers.length === 0}>
+                  <RotateCcw className="h-4 w-4" />Archived Members{visibleArchivedMembers.length ? ` (${visibleArchivedMembers.length})` : ''}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setInviteManagerOpen(true)}><Clipboard className="h-4 w-4" />Manage Invite Links</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </PageHeader>
         {profilesError ? <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{profilesError}</p> : null}
 
@@ -704,7 +789,13 @@ export function ManagerMembersView() {
 
         <Dialog open={!!depositMemberId} onOpenChange={(open) => !open && setDepositMemberId(null)}>
           <DialogContent><DialogHeader><DialogTitle>Manage Deposit</DialogTitle><DialogDescription>Record a payment or adjustment to this member’s cycle balance.</DialogDescription></DialogHeader>
-            {depositMemberId && <DepositForm memberId={depositMemberId} onClose={() => setDepositMemberId(null)} />}
+            {depositMemberId && (
+              <DepositForm
+                memberId={depositMemberId}
+                memberName={members.find((m) => m.id === depositMemberId)?.name}
+                onClose={() => setDepositMemberId(null)}
+              />
+            )}
           </DialogContent>
         </Dialog>
       </div>
