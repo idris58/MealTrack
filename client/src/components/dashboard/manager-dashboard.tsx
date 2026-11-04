@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'wouter';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link, useLocation } from 'wouter';
 import {
   addDays,
   differenceInCalendarDays,
@@ -11,8 +11,10 @@ import {
 import {
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   CalendarCheck,
   CheckCircle2,
+  ChevronDown,
   CircleDollarSign,
   CloudOff,
   Hourglass,
@@ -27,36 +29,54 @@ import {
   TrendingUp,
   Users,
   Utensils,
+  UtensilsCrossed,
   Wallet,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 
-import { useMeal } from '@/lib/meal-context';
+import {
+  useMealActions,
+  useMealChangelog,
+  useMealCycles,
+  useMealMembers,
+  useMealRows,
+  useMealStats,
+  useMealStatus,
+  useRealtimeEvents,
+} from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { useNotice } from '@/lib/notice-context';
+import { supabase } from '@/lib/supabase';
+import { runMutation } from '@/lib/run-mutation';
+import { normalizeBengaliDigits } from '@/lib/localized-number';
+import { formatMealCount, formatMoney, formatSignedMoney } from '@/lib/display-format';
+import { useCountUp } from '@/hooks/use-count-up';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { OnboardingTour } from '@/components/onboarding-tour';
 import { ExpenseForm } from '@/components/expense-form';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { NoticeDialog } from '@/components/notice-dialog';
 
+// Recharts lives in its own vendor chunk; only fetch it when analytics are opened.
+const DashboardAnalytics = lazy(() =>
+  import('@/components/dashboard-analytics').then((m) => ({ default: m.DashboardAnalytics })),
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const money = (n: number, digits = 0) =>
-  `৳${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-const signedMoney = (n: number, digits = 0) => `${n < 0 ? '−' : '+'}${money(n, digits)}`;
-const mealsFmt = (n: number) => `${Math.round((n + Number.EPSILON) * 1000) / 1000}`;
+const money = (n: number, digits = 0) => formatMoney(n, digits);
+const signedMoney = (n: number, digits = 0) => formatSignedMoney(n, digits);
 const dayKey = (d: Date) => format(d, 'yyyy-MM-dd');
+const validAmount = /^[0-9\u09E6-\u09EF]*\.?[0-9\u09E6-\u09EF]*$/;
 
 function greeting() {
   const h = new Date().getHours();
@@ -67,30 +87,15 @@ function greeting() {
   return 'Good night';
 }
 
-function useCountUp(target: number, duration = 900) {
-  const [value, setValue] = useState(target);
-  useEffect(() => {
-    if (typeof window === 'undefined' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setValue(target);
-      return;
-    }
-    let raf = 0;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - start) / duration);
-      setValue(target * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration]);
-  return value;
+/** Settings is lazy-loaded, so wait for the target section to exist before scrolling. */
+function scrollWhenReady(id: string, tries = 25) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  if (tries > 0) window.setTimeout(() => scrollWhenReady(id, tries - 1), 100);
 }
-
-const chartConfig: ChartConfig = {
-  meal: { label: 'Meal', theme: { light: 'hsl(160 84% 39%)', dark: 'hsl(158 64% 52%)' } },
-  fixed: { label: 'Fixed', theme: { light: 'hsl(258 90% 66%)', dark: 'hsl(258 90% 76%)' } },
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Presentational pieces
@@ -169,7 +174,7 @@ function CashSparkline({ values }: { values: number[] }) {
   const last = series[series.length - 1];
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-24 w-full sm:h-28" role="img" aria-label="Cash balance over the cycle">
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-20 w-full sm:h-24" role="img" aria-label="Cash balance over the cycle">
       <defs>
         <linearGradient id="mgr-cash-fill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.45" />
@@ -244,7 +249,7 @@ function QuickDeposit({
   initialAmount?: number;
   onClose: () => void;
 }) {
-  const { addDeposit } = useMeal();
+  const { addDeposit } = useMealActions();
   const [memberId, setMemberId] = useState(initialMemberId ?? members[0]?.id ?? '');
   const [amount, setAmount] = useState(initialAmount ? String(initialAmount) : '');
   const [mode, setMode] = useState<'add' | 'deduct'>('add');
@@ -252,12 +257,15 @@ function QuickDeposit({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseFloat(amount);
-    if (busy || !memberId || isNaN(val) || val === 0) return;
+    const val = Number.parseFloat(normalizeBengaliDigits(amount.trim()));
+    if (busy || !memberId || !Number.isFinite(val) || val === 0) return;
     setBusy(true);
     try {
-      await addDeposit(memberId, mode === 'deduct' ? -Math.abs(val) : Math.abs(val), undefined, mode === 'deduct' ? 'Deduction/Refund' : undefined);
-      onClose();
+      await runMutation(async () => {
+        const signed = mode === 'deduct' ? -Math.abs(val) : Math.abs(val);
+        await addDeposit(memberId, signed, undefined, undefined, mode === 'deduct' ? 'refund' : 'deposit');
+        onClose();
+      });
     } finally {
       setBusy(false);
     }
@@ -280,7 +288,15 @@ function QuickDeposit({
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">Amount (৳)</label>
-        <Input type="number" inputMode="decimal" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus disabled={busy} />
+        <Input
+          type="text"
+          inputMode="decimal"
+          placeholder="0"
+          value={amount}
+          onChange={(e) => { if (validAmount.test(e.target.value)) setAmount(e.target.value); }}
+          autoFocus
+          disabled={busy}
+        />
       </div>
       <Button type="submit" className="w-full" disabled={busy || !amount}>
         {busy ? 'Saving…' : mode === 'deduct' ? 'Record refund' : 'Record deposit'}
@@ -310,30 +326,51 @@ const ENTITY_ICON: Record<string, LucideIcon> = {
 };
 
 export function ManagerDashboard() {
-  const {
-    stats,
-    members,
-    mealLogs,
-    expenses,
-    deposits,
-    activeCycle,
-    pendingCycle,
-    getMemberStats,
-    activeCycleChangelogEntries,
-    pendingSyncIds,
-    failedSyncOps,
-  } = useMeal();
-  const { profile, canManageExpenses, canOperateMeals, canManageDeposits } = useAuth();
+  const { stats } = useMealStats();
+  const { members, getMemberStats } = useMealMembers();
+  const { mealLogs, expenses, deposits } = useMealRows();
+  const { activeCycle, pendingCycle } = useMealCycles();
+  const { activeCycleChangelogEntries } = useMealChangelog();
+  const { pendingSyncIds, failedSyncOps } = useMealStatus();
+  const { mealOffRequests: mealOffRevision } = useRealtimeEvents();
+  const { profile, canManageExpenses, canOperateMeals, canManageDeposits, canManageCycles } = useAuth();
   const { notice } = useNotice();
+  const [, setLocation] = useLocation();
 
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [mealOpen, setMealOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState<{ memberId?: string; amount?: number } | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'expenses'>('activity');
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [pendingMealOff, setPendingMealOff] = useState(0);
 
+  const messId = profile?.mess_id ?? null;
   const firstName = (profile?.full_name ?? 'there').trim().split(' ')[0];
   const canPostNotice = profile?.role === 'manager' || profile?.role === 'coordinator';
+
+  const goToCycleSettings = () => {
+    setLocation('/app/settings');
+    scrollWhenReady('cycle-operations');
+  };
+
+  // Pending meal-off requests (same source as the PWA app badge).
+  useEffect(() => {
+    if (!messId || !canOperateMeals) {
+      setPendingMealOff(0);
+      return;
+    }
+    let active = true;
+    void supabase
+      .from('meal_off_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('mess_id', messId)
+      .eq('status', 'pending')
+      .then(({ count, error }) => {
+        if (active && !error && typeof count === 'number') setPendingMealOff(count);
+      });
+    return () => { active = false; };
+  }, [messId, canOperateMeals, mealOffRevision]);
 
   const v = useMemo(() => {
     if (!activeCycle) return null;
@@ -349,7 +386,7 @@ export function ManagerDashboard() {
     };
 
     const days = keys.map((k) => ({ key: k, meal: 0, fixed: 0, deposits: 0, meals: 0 }));
-    for (const e of expenses) days[idxOf(e.date.slice(0, 10))][e.type] += e.amount;
+    for (const e of expenses) days[idxOf(e.date.slice(0, 10))][e.type === 'meal' ? 'meal' : 'fixed'] += e.amount;
     for (const d of deposits) days[idxOf(dayKey(parseISO(d.createdAt)))].deposits += d.amount;
     for (const l of mealLogs) days[idxOf(l.date.slice(0, 10))].meals += l.count;
 
@@ -377,8 +414,7 @@ export function ManagerDashboard() {
     const ratePrev = rate.length > 1 ? rate[rate.length - 2] : null;
     const rateDelta = rateNow != null && ratePrev ? ((rateNow - ratePrev) / ratePrev) * 100 : null;
 
-    const spend = (from: number, to: number) => days.slice(Math.max(0, from), Math.max(0, to)).reduce((s, d) => s + d.meal + d.fixed, 0);
-    const todaySpent = spend(elapsed - 1, elapsed);
+    const todaySpent = days[elapsed - 1].meal + days[elapsed - 1].fixed;
 
     const todayKey = dayKey(today);
     const todayLogs = mealLogs.filter((l) => l.date.slice(0, 10) === todayKey && l.count > 0);
@@ -393,12 +429,10 @@ export function ManagerDashboard() {
     const totalDue = dues.reduce((s, r) => s + Math.abs(r.balance), 0);
     const maxAbs = Math.max(1, ...ledger.map((r) => Math.abs(r.balance)));
 
-    const cycleDay = elapsed;
-
     return {
-      elapsed, cycleDay, totalSpent, todaySpent, burn, runway, usedPct,
-      rateNow, rateDelta, todayMeals, todayByMember, hasLogToday,
-      ledger, dues, totalDue, maxAbs, todayKey,
+      elapsed, cycleDay: elapsed, cash, totalSpent, todaySpent, burn, runway, usedPct,
+      rateDelta, todayMeals, todayByMember, hasLogToday,
+      ledger, dues, totalDue, maxAbs,
     };
   }, [activeCycle, expenses, deposits, mealLogs, stats, members, getMemberStats]);
 
@@ -415,8 +449,20 @@ export function ManagerDashboard() {
         tone: 'warn',
         icon: Hourglass,
         title: `${pendingCycle.name} awaits settlement`,
-        body: 'Settle balances and lock the cycle to archive it.',
+        body: canManageCycles
+          ? 'Settle balances and lock the cycle to archive it.'
+          : 'Record settlement installments. The manager locks the cycle.',
         action: { label: 'Open settlement', href: '/app/history' },
+      });
+    }
+    if (pendingMealOff > 0) {
+      list.push({
+        id: 'meal-off',
+        tone: 'info',
+        icon: UtensilsCrossed,
+        title: `${pendingMealOff} meal-off request${pendingMealOff === 1 ? '' : 's'} to review`,
+        body: 'Approve or decline before planning upcoming meals.',
+        action: { label: 'Review requests', href: '/app/meals' },
       });
     }
     if (activeCycle && v && members.length > 0 && !v.hasLogToday) {
@@ -436,7 +482,9 @@ export function ManagerDashboard() {
         icon: CircleDollarSign,
         title: `${v.dues.length} member${v.dues.length === 1 ? '' : 's'} owe ${money(v.totalDue)}`,
         body: `Largest: ${v.dues[0].member.name} (${money(Math.abs(v.dues[0].balance))}).`,
-        action: canManageDeposits ? { label: 'Collect', onClick: () => setDepositOpen({ memberId: v.dues[0].member.id, amount: Math.ceil(Math.abs(v.dues[0].balance)) }) } : undefined,
+        action: canManageDeposits
+          ? { label: 'Collect', onClick: () => setDepositOpen({ memberId: v.dues[0].member.id, amount: Math.ceil(Math.abs(v.dues[0].balance)) }) }
+          : undefined,
       });
     }
     if (v && v.runway !== null && v.runway <= 5) {
@@ -463,12 +511,14 @@ export function ManagerDashboard() {
         id: 'sync',
         tone: 'info',
         icon: CloudOff,
-        title: failedSyncOps.length > 0 ? `${failedSyncOps.length} change${failedSyncOps.length === 1 ? '' : 's'} need attention` : `${syncing} change${syncing === 1 ? '' : 's'} waiting to sync`,
+        title: failedSyncOps.length > 0
+          ? `${failedSyncOps.length} change${failedSyncOps.length === 1 ? '' : 's'} need attention`
+          : `${syncing} change${syncing === 1 ? '' : 's'} waiting to sync`,
         body: failedSyncOps.length > 0 ? 'Review the failed offline changes.' : 'They will upload automatically when you are online.',
       });
     }
     return list;
-  }, [pendingCycle, activeCycle, v, members.length, canOperateMeals, canManageDeposits, stats.remainingCash, pendingSyncIds, failedSyncOps]);
+  }, [pendingCycle, pendingMealOff, activeCycle, v, members.length, canOperateMeals, canManageDeposits, canManageCycles, stats.remainingCash, pendingSyncIds, failedSyncOps]);
 
   const toneClasses = {
     warn: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
@@ -551,39 +601,30 @@ export function ManagerDashboard() {
               Cash flow, meal rate, member balances and live trends appear as soon as a cycle is running.
             </p>
           </div>
-          <Button asChild className="gap-2"><Link href="/app/settings#cycle-operations"><Play className="h-4 w-4" />Start new cycle</Link></Button>
+          {canManageCycles ? (
+            <Button className="gap-2" onClick={goToCycleSettings}><Play className="h-4 w-4" />Start new cycle</Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">Only the manager can start a new cycle.</p>
+          )}
         </div>
-        {noticeOpen && <NoticeDialog mode="post" open={noticeOpen} onOpenChange={setNoticeOpen} />}
+        {noticeOpen && <NoticeDialog mode={notice ? 'read' : 'post'} open={noticeOpen} onOpenChange={setNoticeOpen} />}
       </div>
     );
   }
 
   const positive = stats.remainingCash >= 0;
-  const heroBg = !positive ? 'bg-[#2a1215]' : 'bg-[#0d2620]';
-  const rateTrend = v.rateDelta == null ? undefined : { dir: Math.abs(v.rateDelta) < 0.5 ? 'flat' as const : v.rateDelta > 0 ? 'up' as const : 'down' as const, text: `${Math.abs(v.rateDelta).toFixed(1)}%`, good: v.rateDelta <= 0 };
-  const mealSplitTotal = stats.totalMealExpenses + stats.totalFixedExpenses;
-  const mealPct = mealSplitTotal > 0 ? Math.round((stats.totalMealExpenses / mealSplitTotal) * 100) : 0;
+  const rateTrend = v.rateDelta == null
+    ? undefined
+    : {
+        dir: Math.abs(v.rateDelta) < 0.5 ? 'flat' as const : v.rateDelta > 0 ? 'up' as const : 'down' as const,
+        text: `${Math.abs(v.rateDelta).toFixed(1)}%`,
+        good: v.rateDelta <= 0,
+      };
 
   return (
     <div className="space-y-5 pb-24 sm:space-y-6">
       <OnboardingTour />
       {header}
-
-      {/* Active notice strip */}
-      {notice && (
-        <button
-          type="button"
-          onClick={() => setNoticeOpen(true)}
-          className="flex w-full items-center gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 p-3.5 text-left transition-colors hover:bg-amber-100/70 dark:border-amber-800/50 dark:bg-amber-950/25"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400"><Megaphone className="h-4 w-4" /></span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-semibold text-amber-950 dark:text-amber-100">{notice.content}</span>
-            <span className="block text-xs text-amber-700 dark:text-amber-300">Live notice · expires {formatDistanceToNow(parseISO(notice.expiresAt), { addSuffix: true })}</span>
-          </span>
-          <ArrowRight className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
-        </button>
-      )}
 
       {/* Cash command center + attention */}
       <div className="grid gap-5 lg:grid-cols-12 sm:gap-6">
@@ -595,21 +636,33 @@ export function ManagerDashboard() {
               <div>
                 <h2 id="financial-health-title" className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-100/70">Financial health</h2>
                 <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                  <span className="font-heading text-3xl font-extrabold tracking-tight tabular-nums sm:text-4xl">{money(stats.remainingCash)}</span>
+                  <span className="font-heading text-3xl font-extrabold tracking-tight tabular-nums sm:text-4xl">
+                    {positive ? '' : '−'}{money(cashShown)}
+                  </span>
                   <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold', positive ? 'border-emerald-200/20 bg-emerald-300/10 text-emerald-100' : 'border-rose-200/30 bg-rose-400/15 text-rose-100')}>{positive ? 'Healthy reserve' : 'Cash deficit'}</span>
                 </div>
               </div>
               <Link href="/app/reports" className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-emerald-50 transition-colors hover:bg-white/10">Open reports<ArrowRight className="h-3 w-3" /></Link>
             </div>
-            <div className="mt-6">
+
+            <div className="mt-5"><CashSparkline values={v.cash} /></div>
+
+            <div className="mt-5">
               <div className="mb-2 flex items-center justify-between text-xs"><span className="font-medium text-emerald-100/70">Deposits deployed</span><span className="font-semibold tabular-nums text-white">{Math.round(v.usedPct)}%</span></div>
               <div className="h-2 overflow-hidden rounded-full bg-black/25 ring-1 ring-inset ring-white/10" role="progressbar" aria-label={`${Math.round(v.usedPct)}% of deposits deployed`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v.usedPct)}>
                 <div className="h-full rounded-full bg-gradient-to-r from-emerald-200 to-teal-100 shadow-[0_0_12px_rgba(167,243,208,0.35)] transition-all" style={{ width: `${v.usedPct}%` }} />
               </div>
             </div>
             <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {[{ label: 'Meal costs', value: money(stats.totalMealExpenses) }, { label: 'Utility costs', value: money(stats.totalFixedExpenses) }, { label: 'Utility/member', value: money(stats.fixedCostPerMember) }].map((item, index) => (
-                <div key={item.label} className={cn('min-w-0 rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2.5 shadow-sm backdrop-blur-sm', index === 2 && 'hidden sm:block')}><p className="text-xs text-emerald-100/65">{item.label}</p><p className="mt-0.5 truncate font-semibold tabular-nums text-white">{item.value}</p></div>
+              {[
+                { label: 'Meal costs', value: money(stats.totalMealExpenses) },
+                { label: 'Utility costs', value: money(stats.totalFixedExpenses) },
+                { label: 'Utility/member', value: money(stats.fixedCostPerMember) },
+              ].map((item, index) => (
+                <div key={item.label} className={cn('min-w-0 rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2.5 shadow-sm backdrop-blur-sm', index === 2 && 'hidden sm:block')}>
+                  <p className="text-xs text-emerald-100/65">{item.label}</p>
+                  <p className="mt-0.5 truncate font-semibold tabular-nums text-white">{item.value}</p>
+                </div>
               ))}
             </div>
           </div>
@@ -652,8 +705,8 @@ export function ManagerDashboard() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 sm:gap-4">
-        <Kpi label="Meal rate" value={money(v.rateNow ?? 0, 2)} sub="Per meal, this cycle" icon={Utensils} accent="bg-emerald-500/10 text-emerald-600" trend={rateTrend} />
-        <Kpi label="Meals served" value={mealsFmt(stats.totalMealsConsumed)} sub={`${mealsFmt(v.todayMeals)} today`} icon={CalendarCheck} accent="bg-sky-500/10 text-sky-600" />
+        <Kpi label="Meal rate" value={money(stats.currentMealRate, 2)} sub="Per meal, this cycle" icon={Utensils} accent="bg-emerald-500/10 text-emerald-600" trend={rateTrend} />
+        <Kpi label="Meals served" value={formatMealCount(stats.totalMealsConsumed)} sub={`${formatMealCount(v.todayMeals)} today`} icon={CalendarCheck} accent="bg-sky-500/10 text-sky-600" />
         <Kpi label="Total spending" value={money(v.totalSpent)} sub={`Today ${money(v.todaySpent)}`} icon={Receipt} accent="bg-violet-500/10 text-violet-600" />
         <Kpi label="Total collected" value={money(stats.totalDeposits)} sub={`${members.length} active members`} icon={Wallet} accent="bg-amber-500/10 text-amber-600" />
       </div>
@@ -690,11 +743,11 @@ export function ManagerDashboard() {
                         <div className={cn('h-full rounded-full', due ? 'bg-rose-500' : 'bg-emerald-500')} style={{ width }} />
                       </div>
                       <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                        Paid {money(r.deposit)} · Cost {money(r.totalCost)} · {mealsFmt(r.mealsEaten)} meals
+                        Paid {money(r.deposit)} · Cost {money(r.totalCost)} · {formatMealCount(r.mealsEaten)} meals
                       </p>
                     </div>
                     {canManageDeposits && (
-                      <Button size="sm" variant={due ? 'default' : 'ghost'} className="h-8 shrink-0 px-2.5 text-xs" onClick={() => setDepositOpen({ memberId: r.member.id, amount: due ? Math.ceil(Math.abs(r.balance)) : undefined })}>
+                      <Button size="sm" variant={due ? 'default' : 'ghost'} className="h-8 shrink-0 px-2.5 text-xs" aria-label={`Record deposit for ${r.member.name}`} onClick={() => setDepositOpen({ memberId: r.member.id, amount: due ? Math.ceil(Math.abs(r.balance)) : undefined })}>
                         {due ? 'Collect' : <Plus className="h-4 w-4" />}
                       </Button>
                     )}
@@ -707,7 +760,7 @@ export function ManagerDashboard() {
 
         <Panel
           title="Today's meals"
-          hint={v.hasLogToday ? `${mealsFmt(v.todayMeals)} meals · ${v.todayByMember.size}/${members.length} eating` : 'Not logged yet'}
+          hint={v.hasLogToday ? `${formatMealCount(v.todayMeals)} meals · ${v.todayByMember.size}/${members.length} eating` : 'Not logged yet'}
           icon={Utensils}
           className="lg:col-span-5"
           action={canOperateMeals ? <button type="button" onClick={() => setMealOpen(true)} className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400">{v.hasLogToday ? 'Edit' : 'Log now'}</button> : undefined}
@@ -732,7 +785,7 @@ export function ManagerDashboard() {
                     <li key={m.id} className={cn('flex items-center gap-2 rounded-xl border px-2.5 py-2', c > 0 ? 'border-emerald-500/30 bg-emerald-500/[0.07]' : 'bg-muted/30')}>
                       <Avatar className="h-6 w-6 shrink-0 text-[10px]"><AvatarFallback>{m.avatar}</AvatarFallback></Avatar>
                       <span className="min-w-0 flex-1 truncate text-xs font-medium">{m.name.split(' ')[0]}</span>
-                      <span className={cn('text-xs font-bold tabular-nums', c > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground/60')}>{c > 0 ? mealsFmt(c) : '–'}</span>
+                      <span className={cn('text-xs font-bold tabular-nums', c > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground/60')}>{c > 0 ? formatMealCount(c) : '–'}</span>
                     </li>
                   );
                 })}
@@ -800,6 +853,22 @@ export function ManagerDashboard() {
           </ul>
         )}
       </Panel>
+
+      {/* Optional analytics (lazy) */}
+      <section>
+        <Button variant="outline" size="sm" className="gap-2" aria-expanded={showAnalytics} onClick={() => setShowAnalytics((s) => !s)}>
+          <BarChart3 className="h-4 w-4" />
+          {showAnalytics ? 'Hide' : 'Show'} cycle analytics
+          <ChevronDown className={cn('h-4 w-4 transition-transform', showAnalytics && 'rotate-180')} />
+        </Button>
+        {showAnalytics && (
+          <div className="mt-4">
+            <Suspense fallback={<Skeleton className="h-64 w-full rounded-2xl" />}>
+              <DashboardAnalytics />
+            </Suspense>
+          </div>
+        )}
+      </section>
 
       {/* Dialogs */}
       <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
