@@ -587,8 +587,8 @@ export function ManagerDashboard() {
           <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-emerald-300/10 blur-3xl" />
           <div aria-hidden className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-teal-300/[0.08] blur-3xl" />
           <div className="relative p-5 sm:p-7">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-              <div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
                 <h2 id="financial-health-title" className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-100/70">Financial health</h2>
                 <div className="mt-2 flex flex-wrap items-baseline gap-2">
                   <span className="font-heading text-3xl font-extrabold tracking-tight tabular-nums sm:text-4xl">
@@ -597,7 +597,7 @@ export function ManagerDashboard() {
                   <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold', positive ? 'border-emerald-200/20 bg-emerald-300/10 text-emerald-100' : 'border-rose-200/30 bg-rose-400/15 text-rose-100')}>{positive ? 'Healthy reserve' : 'Cash deficit'}</span>
                 </div>
               </div>
-              <Link href="/app/reports" className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-emerald-50 transition-colors hover:bg-white/10">Open reports<ArrowRight className="h-3 w-3" /></Link>
+              <Link href="/app/reports" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-emerald-50 transition-colors hover:bg-white/10">Open reports<ArrowRight className="h-3 w-3" /></Link>
             </div>
 
             <div className="mt-5">
@@ -676,7 +676,7 @@ export function ManagerDashboard() {
           {v.ledger.length === 0 ? (
             <EmptyBlock icon={Users} title="No members yet" body="Add or invite members to start tracking balances." />
           ) : (
-            <ul className="max-h-[26rem] divide-y overflow-y-auto overscroll-contain pr-1">
+            <ul className="max-h-[26rem] divide-y overflow-y-auto overscroll-y-auto pr-1">
               {v.ledger.map((r) => {
                 const due = r.balance < -0.5;
                 const width = `${(Math.abs(r.balance) / v.maxAbs) * 100}%`;
@@ -731,7 +731,7 @@ export function ManagerDashboard() {
                   <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${members.length ? (v.todayByMember.size / members.length) * 100 : 0}%` }} />
                 </div>
               </div>
-              <ul className="grid max-h-[24rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain pr-1">
+              <ul className="grid max-h-[24rem] grid-cols-2 gap-2 overflow-y-auto overscroll-y-auto pr-1">
                 {members.map((m) => {
                   const c = v.todayByMember.get(m.id) ?? 0;
                   return (
