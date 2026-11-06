@@ -22,6 +22,7 @@ import {
   Plus,
   Receipt,
   ScrollText,
+  Share2,
   ShoppingBag,
   TrendingDown,
   TrendingUp,
@@ -444,6 +445,32 @@ export function ManagerDashboard() {
     };
   }, [activeCycle, expenses, deposits, mealLogs, stats, members, getMemberStats]);
 
+  const shareDues = async () => {
+    if (!activeCycle || !v || v.dues.length === 0) return;
+    const text = [
+      `Dues so far`,
+      ...v.dues.map((row) => `• ${row.member.name}: ${money(Math.abs(row.balance))}`),
+      '',
+      'Please pay your manager.',
+    ].join('\n');
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'MealTrack dues', text });
+        return;
+      } catch (error) {
+        if ((error as DOMException).name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Dues list copied');
+    } catch {
+      toast.error('Could not copy the dues list');
+    }
+  };
+
   const cashShown = useCountUp(stats.remainingCash);
 
   const recentExpenses = useMemo(() => [...expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6), [expenses]);
@@ -724,7 +751,16 @@ export function ManagerDashboard() {
           hint={v.dues.length ? `${v.dues.length} owing ${money(v.totalDue)}` : 'Everyone is in credit'}
           icon={Users}
           className="lg:col-span-7"
-          action={<LinkAction href="/app/members">Manage</LinkAction>}
+          action={(
+            <div className="flex items-center gap-3">
+              {v.dues.length > 0 && (
+                <button type="button" onClick={() => void shareDues()} className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400">
+                  <Share2 className="h-3 w-3" />Share dues
+                </button>
+              )}
+              <LinkAction href="/app/members">Manage</LinkAction>
+            </div>
+          )}
         >
           {v.ledger.length === 0 ? (
             <EmptyBlock icon={Users} title="No members yet" body="Add or invite members to start tracking balances." />
