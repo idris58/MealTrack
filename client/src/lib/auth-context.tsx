@@ -16,7 +16,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   lastAuthEvent: AuthChangeEvent | null;
-  profile: { id: string; full_name: string; email: string; role: "manager" | "coordinator" | "member"; mess_id: string | null; picture_url: string | null } | null;
+  profile: { id: string; full_name: string; email: string; role: "manager" | "coordinator" | "member"; mess_id: string | null; picture_url: string | null; notification_preferences: Record<string, unknown> | null; reminder_time: string } | null;
   profileLoading: boolean;
   profileError: string | null;
   canManageMembers: boolean;
@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileError(null);
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, role, mess_id, picture_url")
+      .select("id, full_name, email, role, mess_id, picture_url, notification_preferences, reminder_time")
       .eq("id", session.user.id)
       .maybeSingle();
     if (error) {
@@ -174,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void supabase
       .from("profiles")
-      .select("id, full_name, email, role, mess_id, picture_url")
+      .select("id, full_name, email, role, mess_id, picture_url, notification_preferences, reminder_time")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data, error }) => {

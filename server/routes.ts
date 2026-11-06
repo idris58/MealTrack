@@ -65,17 +65,6 @@ const sharedTokenCleanupSchema = z.object({ oldToken: z.string().trim().min(1).m
 const endpointStatusBodySchema = z.object({
   endpoint: z.string().url().max(4096).optional(),
 }).default({});
-const notificationPreferencesBodySchema = z.object({
-  reminderTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Choose a valid reminder time.").optional(),
-  global: z.boolean().optional(),
-  categories: z.object({
-    notices: z.boolean().optional(),
-    mealReminders: z.boolean().optional(),
-    deposits: z.boolean().optional(),
-    settlements: z.boolean().optional(),
-    mealOff: z.boolean().optional(),
-  }).partial().optional(),
-}).strict();
 const sharedBroadcastBodySchema = z.object({
   shareLinkEnabled: z.boolean().optional(),
 }).strict();
@@ -838,51 +827,6 @@ export async function registerRoutes(
     });
 
     return res.json({ ok: true });
-  }));
-
-  app.get("/api/push/preferences", asyncHandler(async (req, res) => {
-    const userId = await getAuthenticatedUserId(req.get("authorization"));
-    if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
-    const supabaseAdmin = assertSupabaseAdmin();
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("reminder_time, notification_preferences")
-      .eq("id", userId)
-      .maybeSingle();
-    if (error) throw error;
-    return res.json({
-      reminderTime: String(data?.reminder_time || "22:00").slice(0, 5),
-      ...(data?.notification_preferences && typeof data.notification_preferences === "object"
-        ? data.notification_preferences
-        : {}),
-    });
-  }));
-
-  app.put("/api/push/preferences", asyncHandler(async (req, res) => {
-    const userId = await getAuthenticatedUserId(req.get("authorization"));
-    if (!userId) return res.status(401).json({ message: "Invalid authorization token." });
-    const body = parseRequestBody(notificationPreferencesBodySchema, req.body, res);
-    if (!body) return;
-    const hasReminderTime = body.reminderTime !== undefined;
-    const reminderTime = body.reminderTime ?? "";
-    const hasGlobal = body.global !== undefined;
-    const hasCategories = body.categories !== undefined;
-    const categoryInput = body.categories ?? {};
-    const supabaseAdmin = assertSupabaseAdmin();
-    const { data: current, error: currentError } = await supabaseAdmin.from("profiles").select("reminder_time, notification_preferences").eq("id", userId).single();
-    if (currentError) throw currentError;
-    const currentPreferences = current?.notification_preferences && typeof current.notification_preferences === "object" ? current.notification_preferences as Record<string, unknown> : {};
-    const currentCategories = currentPreferences.categories && typeof currentPreferences.categories === "object" ? currentPreferences.categories as Record<string, unknown> : {};
-    const nextPreferences = {
-      ...currentPreferences,
-      ...(hasGlobal ? { global: body.global } : {}),
-      ...(hasCategories ? { categories: { ...currentCategories, ...categoryInput } } : {}),
-    };
-    const updates: Record<string, unknown> = { notification_preferences: nextPreferences, updated_at: new Date().toISOString() };
-    if (hasReminderTime) updates.reminder_time = `${reminderTime}:00`;
-    const { data, error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userId).select("reminder_time, notification_preferences").single();
-    if (error) throw error;
-    return res.json({ reminderTime: String(data.reminder_time || "22:00").slice(0, 5), ...(data.notification_preferences ?? {}) });
   }));
 
   app.post("/api/push/deposit", asyncHandler(async (req, res) => {
