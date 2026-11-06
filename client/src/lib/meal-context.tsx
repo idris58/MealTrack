@@ -778,11 +778,16 @@ export function MealProvider({ children }: { children: ReactNode }) {
       });
     };
 
-    if (idleWindow.requestIdleCallback) {
-      idleCallbackId = idleWindow.requestIdleCallback(persistSnapshot, { timeout: 2000 });
-    } else {
-      timeoutId = window.setTimeout(persistSnapshot, 1000);
-    }
+    // Let rapid row updates (especially realtime bursts) settle before
+    // structured-cloning the full offline snapshot. Then persist during idle,
+    // with a bounded wait so a busy tab still saves it soon afterward.
+    timeoutId = window.setTimeout(() => {
+      if (idleWindow.requestIdleCallback) {
+        idleCallbackId = idleWindow.requestIdleCallback(persistSnapshot, { timeout: 1000 });
+      } else {
+        persistSnapshot();
+      }
+    }, 2000);
 
     return () => {
       if (timeoutId !== null) window.clearTimeout(timeoutId);
