@@ -1356,3 +1356,67 @@ $$;
 revoke all on function public.claim_meal_log_reminders(text) from public, anon, authenticated;
 grant execute on function public.claim_meal_log_reminders(text) to service_role;
 
+-- Fetch all financial and meal rows for one mess and a set of cycles in one
+-- request, without PostgREST's 1,000-row response cap. Authenticated callers
+-- remain subject to the tables' tenant RLS policies; service_role callers are
+-- used by the trusted shared-view and push routes.
+create or replace function public.fetch_cycle_rows_for_scope(
+  mess_id_input uuid,
+  cycle_ids_input uuid[]
+)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'deposits', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', d.id,
+        'cycle_id', d.cycle_id,
+        'member_id', d.member_id,
+        'amount', d.amount,
+        'kind', d.kind,
+        'note', d.note,
+        'created_at', d.created_at
+      ) order by d.created_at asc, d.id asc)
+      from public.cycle_deposits d
+      where d.mess_id = mess_id_input
+        and d.cycle_id = any(coalesce(cycle_ids_input, '{}'::uuid[]))
+    ), '[]'::jsonb),
+    'expenses', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', e.id,
+        'cycle_id', e.cycle_id,
+        'amount', e.amount,
+        'description', e.description,
+        'type', e.type,
+        'date', e.date,
+        'paid_by', e.paid_by,
+        'updated_at', e.updated_at
+      ) order by e.date desc, e.id asc)
+      from public.expenses e
+      where e.mess_id = mess_id_input
+        and e.cycle_id = any(coalesce(cycle_ids_input, '{}'::uuid[]))
+        and e.deleted_at is null
+    ), '[]'::jsonb),
+    'meal_logs', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', ml.id,
+        'cycle_id', ml.cycle_id,
+        'member_id', ml.member_id,
+        'date', ml.date,
+        'count', ml.count,
+        'updated_at', ml.updated_at
+      ) order by ml.date desc, ml.id asc)
+      from public.meal_logs ml
+      where ml.mess_id = mess_id_input
+        and ml.cycle_id = any(coalesce(cycle_ids_input, '{}'::uuid[]))
+    ), '[]'::jsonb)
+  );
+$$;
+
+revoke all on function public.fetch_cycle_rows_for_scope(uuid, uuid[]) from public, anon;
+grant execute on function public.fetch_cycle_rows_for_scope(uuid, uuid[]) to authenticated, service_role;
+

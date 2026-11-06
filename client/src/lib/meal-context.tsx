@@ -320,35 +320,21 @@ function mapDepositRows(rows: CycleDepositRow[]): CycleDeposit[] {
 async function fetchCycleRowsForScope(messId: string, cycleIds: string[]) {
   if (!cycleIds.length) return { deposits: [] as CycleDeposit[], expenses: [] as Expense[], mealLogs: [] as MealLog[] };
 
-  const [depositsResult, expensesResult] = await Promise.all([
-    supabase.from('cycle_deposits')
-      .select('id, cycle_id, member_id, amount, kind, note, created_at')
-      .eq('mess_id', messId).in('cycle_id', cycleIds).order('created_at', { ascending: true }),
-    supabase.from('expenses')
-      .select('id, cycle_id, amount, description, type, date, paid_by, updated_at')
-      .eq('mess_id', messId).in('cycle_id', cycleIds).is('deleted_at', null).order('date', { ascending: false }),
-  ]);
-  if (depositsResult.error) throw depositsResult.error;
-  if (expensesResult.error) throw expensesResult.error;
-
-  const mealLogRows: MealLogRow[] = [];
-  const pageSize = 1000;
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase.from('meal_logs')
-      .select('id, cycle_id, member_id, date, count, updated_at')
-      .eq('mess_id', messId).in('cycle_id', cycleIds)
-      .order('date', { ascending: false }).order('id', { ascending: true })
-      .range(offset, offset + pageSize - 1);
-    if (error) throw error;
-    const page = (data || []) as MealLogRow[];
-    mealLogRows.push(...page);
-    if (page.length < pageSize) break;
-  }
+  const { data, error } = await supabase.rpc('fetch_cycle_rows_for_scope', {
+    mess_id_input: messId,
+    cycle_ids_input: cycleIds,
+  });
+  if (error) throw error;
+  const rows = (data ?? {}) as unknown as {
+    deposits: CycleDepositRow[];
+    expenses: ExpenseRow[];
+    meal_logs: MealLogRow[];
+  };
 
   return {
-    deposits: mapDepositRows((depositsResult.data || []) as CycleDepositRow[]),
-    expenses: mapExpenseRows((expensesResult.data || []) as ExpenseRow[]),
-    mealLogs: mapMealLogRows(mealLogRows),
+    deposits: mapDepositRows(rows.deposits ?? []),
+    expenses: mapExpenseRows(rows.expenses ?? []),
+    mealLogs: mapMealLogRows(rows.meal_logs ?? []),
   };
 }
 

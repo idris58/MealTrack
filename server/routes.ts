@@ -185,6 +185,12 @@ type CycleDepositRow = {
   amount: number | string;
 };
 
+type CycleRowsRpcResult = {
+  deposits: CycleDepositRow[];
+  expenses: ExpenseRow[];
+  meal_logs: MealLogRow[];
+};
+
 function buildSharedPayload(
   cycle: CycleRow,
   membersData: MemberRow[],
@@ -472,7 +478,7 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
     return null;
   }
 
-  const [membersResult, depositsResult, expensesResult, activeNotice] =
+  const [membersResult, cycleRowsResult, activeNotice] =
     await Promise.all([
       supabaseAdmin
         .from("members")
@@ -480,19 +486,10 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
         .eq(...scopeFilter(scope))
         .order("sort_order", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true }),
-      supabaseAdmin
-        .from("cycle_deposits")
-        .select("id, cycle_id, member_id, amount")
-        .eq(...scopeFilter(scope))
-        .eq("cycle_id", cycle.id)
-        .order("created_at", { ascending: true }),
-      supabaseAdmin
-        .from("expenses")
-        .select("id, cycle_id, amount, description, type, date, paid_by")
-        .eq(...scopeFilter(scope))
-        .eq("cycle_id", cycle.id)
-        .is("deleted_at", null)
-        .order("date", { ascending: false }),
+      supabaseAdmin.rpc("fetch_cycle_rows_for_scope", {
+        mess_id_input: scope.messId,
+        cycle_ids_input: [cycle.id],
+      }),
       getActiveNoticeForScope(scope),
     ]);
 
@@ -500,38 +497,16 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
     throw membersResult.error;
   }
 
-  if (depositsResult.error) {
-    throw depositsResult.error;
-  }
-
-  if (expensesResult.error) {
-    throw expensesResult.error;
-  }
-
-  const mealLogRows: MealLogRow[] = [];
-  const mealLogPageSize = 1000;
-  for (let offset = 0; ; offset += mealLogPageSize) {
-    const { data, error } = await supabaseAdmin
-      .from("meal_logs")
-      .select("id, cycle_id, date, member_id, count")
-      .eq(...scopeFilter(scope))
-      .eq("cycle_id", cycle.id)
-      .order("date", { ascending: false })
-      .order("id", { ascending: true })
-      .range(offset, offset + mealLogPageSize - 1);
-    if (error) throw error;
-    const page = (data || []) as MealLogRow[];
-    mealLogRows.push(...page);
-    if (page.length < mealLogPageSize) break;
-  }
+  if (cycleRowsResult.error) throw cycleRowsResult.error;
+  const cycleRows = (cycleRowsResult.data ?? {}) as CycleRowsRpcResult;
 
   return {
     ...buildSharedPayload(
       cycle,
       membersResult.data || [],
-      depositsResult.data || [],
-      expensesResult.data || [],
-      mealLogRows,
+      cycleRows.deposits || [],
+      cycleRows.expenses || [],
+      cycleRows.meal_logs || [],
     ),
     activeNotice,
   };
@@ -918,35 +893,15 @@ export async function registerRoutes(
         .range(from, to),
     );
 
-    const depositsPromise = fetchAllPages<{ member_id: string; amount: number | string }>(async (from, to) =>
-      await supabaseAdmin
-        .from("cycle_deposits")
-        .select("member_id, amount")
-        .eq("mess_id", messId)
-        .eq("cycle_id", cycle.id)
-        .order("id", { ascending: true })
-        .range(from, to),
-    );
-    const expensesPromise = fetchAllPages<{ amount: number | string; type: "meal" | "utility" }>(async (from, to) =>
-      await supabaseAdmin
-        .from("expenses")
-        .select("amount, type")
-        .eq("mess_id", messId)
-        .eq("cycle_id", cycle.id)
-        .is("deleted_at", null)
-        .order("id", { ascending: true })
-        .range(from, to),
-    );
-    const mealLogsPromise = fetchAllPages<{ member_id: string; count: number | string }>(async (from, to) =>
-      await supabaseAdmin
-        .from("meal_logs")
-        .select("member_id, count")
-        .eq("mess_id", messId)
-        .eq("cycle_id", cycle.id)
-        .order("id", { ascending: true })
-        .range(from, to),
-    );
-    const [deposits, expenses, mealLogs] = await Promise.all([depositsPromise, expensesPromise, mealLogsPromise]);
+    const { data: cycleRowsData, error: cycleRowsError } = await supabaseAdmin.rpc("fetch_cycle_rows_for_scope", {
+      mess_id_input: messId,
+      cycle_ids_input: [cycle.id],
+    });
+    if (cycleRowsError) throw cycleRowsError;
+    const cycleRows = (cycleRowsData ?? {}) as CycleRowsRpcResult;
+    const deposits = cycleRows.deposits ?? [];
+    const expenses = cycleRows.expenses ?? [];
+    const mealLogs = cycleRows.meal_logs ?? [];
 
     const members = roster ?? selectCycleMembers(
       liveRoster.map((member) => ({ ...member, deletedAt: member.deleted_at })),
