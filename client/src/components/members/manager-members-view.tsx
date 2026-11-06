@@ -21,7 +21,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
-  AlertTriangle, Check, ChevronDown, Clipboard, Clock3, Copy, GripVertical, Link2, Link2Off,
+  Check, ChevronDown, Clipboard, Clock3, Copy, GripVertical, Link2, Link2Off,
   Plus, RotateCcw, Send, ShieldCheck, Trash2, Wallet, Users, UserPlus,
 } from 'lucide-react';
 import {
@@ -48,6 +48,7 @@ import { runMutation } from '@/lib/run-mutation';
 import { toast } from 'sonner';
 import { useNetworkStatus } from '@/lib/pwa';
 import { PageHeader } from '@/components/page-header';
+import { DepositAmountConfirmation, LARGE_DEPOSIT_THRESHOLD } from '@/components/deposit-amount-confirmation';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DELETE_GRACE_MS = 10 * 1000;
@@ -94,8 +95,6 @@ function AddMemberForm({ onClose }: { onClose: () => void }) {
     </Form>
   );
 }
-
-const LARGE_DEPOSIT_THRESHOLD = 3000;
 
 function DepositForm({ memberId, memberName, onClose }: { memberId: string; memberName?: string; onClose: () => void }) {
   const { addDeposit } = useMealActions();
@@ -155,40 +154,14 @@ function DepositForm({ memberId, memberName, onClose }: { memberId: string; memb
       </div>
 
       {showConfirmLarge && isLarge ? (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-3 text-sm">
-          <div className="flex items-start gap-2.5 text-amber-800 dark:text-amber-300">
-            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-            <div className="space-y-1">
-              <p className="font-semibold text-sm">Confirm unusually large amount</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                You are about to {mode === 'deduct' ? 'deduct' : 'record a deposit of'}{' '}
-                <strong className="text-foreground">৳{Math.abs(parsedVal).toLocaleString()}</strong>
-                {memberName ? ` for ${memberName}` : ''}. Are you sure this amount is correct?
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2 pt-0.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setShowConfirmLarge(false)}
-              disabled={isSubmitting}
-            >
-              Edit Amount
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-medium"
-              disabled={isSubmitting}
-              onClick={() => void executeDeposit(parsedVal)}
-            >
-              {isSubmitting ? 'Saving...' : 'Yes, Confirm'}
-            </Button>
-          </div>
-        </div>
+        <DepositAmountConfirmation
+          amount={parsedVal}
+          mode={mode}
+          memberName={memberName}
+          isSubmitting={isSubmitting}
+          onEdit={() => setShowConfirmLarge(false)}
+          onConfirm={() => void executeDeposit(parsedVal)}
+        />
       ) : (
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           {isSubmitting ? 'Saving...' : mode === 'deduct' ? 'Deduct Amount' : 'Add Deposit'}

@@ -60,6 +60,8 @@ import { OnboardingTour } from '@/components/onboarding-tour';
 import { ExpenseForm } from '@/components/expense-form';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { NoticeDialog } from '@/components/notice-dialog';
+import { DepositAmountConfirmation, LARGE_DEPOSIT_THRESHOLD } from '@/components/deposit-amount-confirmation';
+import { toast } from 'sonner';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -204,11 +206,13 @@ function QuickDeposit({
   members,
   initialMemberId,
   initialAmount,
+  cycleId,
   onClose,
 }: {
   members: Array<{ id: string; name: string }>;
   initialMemberId?: string;
   initialAmount?: number;
+  cycleId: string;
   onClose: () => void;
 }) {
   const { addDeposit } = useMealActions();
@@ -216,28 +220,66 @@ function QuickDeposit({
   const [amount, setAmount] = useState(initialAmount ? String(initialAmount) : '');
   const [mode, setMode] = useState<'add' | 'deduct'>('add');
   const [busy, setBusy] = useState(false);
+  const [showConfirmLarge, setShowConfirmLarge] = useState(false);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const val = Number.parseFloat(normalizeBengaliDigits(amount.trim()));
-    if (busy || !memberId || !Number.isFinite(val) || val === 0) return;
+  const executeDeposit = async (amount: number) => {
+    if (busy) return;
     setBusy(true);
+    const signedAmount = mode === 'deduct' ? -Math.abs(amount) : Math.abs(amount);
+    const kind = mode === 'deduct' ? 'refund' : 'deposit';
     try {
-      await runMutation(async () => {
-        const signed = mode === 'deduct' ? -Math.abs(val) : Math.abs(val);
-        await addDeposit(memberId, signed, undefined, undefined, mode === 'deduct' ? 'refund' : 'deposit');
-        onClose();
+      const saved = await runMutation(() => addDeposit(memberId, signedAmount, cycleId, undefined, kind));
+      if (!saved) return;
+
+      onClose();
+      const memberName = members.find((member) => member.id === memberId)?.name ?? 'member';
+      let undoUsed = false;
+      toast.success(mode === 'deduct' ? 'Refund recorded' : 'Deposit recorded', {
+        description: `${money(Math.abs(signedAmount))} for ${memberName}`,
+        duration: 10_000,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            if (undoUsed) return;
+            undoUsed = true;
+            void runMutation(async () => {
+              await addDeposit(
+                memberId,
+                -signedAmount,
+                cycleId,
+                mode === 'deduct' ? 'Undo refund' : 'Undo deposit',
+                signedAmount > 0 ? 'refund' : 'deposit',
+              );
+              toast.success('Deposit reversed', { description: `A balancing entry was recorded for ${memberName}.` });
+            });
+          },
+        },
       });
     } finally {
       setBusy(false);
     }
   };
 
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = Number.parseFloat(normalizeBengaliDigits(amount.trim()));
+    if (busy || !memberId || !Number.isFinite(val) || val === 0) return;
+    if (Math.abs(val) >= LARGE_DEPOSIT_THRESHOLD && !showConfirmLarge) {
+      setShowConfirmLarge(true);
+      return;
+    }
+    await executeDeposit(val);
+  };
+
+  const parsedAmount = Number.parseFloat(normalizeBengaliDigits(amount.trim()));
+  const isLargeAmount = Number.isFinite(parsedAmount) && Math.abs(parsedAmount) >= LARGE_DEPOSIT_THRESHOLD;
+  const selectedMemberName = members.find((member) => member.id === memberId)?.name;
+
   return (
     <form onSubmit={submit} className="space-y-4 pt-2">
       <div className="space-y-2">
         <label className="text-sm font-medium">Member</label>
-        <Select value={memberId} onValueChange={setMemberId}>
+        <Select value={memberId} onValueChange={(value) => { setMemberId(value); setShowConfirmLarge(false); }}>
           <SelectTrigger><SelectValue placeholder="Choose member" /></SelectTrigger>
           <SelectContent>
             {members.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
@@ -245,8 +287,8 @@ function QuickDeposit({
         </Select>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Button type="button" variant={mode === 'add' ? 'default' : 'outline'} onClick={() => setMode('add')} disabled={busy}>Collect</Button>
-        <Button type="button" variant={mode === 'deduct' ? 'destructive' : 'outline'} onClick={() => setMode('deduct')} disabled={busy}>Refund</Button>
+        <Button type="button" variant={mode === 'add' ? 'default' : 'outline'} onClick={() => { setMode('add'); setShowConfirmLarge(false); }} disabled={busy}>Collect</Button>
+        <Button type="button" variant={mode === 'deduct' ? 'destructive' : 'outline'} onClick={() => { setMode('deduct'); setShowConfirmLarge(false); }} disabled={busy}>Refund</Button>
       </div>
       <div className="space-y-2">
         <label className="text-sm font-medium">Amount (৳)</label>
@@ -255,14 +297,25 @@ function QuickDeposit({
           inputMode="decimal"
           placeholder="0"
           value={amount}
-          onChange={(e) => { if (validAmount.test(e.target.value)) setAmount(e.target.value); }}
+          onChange={(e) => { if (validAmount.test(e.target.value)) { setAmount(e.target.value); setShowConfirmLarge(false); } }}
           autoFocus
           disabled={busy}
         />
       </div>
-      <Button type="submit" className="w-full" disabled={busy || !amount}>
-        {busy ? 'Saving…' : mode === 'deduct' ? 'Record refund' : 'Record deposit'}
-      </Button>
+      {showConfirmLarge && isLargeAmount ? (
+        <DepositAmountConfirmation
+          amount={parsedAmount}
+          mode={mode}
+          memberName={selectedMemberName}
+          isSubmitting={busy}
+          onEdit={() => setShowConfirmLarge(false)}
+          onConfirm={() => void executeDeposit(parsedAmount)}
+        />
+      ) : (
+        <Button type="submit" className="w-full" disabled={busy || !amount}>
+          {busy ? 'Saving…' : mode === 'deduct' ? 'Record refund' : 'Record deposit'}
+        </Button>
+      )}
     </form>
   );
 }
@@ -839,6 +892,7 @@ export function ManagerDashboard() {
               members={members}
               initialMemberId={depositOpen.memberId}
               initialAmount={depositOpen.amount}
+              cycleId={activeCycle.id}
               onClose={() => setDepositOpen(null)}
             />
           )}
