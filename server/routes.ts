@@ -76,6 +76,9 @@ const notificationPreferencesBodySchema = z.object({
     mealOff: z.boolean().optional(),
   }).partial().optional(),
 }).strict();
+const sharedBroadcastBodySchema = z.object({
+  shareLinkEnabled: z.boolean().optional(),
+}).strict();
 const uuidBodySchema = (key: string, label: string) => z.object({
   [key]: z.string().uuid(`${label} must be a valid ID.`),
 });
@@ -307,6 +310,51 @@ const SHARED_SERVER_INSTANCE_ID = randomUUID();
 const sharedPayloadCache = new Map<string, { payload: SharedPayload | null; expiresAt: number }>();
 const sharedPayloadLoads = new Map<string, Promise<SharedPayload | null>>();
 const sharedPayloadVersions = new Map<string, number>();
+const SHARE_LINK_STATUS_CACHE_MS = 60_000;
+const enabledShareLinkCache = new Map<string, { enabled: boolean; expiresAt: number }>();
+const enabledShareLinkLoads = new Map<string, Promise<boolean>>();
+const enabledShareLinkVersions = new Map<string, number>();
+
+function setEnabledShareLinkCache(messId: string, enabled: boolean) {
+  const version = (enabledShareLinkVersions.get(messId) ?? 0) + 1;
+  enabledShareLinkVersions.set(messId, version);
+  enabledShareLinkCache.set(messId, { enabled, expiresAt: Date.now() + SHARE_LINK_STATUS_CACHE_MS });
+}
+
+async function messHasEnabledShareLink(messId: string): Promise<boolean> {
+  const cached = enabledShareLinkCache.get(messId);
+  if (cached && cached.expiresAt > Date.now()) return cached.enabled;
+  if (cached) enabledShareLinkCache.delete(messId);
+
+  const pending = enabledShareLinkLoads.get(messId);
+  if (pending) return pending;
+
+  const version = enabledShareLinkVersions.get(messId) ?? 0;
+  const load = (async () => {
+    const { data, error } = await assertSupabaseAdmin()
+      .from("share_links")
+      .select("id")
+      .eq("mess_id", messId)
+      .eq("is_enabled", true)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+
+    const enabled = Boolean(data);
+    if ((enabledShareLinkVersions.get(messId) ?? 0) === version) {
+      enabledShareLinkCache.set(messId, { enabled, expiresAt: Date.now() + SHARE_LINK_STATUS_CACHE_MS });
+      return enabled;
+    }
+    return enabledShareLinkCache.get(messId)?.enabled ?? enabled;
+  })();
+
+  enabledShareLinkLoads.set(messId, load);
+  try {
+    return await load;
+  } finally {
+    if (enabledShareLinkLoads.get(messId) === load) enabledShareLinkLoads.delete(messId);
+  }
+}
 
 function invalidateSharedPayload(scope: Scope) {
   const key = scopeKey(scope);
@@ -374,6 +422,18 @@ function broadcastSharedChanged(scope: Scope) {
   for (const client of Array.from(clients)) {
     sendShareEvent(client, "changed", { version: sharedPayloadEtag(scope) });
   }
+}
+
+function broadcastSharingDisabled(scope: Scope) {
+  const key = scopeKey(scope);
+  const clients = shareEventClients.get(key);
+  if (!clients) return;
+
+  for (const client of Array.from(clients)) {
+    sendShareEvent(client, "sharing-disabled", {});
+    client.end();
+  }
+  shareEventClients.delete(key);
 }
 
 async function getActiveNoticeForScope(scope: Scope): Promise<ActiveNotice> {
@@ -547,37 +607,25 @@ async function getAuthenticatedUserId(authHeader: string | undefined): Promise<s
  * mess_id — not user_id — determines which data a share view exposes, because
  * coordinators (not just the manager) write rows under the shared mess.
  */
-async function resolveScopeForUserId(userId: string): Promise<Scope> {
-  const supabaseAdmin = assertSupabaseAdmin();
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("mess_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data?.mess_id) {
-    const missingMessError = new Error("You must belong to a mess to broadcast updates.");
-    (missingMessError as Error & { status?: number }).status = 403;
-    throw missingMessError;
-  }
-  return { messId: data.mess_id as string };
-}
-
-async function requireMessOperator(userId: string) {
+async function requireMessOperatorScope(userId: string): Promise<Scope> {
   const supabaseAdmin = assertSupabaseAdmin();
   const { data, error } = await supabaseAdmin
     .from("profiles")
     .select("role, mess_id")
     .eq("id", userId)
     .maybeSingle();
+
   if (error) throw error;
   if (!data?.mess_id || (data.role !== "manager" && data.role !== "coordinator")) {
     const error = new Error("Only mess managers and coordinators can broadcast updates.");
     (error as Error & { status?: number }).status = 403;
     throw error;
   }
-  return data.mess_id as string;
+  return { messId: data.mess_id as string };
+}
+
+async function requireMessOperator(userId: string) {
+  return (await requireMessOperatorScope(userId)).messId;
 }
 
 async function requireMessMember(userId: string) {
@@ -724,8 +772,7 @@ export async function registerRoutes(
     if (!oldToken) return res.status(400).json({ message: "Invalid old share token." });
 
     const supabaseAdmin = assertSupabaseAdmin();
-    const scope = await resolveScopeForUserId(userId);
-    await requireMessOperator(userId);
+    const scope = await requireMessOperatorScope(userId);
     const { data: currentLink, error: linkError } = await supabaseAdmin
       .from("share_links")
       .select("token")
@@ -1203,9 +1250,7 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid authorization token." });
     }
 
-    await requireMessOperator(userId);
-
-    const scope = await resolveScopeForUserId(userId);
+    const scope = await requireMessOperatorScope(userId);
     const activeNotice = await getActiveNoticeForScope(scope);
     invalidateSharedPayload(scope);
     broadcastNoticeUpdate(scopeKey(scope), activeNotice, sharedPayloadEtag(scope));
@@ -1228,10 +1273,13 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid authorization token." });
     }
 
+    const body = parseRequestBody(sharedBroadcastBodySchema, req.body ?? {}, res);
+    if (!body) return;
+
     const supabaseAdmin = assertSupabaseAdmin();
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("mess_id")
+      .select("mess_id, role")
       .eq("id", userId)
       .maybeSingle();
     if (profileError) throw profileError;
@@ -1240,15 +1288,24 @@ export async function registerRoutes(
     }
 
     const scope = { messId: profile.mess_id as string };
-    const { data: enabledShareLink, error: shareLinkError } = await supabaseAdmin
-      .from("share_links")
-      .select("token")
-      .eq("mess_id", scope.messId)
-      .eq("is_enabled", true)
-      .limit(1)
-      .maybeSingle();
-    if (shareLinkError) throw shareLinkError;
-    if (!enabledShareLink) return res.json({ data: null, skipped: true });
+    if (body.shareLinkEnabled !== undefined) {
+      if (profile.role !== "manager") {
+        return res.status(403).json({ message: "Only the manager can change public sharing settings." });
+      }
+
+      setEnabledShareLinkCache(scope.messId, body.shareLinkEnabled);
+      if (body.shareLinkEnabled) {
+        scheduleSharedBroadcast(scope);
+      } else {
+        invalidateSharedPayload(scope);
+        broadcastSharingDisabled(scope);
+      }
+      return res.json({ data: null, shareLinkStatusRefreshed: true });
+    }
+
+    if (!await messHasEnabledShareLink(scope.messId)) {
+      return res.json({ data: null, skipped: true });
+    }
 
     scheduleSharedBroadcast(scope);
 

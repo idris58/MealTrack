@@ -591,10 +591,16 @@ export default function SharedPage({ token }: { token: string }) {
     const handleConnected = (event: MessageEvent) => {
       if (initialLoadFinished) handleSharedChanged(event);
     };
+    const handleSharingDisabled = () => {
+      setLiveConnected(false);
+      setError("Sharing has been disabled by the manager.");
+      events.close();
+    };
 
     events.addEventListener("notice", handleNoticeUpdate);
     events.addEventListener("connected", handleConnected);
     events.addEventListener("changed", handleSharedChanged);
+    events.addEventListener("sharing-disabled", handleSharingDisabled);
 
     return () => {
       active = false;
@@ -603,6 +609,7 @@ export default function SharedPage({ token }: { token: string }) {
       events.removeEventListener("notice", handleNoticeUpdate);
       events.removeEventListener("connected", handleConnected);
       events.removeEventListener("changed", handleSharedChanged);
+      events.removeEventListener("sharing-disabled", handleSharingDisabled);
       events.close();
     };
   }, [token, retryKey]);

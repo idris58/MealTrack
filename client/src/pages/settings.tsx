@@ -45,6 +45,7 @@ import { useNotice } from '@/lib/notice-context';
 import { NoticeDialog } from '@/components/notice-dialog';
 import { useNetworkStatus } from '@/lib/pwa';
 import { supabase } from '@/lib/supabase';
+import { broadcastSharedUpdate } from '@/lib/shared-update';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/page-header';
 
@@ -618,6 +619,7 @@ function ShareSettingsCard({ canManageSharing }: { canManageSharing: boolean }) 
         .single();
       if (upsertError) throw upsertError;
       if (!data) throw new Error('Unable to save share settings.');
+      await broadcastSharedUpdate(data.is_enabled);
       setConfig({ token: data.token, is_enabled: data.is_enabled }); return data;
     } catch (caughtError: any) {
       console.error('Error saving share config:', caughtError);
