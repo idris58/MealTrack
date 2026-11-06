@@ -434,26 +434,31 @@ export default function SharedPage({ token }: { token: string }) {
     let reconnectTimer: number | undefined;
     let reconnectDelay = 5_000;
     let disconnected = false;
+    let initialLoadFinished = false;
+    let changedRefreshTimer: number | undefined;
     const cacheKey = `mealtrack:shared-cache:${token.toUpperCase()}`;
 
-    const readCache = (): { payload: SharedPayload; savedAt?: number } | null => {
+    const readCache = (): { payload: SharedPayload; savedAt?: number; etag?: string } | null => {
       try {
         const value = window.localStorage.getItem(cacheKey);
         if (!value) return null;
-        const parsed = JSON.parse(value) as { savedAt?: number; payload?: SharedPayload };
+        const parsed = JSON.parse(value) as { savedAt?: number; etag?: string; payload?: SharedPayload };
         if (!parsed.payload || !Array.isArray(parsed.payload.members) || !parsed.payload.cycle) return null;
         return {
           payload: parsed.payload,
           savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : undefined,
+          etag: typeof parsed.etag === "string" ? parsed.etag : undefined,
         };
       } catch {
         return null;
       }
     };
 
+    let currentEtag = readCache()?.etag ?? null;
+
     const savePayload = (payload: SharedPayload, savedAt: number) => {
       try {
-        window.localStorage.setItem(cacheKey, JSON.stringify({ savedAt, payload }));
+        window.localStorage.setItem(cacheKey, JSON.stringify({ savedAt, etag: currentEtag, payload }));
       } catch {
         // Keep the online shared view usable if browser storage is unavailable.
       }
@@ -472,6 +477,7 @@ export default function SharedPage({ token }: { token: string }) {
       if (!dataRef.current) {
         const cached = readCache();
         if (cached) {
+          currentEtag = cached.etag ?? currentEtag;
           commitPayload(cached.payload, true, cached.savedAt);
           setLoading(false);
         } else {
@@ -479,7 +485,19 @@ export default function SharedPage({ token }: { token: string }) {
         }
       }
       try {
-        const response = await fetch(`/api/share/${encodeURIComponent(token)}`);
+        const response = await fetch(`/api/share/${encodeURIComponent(token)}`, {
+          cache: "no-cache",
+          headers: currentEtag ? { "If-None-Match": currentEtag } : undefined,
+        });
+        if (response.status === 304) {
+          if (!dataRef.current) throw new Error("The cached shared dashboard is unavailable.");
+          if (active) {
+            setShowingCachedData(false);
+            setLastUpdated(new Date());
+            setError(null);
+          }
+          return;
+        }
         const body = await response.json().catch(() => null);
 
         if (!response.ok) {
@@ -490,6 +508,7 @@ export default function SharedPage({ token }: { token: string }) {
         if (!body?.cycle || !Array.isArray(body.members)) throw new Error("The shared dashboard response was invalid.");
 
         if (active) {
+          currentEtag = response.headers.get("ETag") ?? currentEtag;
           try {
             window.localStorage.setItem(LAST_SHARED_MEAL_CODE_KEY, token);
           } catch {
@@ -510,7 +529,10 @@ export default function SharedPage({ token }: { token: string }) {
           setError(caughtError instanceof Error ? caughtError.message : "Unable to load shared dashboard.");
         }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          initialLoadFinished = true;
+        }
       }
     };
 
@@ -544,7 +566,8 @@ export default function SharedPage({ token }: { token: string }) {
 
     const handleNoticeUpdate = (event: MessageEvent) => {
       try {
-        const payload = JSON.parse(event.data) as Pick<SharedPayload, "activeNotice">;
+        const payload = JSON.parse(event.data) as Pick<SharedPayload, "activeNotice"> & { version?: string };
+        if (payload.version) currentEtag = payload.version;
         const currentData = dataRef.current;
         if (currentData) commitPayload({ ...currentData, activeNotice: payload.activeNotice });
       } catch (caughtError) {
@@ -552,30 +575,34 @@ export default function SharedPage({ token }: { token: string }) {
       }
     };
 
-    const handleSharedDataUpdate = (event: MessageEvent) => {
+    const handleSharedChanged = (event: MessageEvent) => {
       try {
-        const payload = JSON.parse(event.data) as { data: SharedPayload | null };
-
-        if (!payload.data) {
-          setError("No cycle is available for this shared view yet.");
-          return;
-        }
-
-        setError(null);
-        commitPayload(payload.data);
+        const payload = JSON.parse(event.data) as { version?: string };
+        if (!payload.version || payload.version === currentEtag || changedRefreshTimer !== undefined) return;
+        changedRefreshTimer = window.setTimeout(() => {
+          changedRefreshTimer = undefined;
+          void loadSharedData();
+        }, 100);
       } catch (caughtError) {
-        console.error("Error parsing shared data update:", caughtError);
+        console.error("Error parsing shared change event:", caughtError);
       }
     };
 
+    const handleConnected = (event: MessageEvent) => {
+      if (initialLoadFinished) handleSharedChanged(event);
+    };
+
     events.addEventListener("notice", handleNoticeUpdate);
-    events.addEventListener("shared-data", handleSharedDataUpdate);
+    events.addEventListener("connected", handleConnected);
+    events.addEventListener("changed", handleSharedChanged);
 
     return () => {
       active = false;
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
+      if (changedRefreshTimer !== undefined) window.clearTimeout(changedRefreshTimer);
       events.removeEventListener("notice", handleNoticeUpdate);
-      events.removeEventListener("shared-data", handleSharedDataUpdate);
+      events.removeEventListener("connected", handleConnected);
+      events.removeEventListener("changed", handleSharedChanged);
       events.close();
     };
   }, [token, retryKey]);

@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import rateLimit from "express-rate-limit";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { log } from "./logger";
 import { isAllowedPushEndpoint } from "./push-endpoint";
@@ -303,6 +303,7 @@ function scopeFilter(scope: Scope): ["mess_id", string] {
 const shareEventClients = new Map<string, Set<Response>>();
 const sharedBroadcastTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const SHARED_PAYLOAD_CACHE_MS = 3_000;
+const SHARED_SERVER_INSTANCE_ID = randomUUID();
 const sharedPayloadCache = new Map<string, { payload: SharedPayload | null; expiresAt: number }>();
 const sharedPayloadLoads = new Map<string, Promise<SharedPayload | null>>();
 const sharedPayloadVersions = new Map<string, number>();
@@ -347,25 +348,31 @@ function sendShareEvent(res: Response, event: string, payload: unknown) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-function broadcastNoticeUpdate(key: string, activeNotice: ActiveNotice) {
+function sharedPayloadEtag(scope: Scope): string {
+  const version = sharedPayloadVersions.get(scopeKey(scope)) ?? 0;
+  return `"${SHARED_SERVER_INSTANCE_ID}-${version}"`;
+}
+
+function broadcastNoticeUpdate(key: string, activeNotice: ActiveNotice, version: string) {
   const clients = shareEventClients.get(key);
   if (!clients) {
     return;
   }
 
   for (const client of Array.from(clients)) {
-    sendShareEvent(client, "notice", { activeNotice });
+    sendShareEvent(client, "notice", { activeNotice, version });
   }
 }
 
-function broadcastSharedPayload(key: string, data: SharedPayload | null) {
+function broadcastSharedChanged(scope: Scope) {
+  const key = scopeKey(scope);
   const clients = shareEventClients.get(key);
   if (!clients) {
     return;
   }
 
   for (const client of Array.from(clients)) {
-    sendShareEvent(client, "shared-data", { data });
+    sendShareEvent(client, "changed", { version: sharedPayloadEtag(scope) });
   }
 }
 
@@ -406,9 +413,7 @@ function scheduleSharedBroadcast(scope: Scope) {
   const timer = setTimeout(() => {
     sharedBroadcastTimers.delete(key);
     if (!shareEventClients.has(key)) return;
-    void getSharedPayloadForScope(scope)
-      .then((data) => broadcastSharedPayload(key, data))
-      .catch((error) => console.error("Error broadcasting shared update:", error));
+    broadcastSharedChanged(scope);
   }, 100);
   sharedBroadcastTimers.set(key, timer);
 }
@@ -428,8 +433,11 @@ async function getSharedPayloadForScope(scope: Scope): Promise<SharedPayload | n
     const payload = await load;
     if ((sharedPayloadVersions.get(key) ?? 0) === version) {
       sharedPayloadCache.set(key, { payload, expiresAt: Date.now() + SHARED_PAYLOAD_CACHE_MS });
+      return payload;
     }
-    return payload;
+
+    if (sharedPayloadLoads.get(key) === load) sharedPayloadLoads.delete(key);
+    return getSharedPayloadForScope(scope);
   } finally {
     if (sharedPayloadLoads.get(key) === load) sharedPayloadLoads.delete(key);
   }
@@ -1171,10 +1179,11 @@ export async function registerRoutes(
 
     // Register under the mess scope so updates from ANY operator in the mess
     // (manager or coordinator) reach this viewer.
-    const eventKey = scopeKey(scopeFromShareLink(shareLink));
+    const scope = scopeFromShareLink(shareLink);
+    const eventKey = scopeKey(scope);
 
     addShareEventClient(eventKey, res);
-    sendShareEvent(res, "connected", { ok: true });
+    sendShareEvent(res, "connected", { ok: true, version: sharedPayloadEtag(scope) });
 
     const heartbeatId = setInterval(() => {
       sendShareEvent(res, "heartbeat", { at: new Date().toISOString() });
@@ -1199,7 +1208,7 @@ export async function registerRoutes(
     const scope = await resolveScopeForUserId(userId);
     const activeNotice = await getActiveNoticeForScope(scope);
     invalidateSharedPayload(scope);
-    broadcastNoticeUpdate(scopeKey(scope), activeNotice);
+    broadcastNoticeUpdate(scopeKey(scope), activeNotice, sharedPayloadEtag(scope));
     // Push to shared-view visitors
     fireAndForget(sendNoticePushToSharedSubscribers(scope.messId, activeNotice), {
       task: "sendNoticePushToSharedSubscribers", messId: scope.messId,
@@ -1274,10 +1283,19 @@ export async function registerRoutes(
       return res.status(404).json({ message: "Sharing is currently disabled for this Meal Code. Ask the manager to enable sharing again." });
     }
 
-    const data = await getSharedPayloadForScope(scopeFromShareLink(shareLink));
+    const scope = scopeFromShareLink(shareLink);
+    const data = await getSharedPayloadForScope(scope);
 
     if (!data) {
       return res.status(404).json({ message: "No cycle is available for this shared view yet." });
+    }
+
+    const etag = sharedPayloadEtag(scope);
+    res.set("ETag", etag);
+    res.set("Cache-Control", "private, no-cache");
+    const requestEtags = req.get("if-none-match")?.split(",").map((value) => value.trim()) ?? [];
+    if (requestEtags.includes("*") || requestEtags.includes(etag)) {
+      return res.status(304).end();
     }
 
     return res.json(data);
