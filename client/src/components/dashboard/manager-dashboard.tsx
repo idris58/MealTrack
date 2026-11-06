@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   addDays,
@@ -11,10 +11,8 @@ import {
 import {
   AlertTriangle,
   ArrowRight,
-  BarChart3,
   CalendarCheck,
   CheckCircle2,
-  ChevronDown,
   CircleDollarSign,
   CloudOff,
   Hourglass,
@@ -55,7 +53,6 @@ import { useCountUp } from '@/hooks/use-count-up';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -63,11 +60,6 @@ import { OnboardingTour } from '@/components/onboarding-tour';
 import { ExpenseForm } from '@/components/expense-form';
 import { MealCountEditor } from '@/components/meal-count-editor';
 import { NoticeDialog } from '@/components/notice-dialog';
-
-// Recharts lives in its own vendor chunk; only fetch it when analytics are opened.
-const DashboardAnalytics = lazy(() =>
-  import('@/components/dashboard-analytics').then((m) => ({ default: m.DashboardAnalytics })),
-);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -156,36 +148,6 @@ function EmptyBlock({ icon: Icon, title, body }: { icon: LucideIcon; title: stri
       <p className="text-sm font-medium">{title}</p>
       <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">{body}</p>
     </div>
-  );
-}
-
-function CashSparkline({ values }: { values: number[] }) {
-  const w = 600;
-  const h = 110;
-  const pad = 8;
-  const series = values.length ? values : [0];
-  const min = Math.min(0, ...series);
-  const max = Math.max(0, ...series);
-  const range = max - min || 1;
-  const x = (i: number) => (series.length < 2 ? w / 2 : (i / (series.length - 1)) * w);
-  const y = (v: number) => pad + (1 - (v - min) / range) * (h - pad * 2);
-  const line = series.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const area = `${line} L${x(series.length - 1).toFixed(1)},${y(0).toFixed(1)} L${x(0).toFixed(1)},${y(0).toFixed(1)} Z`;
-  const last = series[series.length - 1];
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-20 w-full sm:h-24" role="img" aria-label="Cash balance over the cycle">
-      <defs>
-        <linearGradient id="mgr-cash-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.45" />
-          <stop offset="100%" stopColor="#6ee7b7" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <line x1="0" x2={w} y1={y(0)} y2={y(0)} stroke="rgba(255,255,255,0.22)" strokeDasharray="4 5" vectorEffect="non-scaling-stroke" />
-      <path d={area} fill="url(#mgr-cash-fill)" />
-      <path d={line} fill="none" stroke="#a7f3d0" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      {series.length > 1 && <circle cx={x(series.length - 1)} cy={y(last)} r="4" fill="#fff" stroke="#34d399" strokeWidth="2" vectorEffect="non-scaling-stroke" />}
-    </svg>
   );
 }
 
@@ -342,7 +304,6 @@ export function ManagerDashboard() {
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState<{ memberId?: string; amount?: number } | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'expenses'>('activity');
-  const [showAnalytics, setShowAnalytics] = useState(false);
   const [pendingMealOff, setPendingMealOff] = useState(0);
 
   const messId = profile?.mess_id ?? null;
@@ -390,18 +351,12 @@ export function ManagerDashboard() {
     for (const d of deposits) days[idxOf(dayKey(parseISO(d.createdAt)))].deposits += d.amount;
     for (const l of mealLogs) days[idxOf(l.date.slice(0, 10))].meals += l.count;
 
-    let cumDep = 0;
-    let cumExp = 0;
     let cumMealExp = 0;
     let cumMeals = 0;
-    const cash: number[] = [];
     const rate: Array<number | null> = [];
     for (const d of days) {
-      cumDep += d.deposits;
-      cumExp += d.meal + d.fixed;
       cumMealExp += d.meal;
       cumMeals += d.meals;
-      cash.push(cumDep - cumExp);
       rate.push(cumMeals > 0 ? cumMealExp / cumMeals : null);
     }
 
@@ -430,7 +385,7 @@ export function ManagerDashboard() {
     const maxAbs = Math.max(1, ...ledger.map((r) => Math.abs(r.balance)));
 
     return {
-      elapsed, cycleDay: elapsed, cash, totalSpent, todaySpent, burn, runway, usedPct,
+      elapsed, cycleDay: elapsed, totalSpent, todaySpent, burn, runway, usedPct,
       rateDelta, todayMeals, todayByMember, hasLogToday,
       ledger, dues, totalDue, maxAbs,
     };
@@ -645,10 +600,8 @@ export function ManagerDashboard() {
               <Link href="/app/reports" className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-emerald-50 transition-colors hover:bg-white/10">Open reports<ArrowRight className="h-3 w-3" /></Link>
             </div>
 
-            <div className="mt-5"><CashSparkline values={v.cash} /></div>
-
             <div className="mt-5">
-              <div className="mb-2 flex items-center justify-between text-xs"><span className="font-medium text-emerald-100/70">Deposits deployed</span><span className="font-semibold tabular-nums text-white">{Math.round(v.usedPct)}%</span></div>
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-emerald-100/70">Spent / deposits</span><span className="text-right font-semibold tabular-nums text-white">{money(v.totalSpent)} / {money(stats.totalDeposits)} · {Math.round(v.usedPct)}%</span></div>
               <div className="h-2 overflow-hidden rounded-full bg-black/25 ring-1 ring-inset ring-white/10" role="progressbar" aria-label={`${Math.round(v.usedPct)}% of deposits deployed`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(v.usedPct)}>
                 <div className="h-full rounded-full bg-gradient-to-r from-emerald-200 to-teal-100 shadow-[0_0_12px_rgba(167,243,208,0.35)] transition-all" style={{ width: `${v.usedPct}%` }} />
               </div>
@@ -853,22 +806,6 @@ export function ManagerDashboard() {
           </ul>
         )}
       </Panel>
-
-      {/* Optional analytics (lazy) */}
-      <section>
-        <Button variant="outline" size="sm" className="gap-2" aria-expanded={showAnalytics} onClick={() => setShowAnalytics((s) => !s)}>
-          <BarChart3 className="h-4 w-4" />
-          {showAnalytics ? 'Hide' : 'Show'} cycle analytics
-          <ChevronDown className={cn('h-4 w-4 transition-transform', showAnalytics && 'rotate-180')} />
-        </Button>
-        {showAnalytics && (
-          <div className="mt-4">
-            <Suspense fallback={<Skeleton className="h-64 w-full rounded-2xl" />}>
-              <DashboardAnalytics />
-            </Suspense>
-          </div>
-        )}
-      </section>
 
       {/* Dialogs */}
       <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
