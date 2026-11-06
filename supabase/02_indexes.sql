@@ -63,7 +63,6 @@ drop index if exists public.notices_user_expires_idx;
 alter table public.push_subscriptions drop constraint if exists push_subscriptions_endpoint_key;
 drop index if exists public.push_subscriptions_endpoint_key;
 
-create index if not exists idx_members_created_at on public.members(created_at);
 create index if not exists idx_expenses_date on public.expenses(date);
 create index if not exists idx_expenses_type on public.expenses(type);
 create index if not exists idx_meal_logs_date on public.meal_logs(date);
