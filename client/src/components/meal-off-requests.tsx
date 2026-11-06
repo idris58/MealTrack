@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, parseISO, startOfDay } from 'date-fns';
 import { CalendarDays, Check, ClipboardList, Loader2, MessageSquareText, Plus, UtensilsCrossed, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Member } from '@/lib/meal-context';
-import { useRealtimeEvents } from '@/lib/meal-context';
+import { useMealOffRequests, type MealOffRequest, type MealOffRequestStatus, type MealPeriod as MealPeriodType } from '@/lib/meal-context';
 import { supabase } from '@/lib/supabase';
 import { triggerMealOffSubmitPush, triggerMealOffDecisionPush } from '@/lib/push-triggers';
 import { useNetworkStatus } from '@/lib/pwa';
@@ -15,20 +15,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
-type RequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
-type MealPeriod = 'all_day' | 'lunch' | 'dinner';
-
-type MealOffRequest = {
-  id: string;
-  member_id: string;
-  requested_by_profile_id: string;
-  start_date: string;
-  end_date: string;
-  meal_period: MealPeriod;
-  status: RequestStatus;
-  note: string | null;
-  created_at: string;
-};
+type RequestStatus = MealOffRequestStatus;
+type MealPeriod = MealPeriodType;
 
 type MealOffRequestsProps = {
   activeCycleId: string;
@@ -126,10 +114,12 @@ function RequestRow({
 }
 
 export function MealOffRequests({ activeCycleId, members, profile, canOperateMeals }: MealOffRequestsProps) {
-  const { mealOffRequests: mealOffRequestsRevision } = useRealtimeEvents();
+  const { requests: allRequests, loading, error: requestsError } = useMealOffRequests();
   const { isOnline } = useNetworkStatus();
-  const [requests, setRequests] = useState<MealOffRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const requests = useMemo(
+    () => allRequests.filter((request) => request.cycle_id === activeCycleId),
+    [allRequests, activeCycleId],
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [todayKey, setTodayKey] = useState(() => format(startOfDay(new Date()), 'yyyy-MM-dd'));
@@ -145,26 +135,11 @@ export function MealOffRequests({ activeCycleId, members, profile, canOperateMea
   );
   const memberNames = useMemo(() => new Map(members.map((member) => [member.id, member.name])), [members]);
 
-  const loadRequests = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('meal_off_requests')
-      .select('*')
-      .eq('cycle_id', activeCycleId)
-      .order('start_date', { ascending: true })
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      toast.error('Could not load meal-off requests', { description: error.message });
-    } else {
-      setRequests((data ?? []) as MealOffRequest[]);
-    }
-    setLoading(false);
-  }, [activeCycleId]);
-
   useEffect(() => {
-    void loadRequests();
-  }, [loadRequests, mealOffRequestsRevision]);
+    if (requestsError) {
+      toast.error('Could not load meal-off requests', { description: requestsError });
+    }
+  }, [requestsError]);
 
   useEffect(() => {
     const nextDay = startOfDay(new Date());

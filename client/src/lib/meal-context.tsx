@@ -54,6 +54,28 @@ export type {
 } from './meal-types';
 
 export const MealActionsContext = createContext<MealActionsContextType | undefined>(undefined);
+export type MealOffRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
+export type MealPeriod = 'all_day' | 'lunch' | 'dinner';
+export type MealOffRequest = {
+  id: string;
+  mess_id: string;
+  cycle_id: string;
+  member_id: string;
+  requested_by_profile_id: string;
+  start_date: string;
+  end_date: string;
+  meal_period: MealPeriod;
+  status: MealOffRequestStatus;
+  note: string | null;
+  created_at: string;
+};
+type MealOffRequestsData = {
+  requests: MealOffRequest[];
+  pendingCount: number;
+  loading: boolean;
+  error: string | null;
+};
+const MealOffRequestsContext = createContext<MealOffRequestsData | undefined>(undefined);
 type MealRowsData = Pick<MealDataState, 'expenses' | 'deposits' | 'mealLogs'>;
 type MealCyclesData = Pick<MealDataState, 'cycles' | 'activeCycle' | 'pendingCycle'>;
 type MealCycleDetailsData = Pick<MealDataState, 'getCycleDetails' | 'isCycleDetailsLoading' | 'getCycleDetailsError'> & { revision: unknown };
@@ -357,6 +379,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [allMealLogs, setAllMealLogs] = useState<MealLog[]>([]);
   const [allDeposits, setAllDeposits] = useState<CycleDeposit[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [mealOffRequests, setMealOffRequests] = useState<MealOffRequest[]>([]);
+  const [mealOffRequestsLoading, setMealOffRequestsLoading] = useState(true);
+  const [mealOffRequestsError, setMealOffRequestsError] = useState<string | null>(null);
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvents>({ notices: 0, mealOffRequests: 0, profiles: 0 });
   const [loadedCycleIds, setLoadedCycleIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -367,6 +392,47 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const userId = user?.id ?? null;
   const currentProfile = profile?.id === userId ? profile : null;
   const messId = currentProfile?.mess_id ?? null;
+  React.useEffect(() => {
+    let active = true;
+    if (!messId) {
+      setMealOffRequests([]);
+      setMealOffRequestsLoading(false);
+      setMealOffRequestsError(null);
+      return () => { active = false; };
+    }
+
+    setMealOffRequests([]);
+    setMealOffRequestsLoading(true);
+    setMealOffRequestsError(null);
+    void supabase
+      .from('meal_off_requests')
+      .select('id, mess_id, cycle_id, member_id, requested_by_profile_id, start_date, end_date, meal_period, status, note, created_at')
+      .eq('mess_id', messId)
+      .in('status', ['pending', 'approved'])
+      .order('start_date', { ascending: true })
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error('Failed to load shared meal-off requests:', error);
+          setMealOffRequestsError(error.message);
+          setMealOffRequests([]);
+        } else {
+          setMealOffRequests((data ?? []) as MealOffRequest[]);
+        }
+        setMealOffRequestsLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [messId, realtimeEvents.mealOffRequests]);
+
+  const mealOffRequestsValue = useMemo<MealOffRequestsData>(() => ({
+    requests: mealOffRequests,
+    pendingCount: mealOffRequests.filter((request) => request.status === 'pending').length,
+    loading: mealOffRequestsLoading,
+    error: mealOffRequestsError,
+  }), [mealOffRequests, mealOffRequestsLoading, mealOffRequestsError]);
+
   React.useEffect(() => {
     if (!currentProfile) return;
     profilesMapRef.current.set(currentProfile.id, {
@@ -1310,6 +1376,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   ]);
 
   return (
+    <MealOffRequestsContext.Provider value={mealOffRequestsValue}>
     <RealtimeEventsContext.Provider value={realtimeEvents}>
       <MealActionsContext.Provider value={actionsValue}>
         <MealRowsContext.Provider value={rowsValue}>
@@ -1329,6 +1396,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         </MealRowsContext.Provider>
       </MealActionsContext.Provider>
     </RealtimeEventsContext.Provider>
+    </MealOffRequestsContext.Provider>
   );
 }
 
@@ -1349,6 +1417,10 @@ export function useRealtimeEvents() {
   const context = useContext(RealtimeEventsContext);
   if (context === undefined) throw new Error('useRealtimeEvents must be used within a MealProvider');
   return context;
+}
+
+export function useMealOffRequests() {
+  return requireMealContext(useContext(MealOffRequestsContext), 'useMealOffRequests');
 }
 
 export function useMealActions() {

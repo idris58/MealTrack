@@ -1,8 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useNotice } from '@/lib/notice-context';
-import { useRealtimeEvents } from '@/lib/meal-context';
-import { supabase } from '@/lib/supabase';
+import { useMealOffRequests } from '@/lib/meal-context';
 import { updateAppBadge, clearAppBadge } from '@/lib/app-badge';
 
 /**
@@ -17,39 +16,8 @@ import { updateAppBadge, clearAppBadge } from '@/lib/app-badge';
 export function AppBadgeManager() {
   const { profile, canOperateMeals } = useAuth();
   const { notice, dismissed } = useNotice();
-  const { mealOffRequests: mealOffRequestsRevision } = useRealtimeEvents();
-  const [pendingMealOffCount, setPendingMealOffCount] = useState(0);
-
-  const fetchPendingMealOffCount = useCallback(async () => {
-    if (!profile?.mess_id || !canOperateMeals) {
-      setPendingMealOffCount(0);
-      return;
-    }
-
-    try {
-      const { count, error } = await supabase
-        .from('meal_off_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('mess_id', profile.mess_id)
-        .eq('status', 'pending');
-
-      if (!error && typeof count === 'number') {
-        setPendingMealOffCount(count);
-      }
-    } catch (err) {
-      console.error('Failed to query pending meal-off requests for app badge:', err);
-    }
-  }, [profile?.mess_id, canOperateMeals]);
-
-  // Refresh from the shared mess realtime channel.
-  useEffect(() => {
-    if (!profile?.mess_id || !canOperateMeals) {
-      setPendingMealOffCount(0);
-      return;
-    }
-
-    void fetchPendingMealOffCount();
-  }, [profile?.mess_id, canOperateMeals, fetchPendingMealOffCount, mealOffRequestsRevision]);
+  const { pendingCount } = useMealOffRequests();
+  const pendingMealOffCount = canOperateMeals && profile?.mess_id ? pendingCount : 0;
 
   // Calculate and apply badge whenever notice status or pending requests change
   useEffect(() => {

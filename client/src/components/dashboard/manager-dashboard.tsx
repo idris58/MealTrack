@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   addDays,
@@ -42,11 +42,10 @@ import {
   useMealRows,
   useMealStats,
   useMealStatus,
-  useRealtimeEvents,
+  useMealOffRequests,
 } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { useNotice } from '@/lib/notice-context';
-import { supabase } from '@/lib/supabase';
 import { runMutation } from '@/lib/run-mutation';
 import { normalizeBengaliDigits } from '@/lib/localized-number';
 import { formatMealCount, formatMoney, formatSignedMoney } from '@/lib/display-format';
@@ -348,8 +347,9 @@ export function ManagerDashboard() {
   const { activeCycle, pendingCycle } = useMealCycles();
   const { activeCycleChangelogEntries } = useMealChangelog();
   const { pendingSyncIds, failedSyncOps } = useMealStatus();
-  const { mealOffRequests: mealOffRevision } = useRealtimeEvents();
+  const { pendingCount: sharedPendingMealOff } = useMealOffRequests();
   const { profile, canManageExpenses, canOperateMeals, canManageDeposits, canManageCycles } = useAuth();
+  const pendingMealOff = canOperateMeals ? sharedPendingMealOff : 0;
   const { notice } = useNotice();
   const [, setLocation] = useLocation();
 
@@ -358,9 +358,6 @@ export function ManagerDashboard() {
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState<{ memberId?: string; amount?: number } | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'expenses'>('activity');
-  const [pendingMealOff, setPendingMealOff] = useState(0);
-
-  const messId = profile?.mess_id ?? null;
   const firstName = (profile?.full_name ?? 'there').trim().split(' ')[0];
   const canPostNotice = profile?.role === 'manager' || profile?.role === 'coordinator';
 
@@ -368,24 +365,6 @@ export function ManagerDashboard() {
     setLocation('/app/settings');
     scrollWhenReady('cycle-operations');
   };
-
-  // Pending meal-off requests (same source as the PWA app badge).
-  useEffect(() => {
-    if (!messId || !canOperateMeals) {
-      setPendingMealOff(0);
-      return;
-    }
-    let active = true;
-    void supabase
-      .from('meal_off_requests')
-      .select('id', { count: 'exact', head: true })
-      .eq('mess_id', messId)
-      .eq('status', 'pending')
-      .then(({ count, error }) => {
-        if (active && !error && typeof count === 'number') setPendingMealOff(count);
-      });
-    return () => { active = false; };
-  }, [messId, canOperateMeals, mealOffRevision]);
 
   const v = useMemo(() => {
     if (!activeCycle) return null;
