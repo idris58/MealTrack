@@ -243,9 +243,10 @@ export default function ReportsPage() {
 
   const makePng = async () => {
     if (!previewRef.current) throw new Error('The report preview is not available.');
-    const { toPng } = await import('html-to-image');
-    const dataUrl = await toPng(previewRef.current, { cacheBust: true, pixelRatio: 2, backgroundColor: PAPER });
-    return { blob: await (await fetch(dataUrl)).blob() };
+    const { toBlob } = await import('html-to-image');
+    const blob = await toBlob(previewRef.current, { cacheBust: true, pixelRatio: 2, backgroundColor: PAPER });
+    if (!blob) throw new Error('The report image could not be rendered.');
+    return { blob };
   };
 
   const makePdf = async () => {
@@ -544,7 +545,29 @@ export default function ReportsPage() {
     });
   };
   const run = async (task: () => Promise<void>) => { if (isGenerating) return; setIsGenerating(true); try { await task(); } catch (error) { console.error('Report generation failed:', error); toast.error('Could not create statement', { description: 'Please try again. If the issue continues, refresh the page.' }); } finally { setIsGenerating(false); } };
-  const share = async (blob: Blob, name: string, type: string) => { const file = new File([blob], name, { type }); if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) { try { await navigator.share({ title: 'MealTrack statement', files: [file] }); } catch (error) { if ((error as DOMException).name !== 'AbortError') throw error; } return; } download(blob, name); toast.info('Statement downloaded', { description: 'Your browser does not support file sharing, so the statement was downloaded.' }); };
+  const share = async (blob: Blob, name: string, type: string) => {
+    const file = new File([blob], name, { type });
+    const shareApi = (navigator as unknown as { share?: Navigator['share']; canShare?: Navigator['canShare'] }).share;
+    const canShareApi = (navigator as unknown as { canShare?: Navigator['canShare'] }).canShare;
+    let canShareFile = false;
+    try {
+      canShareFile = Boolean(shareApi && (!canShareApi || canShareApi.call(navigator, { files: [file] })));
+    } catch {
+      canShareFile = false;
+    }
+
+    if (canShareFile) {
+      try {
+        await shareApi!.call(navigator, { title: 'MealTrack statement', files: [file] });
+        return;
+      } catch (error) {
+        if ((error as DOMException).name === 'AbortError') return;
+      }
+    }
+
+    download(blob, name);
+    toast.info('Statement downloaded', { description: 'File sharing is unavailable here, so the statement was downloaded.' });
+  };
 
   return (
     <div className="space-y-6">
