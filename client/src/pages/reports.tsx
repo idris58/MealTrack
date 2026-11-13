@@ -192,12 +192,10 @@ export default function ReportsPage() {
       balance: member.balance,
     }));
     const totalBill = rows.reduce((sum, row) => sum + row.bill, 0);
-    const totalDue = rows.reduce((sum, row) => sum + (row.balance < 0 ? Math.abs(row.balance) : 0), 0);
-    const totalRefund = rows.reduce((sum, row) => sum + (row.balance > 0 ? row.balance : 0), 0);
     const mealPct = totalExpenses > 0 ? Math.round((totalMealExpenses / totalExpenses) * 100) : 0;
     return {
       rows, totalExpenses, totalMealExpenses, totalFixedExpenses, totalMeals, rate,
-      totalDeposits, totalBill, totalDue, totalRefund, mealPct,
+      totalDeposits, totalBill, mealPct,
       remainingCash: math.stats.remainingCash,
     };
   }, [details, from, to, fromKey, toKey]);
@@ -237,7 +235,6 @@ export default function ReportsPage() {
   const rangeLabel = format(from, 'dd MMM yyyy') + ' – ' + format(to, 'dd MMM yyyy');
   const dayCount = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000));
   const statementNo = `MT-${format(generatedAt, 'yyyyMMdd')}-${(activeCycle?.id ?? 'DRAFT').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-  const preparedBy = profile?.full_name?.trim() || 'Manager';
   const cycleLabel = activeCycle?.name ?? '—';
   const baseName = `Mealtrack Statement-${fromKey}-to-${toKey}`;
 
@@ -308,8 +305,7 @@ export default function ReportsPage() {
     doc.rect(0, metaY, pageWidth, metaHeight, 'F');
     const metaItems: [string, string][] = [
       ['CYCLE', cycleLabel],
-      ['PREPARED BY', preparedBy],
-      ['MEMBERS', String(report.rows.length)],
+      ['MEAL RATE', pdfCurrency(report.rate)],
       ['DAYS COVERED', String(dayCount)],
     ];
     const metaColWidth = (pageWidth - margin * 2) / metaItems.length;
@@ -381,15 +377,25 @@ export default function ReportsPage() {
     // ── Member table ─────────────────────────────────────────────────────────
     autoTable(doc, {
       startY: compBarY + 40,
-      head: [['Member', 'Meals', 'Deposit', 'Bill', 'Due', 'Refund']],
-      body: report.rows.map((row) => [row.name, mealCount(row.meals), pdfCurrency(row.deposit), pdfCurrency(row.bill), pdfCurrencyInt(row.balance < 0 ? Math.abs(row.balance) : 0), pdfCurrencyInt(row.balance > 0 ? row.balance : 0)]),
-      foot: [['Totals', mealCount(report.totalMeals), pdfCurrency(report.totalDeposits), pdfCurrency(report.totalBill), pdfCurrencyInt(report.totalDue), pdfCurrencyInt(report.totalRefund)]],
+      head: [['Member', 'Meals', 'Deposit', 'Bill', 'Balance']],
+      body: report.rows.map((row) => [row.name, mealCount(row.meals), pdfCurrency(row.deposit), pdfCurrency(row.bill), row.balance < 0 ? `Due: ${pdfCurrencyInt(Math.abs(row.balance))}` : row.balance > 0 ? `Refund: ${pdfCurrencyInt(row.balance)}` : 'Settled']),
+      foot: [['Totals', mealCount(report.totalMeals), pdfCurrency(report.totalDeposits), pdfCurrency(report.totalBill), `Net: ${pdfCurrencyInt(report.totalDeposits - report.totalBill)}`]],
       theme: 'plain',
       headStyles: { fillColor: inkRgb, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9, cellPadding: { top: 9, bottom: 9, left: 10, right: 10 } },
       footStyles: { fillColor: paperRgb, textColor: inkRgb, fontStyle: 'bold', fontSize: 9.5, cellPadding: { top: 10, bottom: 10, left: 10, right: 10 }, lineColor: goldRgb, lineWidth: { top: 1.2 } },
       alternateRowStyles: { fillColor: [246, 244, 238] },
       styles: { fontSize: 9.5, cellPadding: { top: 9, bottom: 9, left: 10, right: 10 }, textColor: [30, 41, 37], lineColor: [232, 228, 217], lineWidth: { bottom: 0.5 } },
-      columnStyles: { 0: { font: 'HindSiliguri', fontStyle: 'normal' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right', textColor: [176, 58, 46] }, 5: { halign: 'right', textColor: [15, 118, 90] } },
+      columnStyles: { 0: { font: 'HindSiliguri', fontStyle: 'normal' }, 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
+      didParseCell: (data) => {
+        if (data.column.index !== 4) return;
+        if (data.section === 'body') {
+          const balance = report.rows[data.row.index]?.balance ?? 0;
+          data.cell.styles.textColor = balance < 0 ? [176, 58, 46] : balance > 0 ? [15, 118, 90] : [71, 85, 105];
+        } else if (data.section === 'foot') {
+          const net = report.totalDeposits - report.totalBill;
+          data.cell.styles.textColor = net < 0 ? [176, 58, 46] : net > 0 ? [15, 118, 90] : [71, 85, 105];
+        }
+      },
       margin: { left: margin, right: margin, bottom: 56 },
     });
 
@@ -398,7 +404,7 @@ export default function ReportsPage() {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7.5);
     doc.setTextColor(...slateRgb);
-    doc.text('Due is owed to the mess by the member; Refund is owed to the member by the mess.', margin, finalY + 16);
+    doc.text('Negative balance is due to the mess; positive balance is a refund owed to the member.', margin, finalY + 16);
 
     // ── Footer + pagination on every page ─────────────────────────────────────
     const totalPages = doc.getNumberOfPages();
@@ -428,21 +434,21 @@ export default function ReportsPage() {
     const ALT_HEX = 'FFF6F4EE';
 
     const summaryWs = wb.addWorksheet('Summary', { views: [{ showGridLines: false }] });
-    summaryWs.columns = [{ width: 24 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 16 }];
+    summaryWs.columns = [{ width: 24 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 20 }];
 
-    summaryWs.mergeCells('A1:G1');
+    summaryWs.mergeCells('A1:E1');
     const titleCell = summaryWs.getCell('A1');
     titleCell.value = 'MealTrack — Statement of Meal Accounts';
     titleCell.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
     summaryWs.getRow(1).height = 30;
-    for (let col = 1; col <= 7; col += 1) summaryWs.getCell(1, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
+    for (let col = 1; col <= 5; col += 1) summaryWs.getCell(1, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
 
     const metaPairs: [string, string][] = [
       ['Statement No.', statementNo],
       ['Date range', rangeLabel],
       ['Cycle', cycleLabel],
-      ['Prepared by', preparedBy],
+      ['Meal rate (Tk)', Number(report.rate.toFixed(4)).toString()],
       ['Generated', format(generatedAt, 'PPP p')],
     ];
     metaPairs.forEach(([label, value], index) => {
@@ -484,7 +490,7 @@ export default function ReportsPage() {
     summaryWs.getCell(`A${memberTitleRowIndex}`).font = { bold: true, size: 12, color: { argb: 'FF0E2420' } };
 
     const memberHeaderRowIndex = memberTitleRowIndex + 1;
-    const memberHeaders = ['Member Name', 'Meals', 'Deposit (Tk)', 'Bill (Tk)', 'Due (Tk)', 'Refund (Tk)', 'Net Balance (Tk)'];
+    const memberHeaders = ['Member Name', 'Meals', 'Deposit (Tk)', 'Bill (Tk)', 'Balance (Tk)'];
     const memberHeaderRow = summaryWs.getRow(memberHeaderRowIndex);
     memberHeaders.forEach((label, index) => {
       const cell = memberHeaderRow.getCell(index + 1);
@@ -501,23 +507,28 @@ export default function ReportsPage() {
         row.meals,
         row.deposit,
         Number(row.bill.toFixed(2)),
-        row.balance < 0 ? Math.round(Math.abs(row.balance)) : 0,
-        row.balance > 0 ? Math.round(row.balance) : 0,
         Number(row.balance.toFixed(2)),
       ];
       values.forEach((value, colIndex) => { sheetRow.getCell(colIndex + 1).value = value as string | number; });
-      if (index % 2 === 1) for (let col = 1; col <= 7; col += 1) sheetRow.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
+      sheetRow.getCell(5).font = { color: { argb: row.balance < 0 ? 'FFB03A2E' : row.balance > 0 ? 'FF0F765A' : 'FF475569' }, bold: true };
+      if (index % 2 === 1) for (let col = 1; col <= 5; col += 1) sheetRow.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
     });
 
     const totalsRowIndex = memberHeaderRowIndex + 1 + report.rows.length;
     const totalsRow = summaryWs.getRow(totalsRowIndex);
-    const totalsValues = ['Totals', report.totalMeals, report.totalDeposits, Number(report.totalBill.toFixed(2)), Math.round(report.totalDue), Math.round(report.totalRefund), Number((report.totalDeposits - report.totalBill).toFixed(2))];
+    const totalsValues = ['Totals', report.totalMeals, report.totalDeposits, Number(report.totalBill.toFixed(2)), Number((report.totalDeposits - report.totalBill).toFixed(2))];
     totalsValues.forEach((value, colIndex) => {
       const cell = totalsRow.getCell(colIndex + 1);
       cell.value = value as string | number;
       cell.font = { bold: true, color: { argb: 'FF0E2420' } };
       cell.border = { top: { style: 'medium', color: { argb: GOLD_HEX } } };
     });
+    const netBalance = report.totalDeposits - report.totalBill;
+    totalsRow.getCell(5).font = { bold: true, color: { argb: netBalance < 0 ? 'FFB03A2E' : netBalance > 0 ? 'FF0F765A' : 'FF0E2420' } };
+    const balanceNote = summaryWs.getCell(totalsRowIndex + 1, 1);
+    balanceNote.value = 'Negative balance = due to the mess; positive balance = refund owed to the member.';
+    balanceNote.font = { italic: true, size: 9, color: { argb: 'FF475569' } };
+    summaryWs.mergeCells(totalsRowIndex + 1, 1, totalsRowIndex + 1, 5);
 
     if (details?.expenses?.length) {
       const expenses = (details.expenses ?? []).filter((item) => isDateInFilterRange(item.date, from, to, fromKey, toKey));
@@ -699,10 +710,8 @@ export default function ReportsPage() {
           </div>
 
           {/* meta strip */}
-          <div className="relative grid grid-cols-2 sm:grid-cols-4 divide-x" style={{ backgroundColor: MIST, borderColor: HAIRLINE, borderBottomWidth: 1, borderBottomStyle: 'solid' }}>
+          <div className="relative grid grid-cols-2 divide-x" style={{ backgroundColor: MIST, borderColor: HAIRLINE, borderBottomWidth: 1, borderBottomStyle: 'solid' }}>
             <MetaCell label="Cycle" value={cycleLabel} />
-            <MetaCell label="Prepared by" value={preparedBy} />
-            <MetaCell label="Members" value={String(report.rows.length)} />
             <MetaCell label="Meal Rate" value={currency(report.rate)} />
           </div>
 
@@ -735,8 +744,7 @@ export default function ReportsPage() {
                     <th className="p-3 text-right font-semibold text-white">Meals</th>
                     <th className="p-3 text-right font-semibold text-white">Deposit</th>
                     <th className="p-3 text-right font-semibold text-white">Bill</th>
-                    <th className="p-3 text-right font-semibold text-white">Due</th>
-                    <th className="p-3 text-right font-semibold text-white">Refund</th>
+                    <th className="p-3 text-right font-semibold text-white">Balance</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -744,7 +752,6 @@ export default function ReportsPage() {
                     Array.from({ length: 4 }).map((_, index) => (
                       <tr key={index} style={{ backgroundColor: index % 2 ? '#F6F4EE' : 'transparent' }}>
                         <td className="p-3"><Skeleton className="h-4 w-28" /></td>
-                        <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-12" /></td>
                         <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-16" /></td>
                         <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-16" /></td>
                         <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-12" /></td>
@@ -759,11 +766,8 @@ export default function ReportsPage() {
                           <td className="p-3 text-right tabular-nums">{mealCount(row.meals)}</td>
                           <td className="p-3 text-right tabular-nums">{currency(row.deposit)}</td>
                           <td className="p-3 text-right tabular-nums">{currency(row.bill)}</td>
-                          <td className="p-3 text-right font-bold tabular-nums" style={{ color: DUE_RED }}>
-                            {row.balance < 0 ? currencyInt(Math.abs(row.balance)) : '–'}
-                          </td>
-                          <td className="p-3 text-right font-bold tabular-nums" style={{ color: REFUND_GREEN }}>
-                            {row.balance > 0 ? currencyInt(row.balance) : '–'}
+                          <td className="p-3 text-right font-bold tabular-nums" style={{ color: row.balance < 0 ? DUE_RED : row.balance > 0 ? REFUND_GREEN : `${INK}80` }}>
+                            {row.balance < 0 ? `Due ${currencyInt(Math.abs(row.balance))}` : row.balance > 0 ? `Refund ${currencyInt(row.balance)}` : 'Settled'}
                           </td>
                         </tr>
                       ))}
@@ -772,13 +776,12 @@ export default function ReportsPage() {
                         <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER }}>{mealCount(report.totalMeals)}</td>
                         <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER }}>{currency(report.totalDeposits)}</td>
                         <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER }}>{currency(report.totalBill)}</td>
-                        <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER, color: DUE_RED }}>{currencyInt(report.totalDue)}</td>
-                        <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER, color: REFUND_GREEN }}>{currencyInt(report.totalRefund)}</td>
+                        <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER, color: report.totalDeposits - report.totalBill < 0 ? DUE_RED : report.totalDeposits - report.totalBill > 0 ? REFUND_GREEN : INK }}>{`Net ${currencyInt(report.totalDeposits - report.totalBill)}`}</td>
                       </tr>
                     </>
                   ) : (
                     <tr>
-                      <td colSpan={6} className="p-10 text-center" style={{ color: `${INK}99` }}>
+                      <td colSpan={5} className="p-10 text-center" style={{ color: `${INK}99` }}>
                         <p>{activeCycle ? 'No active-cycle members to include in this statement.' : 'Start a cycle to create a statement for your mess.'}</p>
                         {!activeCycle && (
                           <Link href="/app/settings">
@@ -796,7 +799,7 @@ export default function ReportsPage() {
             </div>
             {!isLoading && report.rows.length > 0 && (
               <p className="mt-3 text-xs italic" style={{ color: `${INK}80` }}>
-                Due is owed to the mess by the member; Refund is owed to the member by the mess.
+                Negative balances are due to the mess; positive balances are refunds owed to members.
               </p>
             )}
           </div>
