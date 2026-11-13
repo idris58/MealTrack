@@ -147,10 +147,7 @@ export default function ReportsPage() {
     }
   }, [profile?.role, setLocation]);
 
-  const previewContainerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [previewHeight, setPreviewHeight] = useState<number>(0);
   const today = startOfDay(new Date());
   const [from, setFrom] = useState(() => activeCycle?.startedAt ? startOfDay(new Date(activeCycle.startedAt)) : today);
   const [to, setTo] = useState(() => today);
@@ -200,38 +197,6 @@ export default function ReportsPage() {
     };
   }, [details, from, to, fromKey, toKey]);
 
-  useEffect(() => {
-    const container = previewContainerRef.current;
-    const preview = previewRef.current;
-    if (!container || !preview) return;
-
-    const updateScale = () => {
-      const containerWidth = container.clientWidth;
-      const targetWidth = 820;
-      if (containerWidth > 0 && containerWidth < targetWidth) {
-        setScale(containerWidth / targetWidth);
-      } else {
-        setScale(1);
-      }
-      if (previewRef.current) {
-        setPreviewHeight(previewRef.current.offsetHeight);
-      }
-    };
-
-    updateScale();
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateScale();
-    });
-
-    resizeObserver.observe(container);
-    resizeObserver.observe(preview);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [report, isLoading]);
-
   const rangeLabel = format(from, 'dd MMM yyyy') + ' – ' + format(to, 'dd MMM yyyy');
   const dayCount = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000));
   const statementNo = `MT-${format(generatedAt, 'yyyyMMdd')}-${(activeCycle?.id ?? 'DRAFT').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
@@ -241,9 +206,20 @@ export default function ReportsPage() {
   const makePng = async () => {
     if (!previewRef.current) throw new Error('The report preview is not available.');
     const { toBlob } = await import('html-to-image');
-    const blob = await toBlob(previewRef.current, { cacheBust: true, pixelRatio: 2, backgroundColor: PAPER });
-    if (!blob) throw new Error('The report image could not be rendered.');
-    return { blob };
+    const exportNode = previewRef.current.cloneNode(true) as HTMLDivElement;
+    exportNode.style.width = '820px';
+    exportNode.style.maxWidth = 'none';
+    exportNode.style.position = 'fixed';
+    exportNode.style.left = '-10000px';
+    exportNode.style.top = '0';
+    document.body.appendChild(exportNode);
+    try {
+      const blob = await toBlob(exportNode, { cacheBust: true, pixelRatio: 2, backgroundColor: PAPER, width: 820 });
+      if (!blob) throw new Error('The report image could not be rendered.');
+      return { blob };
+    } finally {
+      exportNode.remove();
+    }
   };
 
   const makePdf = async () => {
@@ -648,26 +624,10 @@ export default function ReportsPage() {
         className="mx-auto max-w-4xl rounded-3xl p-3 pb-6 sm:p-8"
         style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, rgba(14,36,32,0.06), transparent 60%)' }}
       >
-        <div ref={previewContainerRef} className="w-full overflow-hidden">
-          <div
-            style={{
-              height: scale < 1 && previewHeight > 0 ? `${Math.ceil(previewHeight * scale)}px` : undefined,
-              width: '100%',
-              display: 'flex',
-              justifyContent: scale < 1 ? 'flex-start' : 'center',
-            }}
-          >
-            <div
-              style={{
-                width: 820,
-                transform: scale < 1 ? `scale(${scale})` : undefined,
-                transformOrigin: 'top left',
-                flexShrink: 0,
-              }}
-            >
+        <div className="w-full">
               <div
                 ref={previewRef}
-                className="relative w-[820px] overflow-hidden rounded-2xl shadow-[0_28px_70px_-24px_rgba(14,36,32,0.45)] ring-1 ring-black/5"
+                className="relative mx-auto w-full max-w-[820px] overflow-hidden rounded-2xl shadow-[0_28px_70px_-24px_rgba(14,36,32,0.45)] ring-1 ring-black/5"
                 style={{ backgroundColor: PAPER, color: INK }}
               >
           {/* faint watermark monogram */}
@@ -681,10 +641,10 @@ export default function ReportsPage() {
 
           {/* header band */}
           <div
-            className="relative px-7 py-6 text-white sm:px-8 sm:py-7"
+            className="relative px-3 py-4 text-white sm:px-8 sm:py-7"
             style={{ backgroundImage: `linear-gradient(135deg, ${INK} 0%, ${INK_SOFT} 55%, #0A1B17 100%)` }}
           >
-            <div className="flex items-start justify-between gap-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
               <div className="flex items-center gap-3.5">
                 <div
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-heading text-lg font-bold sm:h-12 sm:w-12"
@@ -697,7 +657,7 @@ export default function ReportsPage() {
                   <p className="text-xs" style={{ color: GOLD_SOFT }}>Statement of Meal Accounts</p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <p className="text-sm font-semibold text-white">{rangeLabel}</p>
                 <p className="mt-1 text-[10.5px] text-white/55">Generated {format(generatedAt, 'PPP p')}</p>
                 <p className="text-[10.5px] text-white/55">Statement No. {statementNo}</p>
@@ -717,13 +677,13 @@ export default function ReportsPage() {
 
           {/* expense composition */}
           {!isLoading && report.totalExpenses > 0 && (
-            <div className="px-7 pt-6 sm:px-8">
+            <div className="px-3 pt-4 sm:px-8 sm:pt-6">
               <p className="text-[12.5px] font-semibold" style={{ color: INK }}>Expense composition</p>
               <div className="mt-2.5 flex h-2.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: MIST }}>
                 <div style={{ width: `${report.mealPct}%`, backgroundColor: REFUND_GREEN }} />
                 <div style={{ width: `${100 - report.mealPct}%`, backgroundColor: GOLD }} />
               </div>
-              <div className="mt-2 flex items-center justify-between text-xs">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-[10px] sm:text-xs">
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: REFUND_GREEN }}>
                   <Utensils className="h-3 w-3" /> Meal · {currency(report.totalMealExpenses)} ({report.mealPct}%)
                 </span>
@@ -735,48 +695,48 @@ export default function ReportsPage() {
           )}
 
           {/* table */}
-          <div className="p-7 sm:p-8">
+          <div className="p-2 sm:p-8">
             <div className="overflow-hidden rounded-lg" style={{ border: `1px solid ${HAIRLINE}` }}>
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr style={{ backgroundColor: INK }}>
-                    <th className="p-3 text-left font-semibold text-white">Member</th>
-                    <th className="p-3 text-right font-semibold text-white">Meals</th>
-                    <th className="p-3 text-right font-semibold text-white">Deposit</th>
-                    <th className="p-3 text-right font-semibold text-white">Bill</th>
-                    <th className="p-3 text-right font-semibold text-white">Balance</th>
+                    <th className="p-1.5 text-left text-[10px] font-semibold text-white sm:p-3 sm:text-sm">Member</th>
+                    <th className="p-1.5 text-right text-[10px] font-semibold text-white sm:p-3 sm:text-sm">Meals</th>
+                    <th className="p-1.5 text-right text-[10px] font-semibold text-white sm:p-3 sm:text-sm">Deposit</th>
+                    <th className="p-1.5 text-right text-[10px] font-semibold text-white sm:p-3 sm:text-sm">Bill</th>
+                    <th className="p-1.5 text-right text-[10px] font-semibold text-white sm:p-3 sm:text-sm">Balance</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     Array.from({ length: 4 }).map((_, index) => (
                       <tr key={index} style={{ backgroundColor: index % 2 ? '#F6F4EE' : 'transparent' }}>
-                        <td className="p-3"><Skeleton className="h-4 w-28" /></td>
-                        <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-16" /></td>
-                        <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-16" /></td>
-                        <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-12" /></td>
-                        <td className="p-3 text-right"><Skeleton className="ml-auto h-4 w-12" /></td>
+                        <td className="p-1.5 sm:p-3"><Skeleton className="h-4 w-12 sm:w-28" /></td>
+                        <td className="p-1.5 text-right sm:p-3"><Skeleton className="ml-auto h-4 w-8 sm:w-16" /></td>
+                        <td className="p-1.5 text-right sm:p-3"><Skeleton className="ml-auto h-4 w-8 sm:w-16" /></td>
+                        <td className="p-1.5 text-right sm:p-3"><Skeleton className="ml-auto h-4 w-8 sm:w-12" /></td>
+                        <td className="p-1.5 text-right sm:p-3"><Skeleton className="ml-auto h-4 w-8 sm:w-12" /></td>
                       </tr>
                     ))
                   ) : report.rows.length ? (
                     <>
                       {report.rows.map((row, index) => (
                         <tr key={row.id} style={{ backgroundColor: index % 2 ? '#F6F4EE' : 'transparent' }}>
-                          <td className="p-3 font-semibold">{row.name}</td>
-                          <td className="p-3 text-right tabular-nums">{mealCount(row.meals)}</td>
-                          <td className="p-3 text-right tabular-nums">{currency(row.deposit)}</td>
-                          <td className="p-3 text-right tabular-nums">{currency(row.bill)}</td>
-                          <td className="p-3 text-right font-bold tabular-nums" style={{ color: row.balance < 0 ? DUE_RED : row.balance > 0 ? REFUND_GREEN : `${INK}80` }}>
+                          <td className="p-1.5 text-[10px] font-semibold sm:p-3 sm:text-sm">{row.name}</td>
+                          <td className="p-1.5 text-right text-[10px] tabular-nums sm:p-3 sm:text-sm">{mealCount(row.meals)}</td>
+                          <td className="p-1.5 text-right text-[10px] tabular-nums sm:p-3 sm:text-sm">{currency(row.deposit)}</td>
+                          <td className="p-1.5 text-right text-[10px] tabular-nums sm:p-3 sm:text-sm">{currency(row.bill)}</td>
+                          <td className="p-1.5 text-right text-[9px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ color: row.balance < 0 ? DUE_RED : row.balance > 0 ? REFUND_GREEN : `${INK}80` }}>
                             {row.balance < 0 ? `Due ${currencyInt(Math.abs(row.balance))}` : row.balance > 0 ? `Refund ${currencyInt(row.balance)}` : 'Settled'}
                           </td>
                         </tr>
                       ))}
                       <tr style={{ borderTop: `2px solid ${GOLD}` }}>
-                        <td className="p-3 font-bold" style={{ backgroundColor: PAPER }}>Totals</td>
-                        <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER }}>{mealCount(report.totalMeals)}</td>
-                        <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER }}>{currency(report.totalDeposits)}</td>
-                        <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER }}>{currency(report.totalBill)}</td>
-                        <td className="p-3 text-right font-bold tabular-nums" style={{ backgroundColor: PAPER, color: report.totalDeposits - report.totalBill < 0 ? DUE_RED : report.totalDeposits - report.totalBill > 0 ? REFUND_GREEN : INK }}>{`Net ${currencyInt(report.totalDeposits - report.totalBill)}`}</td>
+                        <td className="p-1.5 text-[10px] font-bold sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER }}>Totals</td>
+                        <td className="p-1.5 text-right text-[10px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER }}>{mealCount(report.totalMeals)}</td>
+                        <td className="p-1.5 text-right text-[10px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER }}>{currency(report.totalDeposits)}</td>
+                        <td className="p-1.5 text-right text-[10px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER }}>{currency(report.totalBill)}</td>
+                        <td className="p-1.5 text-right text-[9px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER, color: report.totalDeposits - report.totalBill < 0 ? DUE_RED : report.totalDeposits - report.totalBill > 0 ? REFUND_GREEN : INK }}>{`Net ${currencyInt(report.totalDeposits - report.totalBill)}`}</td>
                       </tr>
                     </>
                   ) : (
@@ -805,13 +765,11 @@ export default function ReportsPage() {
           </div>
 
           {/* footer signature */}
-          <div className="relative border-t px-8 py-5 text-center" style={{ borderColor: HAIRLINE }}>
+          <div className="relative border-t px-4 py-4 text-center sm:px-8 sm:py-5" style={{ borderColor: HAIRLINE }}>
             <div className="mx-auto mb-2.5 h-px w-14" style={{ backgroundColor: `${GOLD}70` }} />
             <p className="text-xs" style={{ color: `${INK}80` }}>Prepared via MealTrack</p>
           </div>
-        </div>
-            </div>
-          </div>
+              </div>
         </div>
       </div>
     </div>
