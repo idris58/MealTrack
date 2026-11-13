@@ -387,17 +387,30 @@ export default function ReportsPage() {
     const INK_HEX = 'FF0E2420';
     const GOLD_HEX = 'FFB8924D';
     const ALT_HEX = 'FFF6F4EE';
+    const MIST_HEX = 'FFF1EEE4';
+    const SLATE_HEX = 'FF475569';
+    const RED_HEX = 'FFB03A2E';
+    const GREEN_HEX = 'FF0F765A';
+    const moneyFormat = '"৳"#,##0.00;[Red]"-৳"#,##0.00;"৳"0.00';
+    const signedMoneyFormat = '[Green]"+৳"#,##0.00;[Red]"-৳"#,##0.00;"৳"0.00';
 
-    const summaryWs = wb.addWorksheet('Summary', { views: [{ showGridLines: false }] });
+    const summaryWs = wb.addWorksheet('Summary', { views: [{ showGridLines: false, state: 'frozen', ySplit: 1 }] });
     summaryWs.columns = [{ width: 24 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 20 }];
+    summaryWs.properties.defaultRowHeight = 21;
+    summaryWs.pageSetup = { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
 
     summaryWs.mergeCells('A1:E1');
     const titleCell = summaryWs.getCell('A1');
     titleCell.value = 'MealTrack — Statement of Meal Accounts';
-    titleCell.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
+    titleCell.font = { name: 'Calibri', size: 17, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-    summaryWs.getRow(1).height = 30;
-    for (let col = 1; col <= 5; col += 1) summaryWs.getCell(1, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
+    titleCell.border = { bottom: { style: 'medium', color: { argb: GOLD_HEX } } };
+    summaryWs.getRow(1).height = 38;
+    for (let col = 1; col <= 5; col += 1) {
+      const cell = summaryWs.getCell(1, col);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
+      cell.border = { bottom: { style: 'medium', color: { argb: GOLD_HEX } } };
+    }
 
     const metaPairs: [string, string][] = [
       ['Statement No.', statementNo],
@@ -409,13 +422,22 @@ export default function ReportsPage() {
     metaPairs.forEach(([label, value], index) => {
       const row = summaryWs.getRow(2 + index);
       row.getCell(1).value = label;
-      row.getCell(1).font = { bold: true, color: { argb: 'FF44544E' } };
+      row.getCell(1).font = { bold: true, color: { argb: SLATE_HEX } };
+      row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: MIST_HEX } };
+      row.getCell(1).alignment = { vertical: 'middle', indent: 1 };
       row.getCell(2).value = value;
+      row.getCell(2).font = { color: { argb: INK_HEX } };
+      row.getCell(2).alignment = { vertical: 'middle' };
+      row.getCell(1).border = { bottom: { style: 'hair', color: { argb: 'FFD8DFDB' } } };
+      row.getCell(2).border = { bottom: { style: 'hair', color: { argb: 'FFD8DFDB' } } };
     });
 
     const metricsTitleRow = 2 + metaPairs.length + 1;
-    summaryWs.getCell(`A${metricsTitleRow}`).value = 'Summary metrics';
-    summaryWs.getCell(`A${metricsTitleRow}`).font = { bold: true, size: 12, color: { argb: 'FF0E2420' } };
+    summaryWs.mergeCells(`A${metricsTitleRow}:B${metricsTitleRow}`);
+    summaryWs.getCell(`A${metricsTitleRow}`).value = 'FINANCIAL SUMMARY';
+    summaryWs.getCell(`A${metricsTitleRow}`).font = { bold: true, size: 11, color: { argb: INK_HEX } };
+    summaryWs.getCell(`A${metricsTitleRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: MIST_HEX } };
+    summaryWs.getRow(metricsTitleRow).height = 25;
 
     const metricHeaderRowIndex = metricsTitleRow + 1;
     const metricHeaderRow = summaryWs.getRow(metricHeaderRowIndex);
@@ -424,6 +446,7 @@ export default function ReportsPage() {
       cell.value = label;
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
+      cell.alignment = { vertical: 'middle', horizontal: index === 1 ? 'right' : 'left', indent: 1 };
     });
     const metricRows = [
       ['Total Expenses (Tk)', report.totalExpenses],
@@ -437,12 +460,20 @@ export default function ReportsPage() {
     metricRows.forEach((values, index) => {
       const row = summaryWs.getRow(metricHeaderRowIndex + 1 + index);
       values.forEach((value, colIndex) => { row.getCell(colIndex + 1).value = value as string | number; });
+      const isMoney = index <= 2 || index === 4 || index >= 5;
+      row.getCell(1).alignment = { indent: index === 0 ? 1 : 2, vertical: 'middle' };
+      row.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
+      if (isMoney) row.getCell(2).numFmt = index === 4 ? '"৳"#,##0.0000' : moneyFormat;
+      if (index === 0 || index === 6) row.getCell(1).font = { bold: true, color: { argb: INK_HEX } };
       if (index % 2 === 1) for (let col = 1; col <= 2; col += 1) row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
     });
 
     const memberTitleRowIndex = metricHeaderRowIndex + 1 + metricRows.length + 1;
-    summaryWs.getCell(`A${memberTitleRowIndex}`).value = 'Member breakdown';
-    summaryWs.getCell(`A${memberTitleRowIndex}`).font = { bold: true, size: 12, color: { argb: 'FF0E2420' } };
+    summaryWs.mergeCells(`A${memberTitleRowIndex}:E${memberTitleRowIndex}`);
+    summaryWs.getCell(`A${memberTitleRowIndex}`).value = 'MEMBER BALANCES';
+    summaryWs.getCell(`A${memberTitleRowIndex}`).font = { bold: true, size: 11, color: { argb: INK_HEX } };
+    summaryWs.getCell(`A${memberTitleRowIndex}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: MIST_HEX } };
+    summaryWs.getRow(memberTitleRowIndex).height = 25;
 
     const memberHeaderRowIndex = memberTitleRowIndex + 1;
     const memberHeaders = ['Member Name', 'Meals', 'Deposit (Tk)', 'Bill (Tk)', 'Balance (Tk)'];
@@ -453,7 +484,9 @@ export default function ReportsPage() {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
       cell.border = { bottom: { style: 'thin', color: { argb: GOLD_HEX } } };
+      cell.alignment = { vertical: 'middle', horizontal: index === 0 ? 'left' : 'right', indent: 1 };
     });
+    memberHeaderRow.height = 25;
 
     report.rows.forEach((row, index) => {
       const sheetRow = summaryWs.getRow(memberHeaderRowIndex + 1 + index);
@@ -465,8 +498,19 @@ export default function ReportsPage() {
         Number(row.balance.toFixed(2)),
       ];
       values.forEach((value, colIndex) => { sheetRow.getCell(colIndex + 1).value = value as string | number; });
-      sheetRow.getCell(5).font = { color: { argb: row.balance < 0 ? 'FFB03A2E' : row.balance > 0 ? 'FF0F765A' : 'FF475569' }, bold: true };
-      if (index % 2 === 1) for (let col = 1; col <= 5; col += 1) sheetRow.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
+      sheetRow.height = 23;
+      sheetRow.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+      sheetRow.getCell(1).font = { bold: true, color: { argb: INK_HEX } };
+      sheetRow.getCell(2).numFmt = '0.###';
+      sheetRow.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
+      [3, 4].forEach((column) => { sheetRow.getCell(column).numFmt = moneyFormat; sheetRow.getCell(column).alignment = { horizontal: 'right', vertical: 'middle' }; });
+      sheetRow.getCell(5).numFmt = signedMoneyFormat;
+      sheetRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };
+      sheetRow.getCell(5).font = { color: { argb: row.balance < 0 ? RED_HEX : row.balance > 0 ? GREEN_HEX : SLATE_HEX }, bold: true };
+      for (let col = 1; col <= 5; col += 1) {
+        sheetRow.getCell(col).border = { bottom: { style: 'hair', color: { argb: 'FFE3E8E5' } } };
+        if (index % 2 === 1) sheetRow.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
+      }
     });
 
     const totalsRowIndex = memberHeaderRowIndex + 1 + report.rows.length;
@@ -477,32 +521,72 @@ export default function ReportsPage() {
       cell.value = value as string | number;
       cell.font = { bold: true, color: { argb: 'FF0E2420' } };
       cell.border = { top: { style: 'medium', color: { argb: GOLD_HEX } } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: MIST_HEX } };
+      cell.alignment = { vertical: 'middle', horizontal: colIndex === 0 ? 'left' : 'right', indent: 1 };
     });
+    [3, 4].forEach((column) => { totalsRow.getCell(column).numFmt = moneyFormat; });
+    totalsRow.getCell(5).numFmt = signedMoneyFormat;
+    totalsRow.height = 25;
     const netBalance = report.totalDeposits - report.totalBill;
     totalsRow.getCell(5).font = { bold: true, color: { argb: netBalance < 0 ? 'FFB03A2E' : netBalance > 0 ? 'FF0F765A' : 'FF0E2420' } };
     const balanceNote = summaryWs.getCell(totalsRowIndex + 1, 1);
     balanceNote.value = 'Negative balance = due to the mess; positive balance = refund owed to the member.';
     balanceNote.font = { italic: true, size: 9, color: { argb: 'FF475569' } };
+    balanceNote.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
+    balanceNote.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9F7F1' } };
+    summaryWs.getRow(totalsRowIndex + 1).height = 24;
     summaryWs.mergeCells(totalsRowIndex + 1, 1, totalsRowIndex + 1, 5);
+    if (report.rows.length) summaryWs.autoFilter = { from: { row: memberHeaderRowIndex, column: 1 }, to: { row: totalsRowIndex - 1, column: 5 } };
 
     if (details?.expenses?.length) {
       const expenses = (details.expenses ?? []).filter((item) => isDateInFilterRange(item.date, from, to, fromKey, toKey));
-      const expenseWs = wb.addWorksheet('Expenses', { views: [{ showGridLines: false }] });
-      expenseWs.columns = [{ width: 14 }, { width: 28 }, { width: 16 }, { width: 14 }];
-      const headerRow = expenseWs.getRow(1);
+      const expenseWs = wb.addWorksheet('Expenses', { views: [{ showGridLines: false, state: 'frozen', ySplit: 4 }] });
+      expenseWs.columns = [{ width: 18 }, { width: 38 }, { width: 20 }, { width: 18 }];
+      expenseWs.properties.defaultRowHeight = 22;
+      expenseWs.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
+      expenseWs.mergeCells('A1:D1');
+      const expensesTitle = expenseWs.getCell('A1');
+      expensesTitle.value = 'MealTrack — Expense details';
+      expensesTitle.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+      expensesTitle.alignment = { vertical: 'middle', indent: 1 };
+      expenseWs.getRow(1).height = 34;
+      for (let col = 1; col <= 4; col += 1) {
+        expenseWs.getCell(1, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
+        expenseWs.getCell(1, col).border = { bottom: { style: 'medium', color: { argb: GOLD_HEX } } };
+      }
+      expenseWs.mergeCells('A2:D2');
+      expenseWs.getCell('A2').value = `${cycleLabel}  ·  ${rangeLabel}`;
+      expenseWs.getCell('A2').font = { color: { argb: SLATE_HEX }, italic: true };
+      expenseWs.getCell('A2').alignment = { vertical: 'middle', indent: 1 };
+      expenseWs.getRow(2).height = 25;
+      const headerRow = expenseWs.getRow(4);
       ['Date', 'Title / Description', 'Category', 'Amount (Tk)'].forEach((label, index) => {
         const cell = headerRow.getCell(index + 1);
         cell.value = label;
         cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: INK_HEX } };
+        cell.alignment = { vertical: 'middle', horizontal: index === 3 ? 'right' : 'left', indent: 1 };
+        cell.border = { bottom: { style: 'thin', color: { argb: GOLD_HEX } } };
       });
+      headerRow.height = 25;
       expenses.forEach((exp, index) => {
-        const row = expenseWs.getRow(2 + index);
-        [exp.date, exp.description, exp.type === 'utility' ? 'Utility Expense' : 'Meal Expense', exp.amount].forEach((value, colIndex) => {
+        const row = expenseWs.getRow(5 + index);
+        [new Date(`${exp.date.slice(0, 10)}T12:00:00`), exp.description, exp.type === 'utility' ? 'Utility Expense' : 'Meal Expense', exp.amount].forEach((value, colIndex) => {
           row.getCell(colIndex + 1).value = value as string | number;
         });
-        if (index % 2 === 1) for (let col = 1; col <= 4; col += 1) row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
+        row.getCell(1).numFmt = 'dd mmm yyyy';
+        row.getCell(1).alignment = { vertical: 'middle', indent: 1 };
+        row.getCell(2).alignment = { vertical: 'middle', wrapText: true, indent: 1 };
+        row.getCell(3).font = { color: { argb: exp.type === 'utility' ? 'FF8A6D34' : GREEN_HEX }, bold: true };
+        row.getCell(3).alignment = { vertical: 'middle', indent: 1 };
+        row.getCell(4).numFmt = moneyFormat;
+        row.getCell(4).alignment = { vertical: 'middle', horizontal: 'right' };
+        for (let col = 1; col <= 4; col += 1) {
+          row.getCell(col).border = { bottom: { style: 'hair', color: { argb: 'FFE3E8E5' } } };
+          if (index % 2 === 1) row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ALT_HEX } };
+        }
       });
+      if (expenses.length) expenseWs.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + expenses.length, column: 4 } };
     }
 
     const wbOut = await wb.xlsx.writeBuffer();
