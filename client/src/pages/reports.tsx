@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import {
   CalendarIcon,
@@ -28,7 +28,7 @@ import { Link, useLocation } from 'wouter';
 
 type ReportMember = { id: string; name: string; meals: number; deposit: number; bill: number; balance: number };
 
-// ── Palette ──────────────────────────────────────────────────────────────────
+// â”€â”€ Palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // A deep emerald "ink" paired with a brushed-brass accent, evoking a printed
 // ledger statement rather than a generic SaaS dashboard card.
 const INK = '#0E2420';
@@ -41,8 +41,8 @@ const HAIRLINE = '#E4DDCB';
 const DUE_RED = '#B03A2E';
 const REFUND_GREEN = '#0F765A';
 
-const currency = (amount: number) => `৳${amount.toFixed(2)}`;
-const currencyInt = (amount: number) => `৳${Math.round(amount)}`;
+const currency = (amount: number) => `à§³${amount.toFixed(2)}`;
+const currencyInt = (amount: number) => `à§³${Math.round(amount)}`;
 const mealCount = (amount: number) => `${Math.round((amount + Number.EPSILON) * 1000) / 1000}`;
 const pdfCurrency = (amount: number) => `Tk ${amount.toFixed(2)}`;
 const pdfCurrencyInt = (amount: number) => `Tk ${Math.round(amount)}`;
@@ -123,8 +123,8 @@ function isDateInFilterRange(dateStr: string, fromDate: Date, toDate: Date, from
   return false;
 }
 
-// ── Statement stat cell (ledger-bar segment) ──────────────────────────────────
-// ── Meta strip cell (statement no / cycle / prepared by / members) ──────────
+// â”€â”€ Statement stat cell (ledger-bar segment) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ Meta strip cell (statement no / cycle / prepared by / members) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function MetaCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col justify-center px-4 py-4 sm:px-6">
@@ -197,10 +197,10 @@ export default function ReportsPage() {
     };
   }, [details, from, to, fromKey, toKey]);
 
-  const rangeLabel = format(from, 'dd MMM yyyy') + ' – ' + format(to, 'dd MMM yyyy');
+  const rangeLabel = format(from, 'dd MMM yyyy') + ' â€“ ' + format(to, 'dd MMM yyyy');
   const dayCount = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000));
   const statementNo = `MT-${format(generatedAt, 'yyyyMMdd')}-${(activeCycle?.id ?? 'DRAFT').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-  const cycleLabel = activeCycle?.name ?? '—';
+  const cycleLabel = activeCycle?.name ?? 'â€”';
   const baseName = `Mealtrack Statement-${fromKey}-to-${toKey}`;
 
   const makePng = async () => {
@@ -242,7 +242,7 @@ export default function ReportsPage() {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 40;
 
-    // ── Header band ──────────────────────────────────────────────────────────
+    // â”€â”€ Header band â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     doc.setFillColor(...inkRgb);
     doc.rect(0, 0, pageWidth, 100, 'F');
     doc.setFillColor(...goldRgb);
@@ -274,7 +274,7 @@ export default function ReportsPage() {
     doc.setLineWidth(1);
     doc.line(0, 100, pageWidth, 100);
 
-    // ── Meta strip ───────────────────────────────────────────────────────────
+    // â”€â”€ Meta strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const metaY = 100;
     const metaHeight = 32;
     doc.setFillColor(...mistRgb);
@@ -294,10 +294,10 @@ export default function ReportsPage() {
       doc.setTextColor(...inkRgb);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9.5);
-      doc.text(value.length > 26 ? `${value.slice(0, 24)}…` : value, x, metaY + 25);
+      doc.text(value.length > 26 ? `${value.slice(0, 24)}â€¦` : value, x, metaY + 25);
     });
 
-    // ── Ledger stat bar (4 columns) ────────────────────────────────────────────
+    // â”€â”€ Ledger stat bar (4 columns) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const barY = metaY + metaHeight;
     const barHeight = 60;
     const colWidth = (pageWidth - margin * 2) / 4;
@@ -328,7 +328,7 @@ export default function ReportsPage() {
       doc.text(value, x, barY + 58);
     });
 
-    // ── Expense composition ────────────────────────────────────────────────────
+    // â”€â”€ Expense composition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const compY = barY + 14 + barHeight + 22;
     doc.setTextColor(...inkRgb);
     doc.setFont('helvetica', 'bold');
@@ -346,16 +346,16 @@ export default function ReportsPage() {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...emeraldRgb);
-    doc.text(`Meal · ${pdfCurrency(report.totalMealExpenses)} (${report.mealPct}%)`, margin, compBarY + 24);
+    doc.text(`Meal Â· ${pdfCurrency(report.totalMealExpenses)} (${report.mealPct}%)`, margin, compBarY + 24);
     doc.setTextColor(...sandRgb);
-    doc.text(`Utility · ${pdfCurrency(report.totalFixedExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
+    doc.text(`Utility Â· ${pdfCurrency(report.totalFixedExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
 
-    // ── Member table ─────────────────────────────────────────────────────────
+    // â”€â”€ Member table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     autoTable(doc, {
       startY: compBarY + 40,
       head: [['Member', 'Meals', 'Deposit', 'Bill', 'Balance']],
-      body: report.rows.map((row) => [row.name, mealCount(row.meals), pdfCurrency(row.deposit), pdfCurrency(row.bill), row.balance < 0 ? `Due: ${pdfCurrencyInt(Math.abs(row.balance))}` : row.balance > 0 ? `Refund: ${pdfCurrencyInt(row.balance)}` : 'Settled']),
-      foot: [['Totals', mealCount(report.totalMeals), pdfCurrency(report.totalDeposits), pdfCurrency(report.totalBill), `Net: ${pdfCurrencyInt(report.totalDeposits - report.totalBill)}`]],
+      body: report.rows.map((row) => [row.name, mealCount(row.meals), pdfCurrency(row.deposit), pdfCurrency(row.bill), row.balance < 0 ? `âˆ’${pdfCurrencyInt(Math.abs(row.balance))}` : row.balance > 0 ? `+${pdfCurrencyInt(row.balance)}` : pdfCurrencyInt(0)]),
+      foot: [['Totals', mealCount(report.totalMeals), pdfCurrency(report.totalDeposits), pdfCurrency(report.totalBill), `${report.totalDeposits - report.totalBill < 0 ? 'âˆ’' : report.totalDeposits - report.totalBill > 0 ? '+' : ''}${pdfCurrencyInt(Math.abs(report.totalDeposits - report.totalBill))}`]],
       theme: 'plain',
       headStyles: { fillColor: inkRgb, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9, cellPadding: { top: 9, bottom: 9, left: 10, right: 10 } },
       footStyles: { fillColor: paperRgb, textColor: inkRgb, fontStyle: 'bold', fontSize: 9.5, cellPadding: { top: 10, bottom: 10, left: 10, right: 10 }, lineColor: goldRgb, lineWidth: { top: 1.2 } },
@@ -375,14 +375,14 @@ export default function ReportsPage() {
       margin: { left: margin, right: margin, bottom: 56 },
     });
 
-    // ── Footnote ─────────────────────────────────────────────────────────────
+    // â”€â”€ Footnote â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7.5);
     doc.setTextColor(...slateRgb);
     doc.text('Negative balance is due to the mess; positive balance is a refund owed to the member.', margin, finalY + 16);
 
-    // ── Footer + pagination on every page ─────────────────────────────────────
+    // â”€â”€ Footer + pagination on every page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const totalPages = doc.getNumberOfPages();
     for (let page = 1; page <= totalPages; page += 1) {
       doc.setPage(page);
@@ -393,7 +393,7 @@ export default function ReportsPage() {
       doc.setTextColor(...slateRgb);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text(`Prepared via MealTrack  ·  Page ${page} of ${totalPages}`, pageWidth / 2, height - 26, { align: 'center' });
+      doc.text(`Prepared via MealTrack  Â·  Page ${page} of ${totalPages}`, pageWidth / 2, height - 26, { align: 'center' });
     }
 
     return doc.output('blob');
@@ -414,7 +414,7 @@ export default function ReportsPage() {
 
     summaryWs.mergeCells('A1:E1');
     const titleCell = summaryWs.getCell('A1');
-    titleCell.value = 'MealTrack — Statement of Meal Accounts';
+    titleCell.value = 'MealTrack â€” Statement of Meal Accounts';
     titleCell.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
     summaryWs.getRow(1).height = 30;
@@ -558,10 +558,10 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Page header ── */}
+      {/* â”€â”€ Page header â”€â”€ */}
       <PageHeader icon={FileBarChart} title="Reports" description="Review cycle performance, member balances, and downloadable statements." />
 
-      {/* ── Control panel ── */}
+      {/* â”€â”€ Control panel â”€â”€ */}
       <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
         <div className="flex flex-col gap-5 p-4 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -619,7 +619,7 @@ export default function ReportsPage() {
         </div>
       </section>
 
-      {/* ── Statement preview ── */}
+      {/* â”€â”€ Statement preview â”€â”€ */}
       <div
         className="mx-auto max-w-4xl rounded-3xl p-3 pb-6 sm:p-8"
         style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, rgba(14,36,32,0.06), transparent 60%)' }}
@@ -685,10 +685,10 @@ export default function ReportsPage() {
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-[10px] sm:text-xs">
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: REFUND_GREEN }}>
-                  <Utensils className="h-3 w-3" /> Meal · {currency(report.totalMealExpenses)} ({report.mealPct}%)
+                  <Utensils className="h-3 w-3" /> Meal Â· {currency(report.totalMealExpenses)} ({report.mealPct}%)
                 </span>
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: '#8A6D34' }}>
-                  <ShoppingBag className="h-3 w-3" /> Utility · {currency(report.totalFixedExpenses)} ({100 - report.mealPct}%)
+                  <ShoppingBag className="h-3 w-3" /> Utility Â· {currency(report.totalFixedExpenses)} ({100 - report.mealPct}%)
                 </span>
               </div>
             </div>
@@ -727,7 +727,7 @@ export default function ReportsPage() {
                           <td className="p-1.5 text-right text-[10px] tabular-nums sm:p-3 sm:text-sm">{currency(row.deposit)}</td>
                           <td className="p-1.5 text-right text-[10px] tabular-nums sm:p-3 sm:text-sm">{currency(row.bill)}</td>
                           <td className="p-1.5 text-right text-[9px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ color: row.balance < 0 ? DUE_RED : row.balance > 0 ? REFUND_GREEN : `${INK}80` }}>
-                            {row.balance < 0 ? `Due ${currencyInt(Math.abs(row.balance))}` : row.balance > 0 ? `Refund ${currencyInt(row.balance)}` : 'Settled'}
+                            {row.balance < 0 ? `âˆ’${currencyInt(Math.abs(row.balance))}` : row.balance > 0 ? `+${currencyInt(row.balance)}` : currencyInt(0)}
                           </td>
                         </tr>
                       ))}
@@ -736,7 +736,7 @@ export default function ReportsPage() {
                         <td className="p-1.5 text-right text-[10px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER }}>{mealCount(report.totalMeals)}</td>
                         <td className="p-1.5 text-right text-[10px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER }}>{currency(report.totalDeposits)}</td>
                         <td className="p-1.5 text-right text-[10px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER }}>{currency(report.totalBill)}</td>
-                        <td className="p-1.5 text-right text-[9px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER, color: report.totalDeposits - report.totalBill < 0 ? DUE_RED : report.totalDeposits - report.totalBill > 0 ? REFUND_GREEN : INK }}>{`Net ${currencyInt(report.totalDeposits - report.totalBill)}`}</td>
+                        <td className="p-1.5 text-right text-[9px] font-bold tabular-nums sm:p-3 sm:text-sm" style={{ backgroundColor: PAPER, color: report.totalDeposits - report.totalBill < 0 ? DUE_RED : report.totalDeposits - report.totalBill > 0 ? REFUND_GREEN : INK }}>{`${report.totalDeposits - report.totalBill < 0 ? 'âˆ’' : report.totalDeposits - report.totalBill > 0 ? '+' : ''}${currencyInt(Math.abs(report.totalDeposits - report.totalBill))}`}</td>
                       </tr>
                     </>
                   ) : (
