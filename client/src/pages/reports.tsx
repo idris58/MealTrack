@@ -203,20 +203,9 @@ export default function ReportsPage() {
   const makePng = async () => {
     if (!previewRef.current) throw new Error('The report preview is not available.');
     const { toBlob } = await import('html-to-image');
-    const exportNode = previewRef.current.cloneNode(true) as HTMLDivElement;
-    exportNode.style.width = '820px';
-    exportNode.style.maxWidth = 'none';
-    exportNode.style.position = 'fixed';
-    exportNode.style.left = '-10000px';
-    exportNode.style.top = '0';
-    document.body.appendChild(exportNode);
-    try {
-      const blob = await toBlob(exportNode, { cacheBust: true, pixelRatio: 2, backgroundColor: PAPER, width: 820 });
-      if (!blob) throw new Error('The report image could not be rendered.');
-      return { blob };
-    } finally {
-      exportNode.remove();
-    }
+    const blob = await toBlob(previewRef.current, { cacheBust: true, pixelRatio: 2, backgroundColor: PAPER });
+    if (!blob) throw new Error('The report image could not be rendered.');
+    return { blob };
   };
 
   const makePdf = async () => {
