@@ -41,8 +41,8 @@ const HAIRLINE = '#E4DDCB';
 const DUE_RED = '#B03A2E';
 const REFUND_GREEN = '#0F765A';
 
-const currency = (amount: number) => `à§³${amount.toFixed(2)}`;
-const currencyInt = (amount: number) => `à§³${Math.round(amount)}`;
+const currency = (amount: number) => `৳${amount.toFixed(2)}`;
+const currencyInt = (amount: number) => `৳${Math.round(amount)}`;
 const mealCount = (amount: number) => `${Math.round((amount + Number.EPSILON) * 1000) / 1000}`;
 const pdfCurrency = (amount: number) => `Tk ${amount.toFixed(2)}`;
 const pdfCurrencyInt = (amount: number) => `Tk ${Math.round(amount)}`;
@@ -197,10 +197,10 @@ export default function ReportsPage() {
     };
   }, [details, from, to, fromKey, toKey]);
 
-  const rangeLabel = format(from, 'dd MMM yyyy') + ' â€“ ' + format(to, 'dd MMM yyyy');
+  const rangeLabel = format(from, 'dd MMM yyyy') + ' – ' + format(to, 'dd MMM yyyy');
   const dayCount = Math.max(1, Math.round((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86400000));
   const statementNo = `MT-${format(generatedAt, 'yyyyMMdd')}-${(activeCycle?.id ?? 'DRAFT').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
-  const cycleLabel = activeCycle?.name ?? 'â€”';
+  const cycleLabel = activeCycle?.name ?? '—';
   const baseName = `Mealtrack Statement-${fromKey}-to-${toKey}`;
 
   const makePng = async () => {
@@ -294,7 +294,7 @@ export default function ReportsPage() {
       doc.setTextColor(...inkRgb);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9.5);
-      doc.text(value.length > 26 ? `${value.slice(0, 24)}â€¦` : value, x, metaY + 25);
+      doc.text(value.length > 26 ? `${value.slice(0, 24)}…` : value, x, metaY + 25);
     });
 
     // â”€â”€ Ledger stat bar (4 columns) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -346,9 +346,9 @@ export default function ReportsPage() {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...emeraldRgb);
-    doc.text(`Meal Â· ${pdfCurrency(report.totalMealExpenses)} (${report.mealPct}%)`, margin, compBarY + 24);
+    doc.text(`Meal · ${pdfCurrency(report.totalMealExpenses)} (${report.mealPct}%)`, margin, compBarY + 24);
     doc.setTextColor(...sandRgb);
-    doc.text(`Utility Â· ${pdfCurrency(report.totalFixedExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
+    doc.text(`Utility · ${pdfCurrency(report.totalFixedExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
 
     // â”€â”€ Member table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     autoTable(doc, {
@@ -393,7 +393,7 @@ export default function ReportsPage() {
       doc.setTextColor(...slateRgb);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text(`Prepared via MealTrack  Â·  Page ${page} of ${totalPages}`, pageWidth / 2, height - 26, { align: 'center' });
+      doc.text(`Prepared via MealTrack  ·  Page ${page} of ${totalPages}`, pageWidth / 2, height - 26, { align: 'center' });
     }
 
     return doc.output('blob');
@@ -414,7 +414,7 @@ export default function ReportsPage() {
 
     summaryWs.mergeCells('A1:E1');
     const titleCell = summaryWs.getCell('A1');
-    titleCell.value = 'MealTrack â€” Statement of Meal Accounts';
+    titleCell.value = 'MealTrack — Statement of Meal Accounts';
     titleCell.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
     titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
     summaryWs.getRow(1).height = 30;
@@ -685,10 +685,10 @@ export default function ReportsPage() {
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-[10px] sm:text-xs">
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: REFUND_GREEN }}>
-                  <Utensils className="h-3 w-3" /> Meal Â· {currency(report.totalMealExpenses)} ({report.mealPct}%)
+                  <Utensils className="h-3 w-3" /> Meal · {currency(report.totalMealExpenses)} ({report.mealPct}%)
                 </span>
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: '#8A6D34' }}>
-                  <ShoppingBag className="h-3 w-3" /> Utility Â· {currency(report.totalFixedExpenses)} ({100 - report.mealPct}%)
+                  <ShoppingBag className="h-3 w-3" /> Utility · {currency(report.totalFixedExpenses)} ({100 - report.mealPct}%)
                 </span>
               </div>
             </div>
