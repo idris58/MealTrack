@@ -7,3 +7,4 @@ vite.config.ts.*
 .env
 .env.local
 TODO List.md
+.playwright-mcp
