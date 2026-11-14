@@ -67,10 +67,27 @@ function AppLoadingSkeleton({ message }: { message: string }) {
   );
 }
 
+const ROUTE_TITLES: Record<string, string> = {
+  "/app": "Dashboard",
+  "/app/members": "Members",
+  "/app/expenses": "Expenses",
+  "/app/meals": "Meals",
+  "/app/reports": "Reports",
+  "/app/history": "History",
+  "/app/changelog": "Changelog",
+  "/app/settings": "Settings",
+  "/app/profile": "Profile",
+};
+
 function Router() {
   const { initialLoading, dataError } = useMealStatus();
   const { retryLoadData } = useMealActions();
   const [location] = useLocation();
+
+  useEffect(() => {
+    const title = ROUTE_TITLES[location];
+    document.title = title ? `${title} | MealTrack` : "MealTrack";
+  }, [location]);
 
   if (initialLoading && !dataError) {
     return <AppLoadingSkeleton message="Loading your meal data..." />;

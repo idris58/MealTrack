@@ -1,0 +1,7 @@
+# Fallback for dev and static-only hosting.
+# In production the Express server (server/static.ts) serves /robots.txt
+# dynamically and appends an absolute Sitemap line derived from APP_URL
+# or the request origin — that response takes precedence over this file.
+User-agent: *
+Allow: /
+Disallow: /api/
