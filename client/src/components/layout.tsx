@@ -127,7 +127,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     setIsLoggingOut(true);
     try {
       await signOut();
-      setLocation('/auth');
+      setLocation('/');
     } catch (error) {
       console.error('Error logging out:', error);
       setIsLoggingOut(false);

@@ -31,6 +31,7 @@ const ProfilePage = lazy(() => import("@/pages/profile"));
 const SharedPage = lazy(() => import("@/pages/shared").then(({ default: Component }) => ({ default: Component })));
 const SharedAccessPage = lazy(() => import("@/pages/shared").then(({ SharedAccessPage: Component }) => ({ default: Component })));
 const InvitePage = lazy(() => import("@/pages/invite"));
+const LandingPage = lazy(() => import("@/pages/landing"));
 
 function AppLoadingSkeleton({ message }: { message: string }) {
   return (
@@ -240,7 +241,6 @@ function NotificationOnboardingToast() {
 }
 
 const legacyMainRouteMap: Record<string, string> = {
-  "/": "/app",
   "/auth": "/app/auth",
   "/onboarding": "/app/onboarding",
   "/members": "/app/members",
@@ -328,6 +328,7 @@ function AppShell() {
     recoveryLinkVerified || recoveryTokenInUrl || lastAuthEvent === "PASSWORD_RECOVERY";
   const isAuthRoute = routePath === "/auth" || routePath === "/app/auth";
   const isOnboardingRoute = routePath === "/onboarding" || routePath === "/app/onboarding";
+  const isLandingRoute = routePath === "/";
   const isRecoveryFlow = isAuthRoute && hasRecoveryContext;
 
   useEffect(() => {
@@ -354,7 +355,7 @@ function AppShell() {
 
     const isMemberRole = profile?.role === "member";
     const pageTitleMap: Record<string, string> = {
-      "/": "Dashboard - MealTrack",
+      "/": "MealTrack — Shared Meal & Cost Tracker",
       "/app": "Dashboard - MealTrack",
       "/members": isMemberRole ? "Deposits - MealTrack" : "Members - MealTrack",
       "/app/members": isMemberRole ? "Deposits - MealTrack" : "Members - MealTrack",
@@ -390,7 +391,7 @@ function AppShell() {
     }
 
     if (loading) return;
-    if (!session && !isAuthRoute) {
+    if (!session && !isAuthRoute && !isLandingRoute) {
       setLocation("/app/auth");
       return;
     }
@@ -409,14 +410,14 @@ function AppShell() {
       setLocation("/app/onboarding");
       return;
     }
-    if (profile.mess_id && (isAuthRoute || isOnboardingRoute)) {
+    if (profile.mess_id && (isAuthRoute || isOnboardingRoute || isLandingRoute)) {
       setLocation("/app");
       return;
     }
     if (profile.mess_id && legacyMainRouteMap[routePath]) {
       setLocation(legacyMainRouteMap[routePath]);
     }
-  }, [authLinkResolved, hasRecoveryContext, isInviteRoute, isRecoveryFlow, isSharedLandingRoute, isSharedRoute, loading, pendingInviteToken, profile, profileLoading, routePath, session, setLocation]);
+  }, [authLinkResolved, hasRecoveryContext, isAuthRoute, isInviteRoute, isLandingRoute, isOnboardingRoute, isRecoveryFlow, isSharedLandingRoute, isSharedRoute, loading, pendingInviteToken, profile, profileLoading, routePath, session, setLocation]);
 
   if (isSharedLandingRoute) {
     return <SharedAccessPage />;
@@ -428,6 +429,10 @@ function AppShell() {
 
   if (isInviteRoute && inviteParams?.token) {
     return <InvitePage token={inviteParams.token} />;
+  }
+
+  if (isLandingRoute && !session && authLinkResolved && !hasRecoveryContext) {
+    return <LandingPage />;
   }
 
   if (session && profileError && !profileLoading && profile === null) {

@@ -23,7 +23,7 @@ export interface ResolvedMeta {
 
 export const HOME_TITLE = "MealTrack — Shared Meal & Cost Tracker";
 export const HOME_DESCRIPTION =
-  "MealTrack helps messes and shared households log meals, deposits and expenses, then computes per-meal costs and settles monthly balances automatically.";
+  "Free shared ledger for messes and shared households — log meals and bazar costs, track deposits, settle monthly balances automatically. Create your mess today.";
 
 const GENERIC_TITLE = "MealTrack";
 const SHARED_FALLBACK: ResolvedMeta = {

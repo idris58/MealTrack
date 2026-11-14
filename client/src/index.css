@@ -32,7 +32,10 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  
+  --color-primary-border: hsl(var(--primary-border));
+  --color-destructive-border: hsl(var(--destructive-border));
+  --color-secondary-border: hsl(var(--secondary-border));
+
   --color-emerald-50: hsl(152 81% 96%);
   --color-emerald-100: hsl(149 80% 90%);
   --color-emerald-500: hsl(158 64% 52%);
@@ -79,6 +82,13 @@
   --ring: 158 64% 52%;
 
   --radius: 0.75rem;
+
+  /* Consumed by ui/button.tsx + ui/badge.tsx variants */
+  --button-outline: 214.3 24% 85%;
+  --primary-border: 158 64% 45%;
+  --destructive-border: 0 84.2% 70%;
+  --secondary-border: 214.3 31.8% 85%;
+  --badge-outline: 214.3 24% 85%;
 }
 
 html {
@@ -119,9 +129,20 @@ html {
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
   --ring: 158 64% 52%;
+
+  --button-outline: 217.2 32.6% 30%;
+  --primary-border: 158 64% 40%;
+  --destructive-border: 0 62.8% 45%;
+  --secondary-border: 217.2 32.6% 28%;
+  --badge-outline: 217.2 32.6% 30%;
 }
 
 @layer base {
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
   * {
     @apply border-border;
   }
