@@ -84,14 +84,14 @@
       "sizes": "768x1376",
       "type": "image/jpeg",
       "form_factor": "narrow",
-      "label": "MealTrack dashboard on mobile — meal stats, deposits, and member balances at a glance"
+      "label": "MealTrack landing page on mobile — shared meal, deposit and settlement tracking for messes and shared households."
     },
     {
       "src": "/screenshot-desktop.jpg",
       "sizes": "1376x768",
       "type": "image/jpeg",
       "form_factor": "wide",
-      "label": "MealTrack desktop view — full sidebar navigation with member table and meal log"
+      "label": "MealTrack landing page — every meal counted, every taka settled. Create a mess or join one in minutes."
     }
   ]
 }
