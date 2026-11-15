@@ -202,3 +202,13 @@ html {
   80%       { transform: rotate(0deg); }
 }
 
+/* Landing page – progress bar shimmer */
+@keyframes landing-bar-fill {
+  0%   { width: 0%; }
+  100% { width: 72%; }
+}
+
+.landing-bar-animate {
+  animation: landing-bar-fill 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
