@@ -302,7 +302,7 @@ export default function LandingPage() {
       <main id="main">
         {/* ============ Hero ============ */}
         <section className="relative">
-          <div className="mx-auto max-w-6xl px-4 pb-14 pt-14 sm:px-6 sm:pb-20 sm:pt-20 lg:px-8 lg:pt-24">
+          <div className="mx-auto max-w-6xl px-4 pb-10 pt-10 sm:px-6 sm:pb-14 sm:pt-14 lg:px-8 lg:pt-16 lg:pb-16">
             <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-14">
               <div
                 ref={heroReveal.ref}
@@ -377,14 +377,14 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <p className="mt-14 text-center text-xs text-muted-foreground sm:text-sm">
+            <p className="mt-8 text-center text-xs text-muted-foreground sm:mt-10 sm:text-sm">
               Replaces paper registers, calculator apps and end-of-month math.
             </p>
           </div>
         </section>
 
         {/* ============ Logos / social proof strip ============ */}
-        <section className="border-y border-border/50 bg-muted/30 py-6">
+        <section className="border-y border-border/50 bg-muted/30 py-4 sm:py-5">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-4 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:gap-x-12 sm:text-xs">
             <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-primary" /> Works offline</span>
             <span className="flex items-center gap-1.5"><Bell className="h-3.5 w-3.5 text-primary" /> Push reminders</span>
@@ -395,7 +395,7 @@ export default function LandingPage() {
         </section>
 
         {/* ============ Command center ============ */}
-        <section id="showcase" className="relative scroll-mt-24 py-16 sm:py-24">
+        <section id="showcase" className="relative scroll-mt-20 py-10 sm:py-14">
           <div
             ref={showcaseReveal.ref}
             className={cn(
@@ -440,7 +440,7 @@ export default function LandingPage() {
         </section>
 
         {/* ============ How it works ============ */}
-        <section id="how-it-works" className="relative scroll-mt-24 py-16 sm:py-24">
+        <section id="how-it-works" className="relative scroll-mt-20 py-10 sm:py-14">
           <div
             ref={howReveal.ref}
             className={cn(
@@ -454,7 +454,7 @@ export default function LandingPage() {
                 Three steps to a settled month.
               </h2>
             </div>
-            <div className="relative mt-12 grid items-start gap-4 sm:gap-6 md:grid-cols-3">
+            <div className="relative mt-10 grid items-start gap-4 sm:gap-6 md:grid-cols-3">
               {/* Connecting line */}
               <div
                 aria-hidden="true"
@@ -499,7 +499,7 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 text-center text-sm leading-6 sm:flex-row sm:text-left">
+            <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 text-center text-sm leading-6 sm:flex-row sm:text-left">
               <UsersRound className="h-5 w-5 shrink-0 text-primary" />
               <p className="text-muted-foreground">
                 <span className="font-semibold text-foreground">Joining instead?</span> Open the
@@ -511,7 +511,7 @@ export default function LandingPage() {
         </section>
 
         {/* ============ Features ============ */}
-        <section id="features" className="relative scroll-mt-24 py-16 sm:py-24">
+        <section id="features" className="relative scroll-mt-20 py-10 sm:py-14">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <Eyebrow muted>What you get</Eyebrow>
@@ -577,7 +577,7 @@ export default function LandingPage() {
         </section>
 
         {/* ============ Roles ============ */}
-        <section id="roles" className="relative scroll-mt-24 py-16 sm:py-24">
+        <section id="roles" className="relative scroll-mt-20 py-10 sm:py-14">
           <div
             ref={rolesReveal.ref}
             className={cn(
@@ -664,7 +664,7 @@ export default function LandingPage() {
         </section>
 
         {/* ============ FAQ ============ */}
-        <section id="faq" className="relative scroll-mt-24 py-16 sm:py-24">
+        <section id="faq" className="relative scroll-mt-20 py-10 sm:py-14">
           <div
             ref={faqReveal.ref}
             className={cn(
@@ -678,7 +678,7 @@ export default function LandingPage() {
                 Fair questions, straight answers.
               </h2>
             </div>
-            <Accordion type="single" collapsible className="mt-10 w-full">
+            <Accordion type="single" collapsible className="mt-8 w-full">
               {[
                 {
                   q: "Is MealTrack free?",
@@ -719,7 +719,7 @@ export default function LandingPage() {
         </section>
 
         {/* ============ Final CTA ============ */}
-        <section className="relative pb-16 sm:pb-20">
+        <section className="relative pt-2 pb-12 sm:pt-4 sm:pb-16">
           <div
             ref={ctaReveal.ref}
             className={cn(
@@ -727,7 +727,7 @@ export default function LandingPage() {
               ctaReveal.visible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-8 scale-[0.97]",
             )}
           >
-            <div className="relative overflow-hidden rounded-3xl border border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 px-6 py-16 text-center text-white shadow-2xl shadow-emerald-950/20 sm:py-24 dark:border-white/10">
+            <div className="relative overflow-hidden rounded-3xl border border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 px-6 py-12 text-center text-white shadow-2xl shadow-emerald-950/20 sm:py-16 dark:border-white/10">
               <PanelOrbs />
               {/* Subtle grid pattern overlay */}
               <div
@@ -808,7 +808,6 @@ export default function LandingPage() {
           </div>
           <div className="mt-8 flex flex-col items-center justify-between gap-2 border-t border-border/50 pt-6 text-[11px] text-muted-foreground sm:flex-row">
             <p>© {year} MealTrack · Shared Meal &amp; Cost Tracker</p>
-            <p>Amounts shown in BDT (৳)</p>
           </div>
         </div>
       </footer>
