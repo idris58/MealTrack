@@ -43,7 +43,7 @@ registerRoute(
       headers,
     });
   }, {
-    denylist: [/^\/api\//],
+    denylist: [/^\/api\//, /^\/robots\.txt(\?.*)?$/, /^\/sitemap\.xml(\?.*)?$/],
   }),
 );
 
