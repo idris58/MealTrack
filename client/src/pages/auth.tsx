@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
+import { LocaleToggle } from "@/components/locale-toggle";
 import {
   AlertCircle,
   ArrowLeft,
@@ -34,34 +36,30 @@ function getAuthRedirectUrl() {
   return `${window.location.origin}/app/auth`;
 }
 
-function mapAuthError(error: unknown, mode: AuthMode) {
+function mapAuthError(error: unknown, mode: AuthMode, t: (key: string) => string) {
   if (typeof error === "object" && error !== null) {
     const authErr = error as any;
     const code = String(authErr.code ?? "").toLowerCase();
     const message = String(authErr.message ?? "").toLowerCase();
     if (code === "invalid_credentials" || code === "email_not_confirmed") {
       return code === "email_not_confirmed"
-        ? "Please confirm your email before signing in. You can request another confirmation email below."
-        : mode === "login"
-          ? "The email or password is incorrect."
-          : "This account could not be verified. Check your email or try signing in.";
+        ? t("auth.errEmailNotConfirmed")
+        : mode === "login" ? t("auth.errInvalidCredentials") : t("auth.errCreateFailed");
     }
     if (code === "user_already_exists" || code === "email_exists" || message.includes("already registered")) {
-      return "This email is already registered. Try logging in instead.";
+      return t("auth.errAlreadyExists");
     }
     if (code === "weak_password" || code === "password_too_short" || /password.{0,40}(weak|short|least|required|characters)/.test(message)) {
-      return "Choose a stronger password that meets the account password requirements.";
+      return t("auth.errWeakPassword");
     }
     if (code === "signup_disabled" || message.includes("signups not allowed") || message.includes("signup is disabled")) {
-      return "New account registration is currently disabled. Contact the manager for access.";
+      return t("auth.errSignupDisabled");
     }
     if (code === "over_email_send_rate_limit" || authErr.status === 429) {
-      return mode === "forgot-password"
-        ? "A reset email was requested recently. Please wait a little and try again."
-        : "Please wait a little before trying again.";
+      return t("auth.errRateLimit");
     }
     if (authErr.status === 0 || message.includes("network") || message.includes("fetch")) {
-      return "We could not reach the authentication service. Please check your network connection and try again.";
+      return t("auth.errNetwork");
     }
   }
 
@@ -69,36 +67,34 @@ function mapAuthError(error: unknown, mode: AuthMode) {
   const normalized = message.toLowerCase();
 
   if (normalized.includes("invalid login credentials")) {
-    return mode === "login" ? "The email or password is incorrect." : "This account could not be verified. Check your email or try signing in.";
+    return mode === "login" ? t("auth.errInvalidCredentials") : t("auth.errCreateFailed");
   }
   if (normalized.includes("email not confirmed")) {
-    return "Please confirm your email before signing in. You can request another confirmation email below.";
+    return t("auth.errEmailNotConfirmed");
   }
   if (normalized.includes("user already registered") || normalized.includes("already been registered")) {
-    return "This email is already registered. Try logging in instead.";
+    return t("auth.errAlreadyExists");
   }
   if (normalized.includes("expired") || normalized.includes("otp") || normalized.includes("token") || normalized.includes("invalid grant")) {
-    return "This link is invalid or has expired. Request a new password reset email.";
+    return t("auth.errInvalidGrant");
   }
   if (normalized.includes("network")) {
-    return "We could not reach the authentication service. Please try again.";
+    return t("auth.errNetwork");
   }
   if (/password.{0,40}(weak|short|least|required|characters)/.test(normalized)) {
-    return "Choose a stronger password that meets the account password requirements.";
+    return t("auth.errWeakPassword");
   }
   if (normalized.includes("signups not allowed") || normalized.includes("signup is disabled")) {
-    return "New account registration is currently disabled. Contact the manager for access.";
+    return t("auth.errSignupDisabled");
   }
   if (normalized.includes("rate limit") || normalized.includes("security purposes") || normalized.includes("too many requests")) {
-    return mode === "forgot-password"
-      ? "A reset email was requested recently. Please wait a little and try again."
-      : "Please wait a little before trying again.";
+    return t("auth.errRateLimit");
   }
   if (normalized.includes("redirect") || normalized.includes("redirect_to") || normalized.includes("not allowed") || normalized.includes("invalid redirect")) {
-    return "This app URL is not allowed in Supabase Auth redirect settings. Add it there or try again from the deployed app.";
+    return t("auth.errRedirect");
   }
 
-  return "Authentication failed. Please try again.";
+  return t("auth.errGeneric");
 }
 
 // ── Google logo SVG ───────────────────────────────────────────────────────────
@@ -144,6 +140,7 @@ function FeatureCard({
 
 export default function AuthPage() {
   const { lastAuthEvent } = useAuth();
+  const { t } = useI18n();
   const inviteToken = new URLSearchParams(window.location.search).get("invite");
   const requestedMode = new URLSearchParams(window.location.search).get("mode");
   const [mode, setMode] = useState<AuthMode>(requestedMode === "signup" ? "signup" : "login");
@@ -174,7 +171,7 @@ export default function AuthPage() {
     if (isRecoveryLink) {
       setMode("reset-password");
       setError(null);
-      setMessage("Set a new password for your account.");
+      setMessage(t("auth.recoveryMessage"));
     }
   }, [isRecoveryLink]);
 
@@ -202,10 +199,10 @@ export default function AuthPage() {
   };
 
   const validateForm = (currentMode: AuthMode) => {
-    if (currentMode === "signup" && !fullName.trim()) return "Enter your name.";
-    if (currentMode !== "reset-password" && !EMAIL_PATTERN.test(email.trim())) return "Enter a valid email address.";
-    if (currentMode !== "forgot-password" && password.length < 6) return "Password must be at least 6 characters.";
-    if ((currentMode === "signup" || currentMode === "reset-password") && password !== confirmPassword) return "Passwords do not match.";
+    if (currentMode === "signup" && !fullName.trim()) return t("auth.vNameMissing");
+    if (currentMode !== "reset-password" && !EMAIL_PATTERN.test(email.trim())) return t("auth.vEmailInvalid");
+    if (currentMode !== "forgot-password" && password.length < 6) return t("auth.vPasswordShort");
+    if ((currentMode === "signup" || currentMode === "reset-password") && password !== confirmPassword) return t("auth.vPasswordsMismatch");
     return null;
   };
 
@@ -228,7 +225,7 @@ export default function AuthPage() {
       if (mode === "forgot-password") {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: getAuthRedirectUrl() });
         if (resetError) throw resetError;
-        setMessage("Password reset email sent. Check your inbox for the reset link.");
+        setMessage(t("auth.msgResetSent"));
         return;
       }
       if (mode === "reset-password") {
@@ -237,7 +234,7 @@ export default function AuthPage() {
         setPassword(""); setConfirmPassword("");
         window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
         switchMode("login");
-        setMessage("Password updated. You can now log in with your new password.");
+        setMessage(t("auth.msgPasswordUpdated"));
         return;
       }
 
@@ -254,15 +251,15 @@ export default function AuthPage() {
         Array.isArray((data.user as SupabaseUser & { identities?: unknown[] }).identities) &&
         ((data.user as SupabaseUser & { identities?: unknown[] }).identities?.length ?? 0) === 0
       ) {
-        setError("This email is already registered. Try logging in instead.");
+        setError(t("auth.errAlreadyExists"));
         return;
       }
       if (!data.session) {
         setPassword(""); setFullName(""); setConfirmPassword("");
         setCanResendConfirmation(true);
-        setMessage("Account created. Check your email to confirm your account.");
+        setMessage(t("auth.msgSignupConfirmSent"));
       } else {
-        setMessage("Account created. You are now signed in.");
+        setMessage(t("auth.msgSignedIn"));
       }
     } catch (caughtError) {
       if (mode === "forgot-password") console.error("Password reset email error:", caughtError);
@@ -270,7 +267,7 @@ export default function AuthPage() {
       if (mode === "login" && (authError.code === "email_not_confirmed" || authError.message?.toLowerCase().includes("email not confirmed"))) {
         setCanResendConfirmation(true);
       }
-      setError(mapAuthError(caughtError, mode));
+      setError(mapAuthError(caughtError, mode, t));
     } finally {
       setSubmitting(false);
     }
@@ -290,9 +287,9 @@ export default function AuthPage() {
         options: { emailRedirectTo: authRedirectUrl },
       });
       if (resendError) throw resendError;
-      setMessage("If this account needs confirmation, a new email has been sent.");
+      setMessage(t("auth.msgResendSent"));
     } catch (caughtError) {
-      setError(mapAuthError(caughtError, "signup"));
+      setError(mapAuthError(caughtError, "signup", t));
     } finally {
       setResendingConfirmation(false);
     }
@@ -306,28 +303,28 @@ export default function AuthPage() {
       provider: "google",
       options: { redirectTo: authRedirectUrl },
     });
-    if (oauthError) { setGoogleLoading(false); setError(mapAuthError(oauthError, "login")); return; }
+    if (oauthError) { setGoogleLoading(false); setError(mapAuthError(oauthError, "login", t)); return; }
     setTimeout(() => setGoogleLoading(false), 10_000);
   };
 
   const title =
-    mode === "login" ? "Welcome back"
-      : mode === "signup" ? "Create your account"
-        : mode === "forgot-password" ? "Reset your password"
-          : "Choose a new password";
+    mode === "login" ? t("auth.titleLogin")
+      : mode === "signup" ? t("auth.titleSignup")
+        : mode === "forgot-password" ? t("auth.titleForgot")
+          : t("auth.titleReset");
 
   const submitLabel =
-    mode === "login" ? "Sign in with Email"
-      : mode === "signup" ? "Create Account"
-        : mode === "forgot-password" ? "Send Reset Link"
-          : "Update Password";
+    mode === "login" ? t("auth.submitLogin")
+      : mode === "signup" ? t("auth.submitSignup")
+        : mode === "forgot-password" ? t("auth.submitForgot")
+          : t("auth.submitReset");
 
   const EyeToggle = ({ show, onToggle }: { show: boolean; onToggle: () => void }) => (
     <button
       type="button"
       className="text-muted-foreground/60 transition-colors hover:text-foreground"
       onClick={onToggle}
-      aria-label={show ? "Hide password" : "Show password"}
+      aria-label={show ? t("auth.hidePassword") : t("auth.showPassword")}
     >
       {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
     </button>
@@ -336,7 +333,8 @@ export default function AuthPage() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground selection:bg-primary/20">
       {/* ── Theme Toggle in top-right corner ── */}
-      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
+      <div className="absolute right-4 top-4 z-20 flex items-center gap-2 sm:right-6 sm:top-6">
+        <LocaleToggle />
         <ThemeToggle />
       </div>
 
@@ -359,20 +357,19 @@ export default function AuthPage() {
           {/* Trust badge */}
           <div className="inline-flex items-center gap-2.5 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary backdrop-blur-sm">
             <ChefHat className="h-3.5 w-3.5 text-primary" />
-            Trusted by hostels, messes &amp; flatmates
+            {t("auth.trustedBy")}
           </div>
 
           {/* Headline */}
           <div className="space-y-4">
             <h1 className="font-heading text-4xl font-bold leading-[1.15] tracking-tight text-foreground md:text-5xl">
-              Meal management,{" "}
+              {t("auth.headlineA")}{" "}
               <span className="bg-gradient-to-r from-primary via-emerald-500 to-teal-500 bg-clip-text text-transparent">
-                made simple.
+                {t("auth.headlineB")}
               </span>
             </h1>
             <p className="max-w-md text-base leading-7 text-muted-foreground">
-              Track meals, split expenses, and settle balances — all in one
-              secure shared workspace built for your mess.
+              {t("auth.lede")}
             </p>
           </div>
 
@@ -382,22 +379,22 @@ export default function AuthPage() {
               icon={Utensils}
               iconClass="text-emerald-600 dark:text-emerald-400"
               iconBgClass="bg-emerald-500/10 dark:bg-emerald-500/15"
-              title="Daily Meal Tracking"
-              description="Log breakfast, lunch & dinner per member. Auto-calculates your individual meal rate."
+              title={t("auth.card1Title")}
+              description={t("auth.card1Desc")}
             />
             <FeatureCard
               icon={Wallet}
               iconClass="text-sky-600 dark:text-sky-400"
               iconBgClass="bg-sky-500/10 dark:bg-sky-500/15"
-              title="Transparent Shared Ledger"
-              description="Track deposits, grocery and utility bills in real time — everyone sees the same numbers."
+              title={t("auth.card2Title")}
+              description={t("auth.card2Desc")}
             />
             <FeatureCard
               icon={TrendingDown}
               iconClass="text-violet-600 dark:text-violet-400"
               iconBgClass="bg-violet-500/10 dark:bg-violet-500/15"
-              title="Zero-Friction Settlement"
-              description="Close a cycle and instantly see who owes what. Archive finalized cycles in History."
+              title={t("auth.card3Title")}
+              description={t("auth.card3Desc")}
             />
           </div>
         </section>
@@ -411,13 +408,13 @@ export default function AuthPage() {
             <span className="font-heading text-xl font-bold text-primary">MealTrack</span>
           </div>
           <h1 className="font-heading text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
-            Meal management,{" "}
+            {t("auth.headlineA")}{" "}
             <span className="bg-gradient-to-r from-primary via-emerald-500 to-teal-500 bg-clip-text text-transparent">
-              made simple.
+              {t("auth.headlineB")}
             </span>
           </h1>
           <p className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
-            Track meals, split expenses, and settle balances — all in one shared workspace.
+            {t("auth.compactLede")}
           </p>
         </div>
 
@@ -450,7 +447,7 @@ export default function AuthPage() {
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {m === "login" ? "Sign in" : "Create account"}
+                    {m === "login" ? t("auth.modeSignIn") : t("auth.modeCreate")}
                   </button>
                 ))}
               </div>
@@ -461,7 +458,7 @@ export default function AuthPage() {
                 onClick={() => switchMode("login")}
               >
                 <ArrowLeft className="h-4 w-4" />
-                Back to sign in
+                {t("auth.backToSignIn")}
               </button>
             )}
           </CardHeader>
@@ -481,12 +478,12 @@ export default function AuthPage() {
                   {googleLoading ? (
                     <>
                       <LoaderCircle className="h-4 w-4 animate-spin" />
-                      Redirecting…
+                      {t("auth.googleRedirecting")}
                     </>
                   ) : (
                     <>
                       <GoogleLogo className="h-4 w-4" />
-                      Continue with Google
+                      {t("auth.google")}
                     </>
                   )}
                 </Button>
@@ -497,7 +494,7 @@ export default function AuthPage() {
                     <span className="w-full border-t border-border" />
                   </div>
                   <div className="relative flex justify-center">
-                    <span className="bg-card px-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">or use email</span>
+                    <span className="bg-card px-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">{t("auth.orUseEmail")}</span>
                   </div>
                 </div>
               </>
@@ -508,7 +505,7 @@ export default function AuthPage() {
               {/* Email */}
               {mode !== "reset-password" && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="auth-email">Email</Label>
+                  <Label htmlFor="auth-email">{t("auth.emailLabel")}</Label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Mail className="h-4 w-4 text-muted-foreground/70" />
@@ -530,7 +527,7 @@ export default function AuthPage() {
               {/* Full name (signup only) */}
               {mode === "signup" && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="auth-full-name">Name</Label>
+                  <Label htmlFor="auth-full-name">{t("auth.nameLabel")}</Label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <User className="h-4 w-4 text-muted-foreground/70" />
@@ -538,7 +535,7 @@ export default function AuthPage() {
                     <Input
                       id="auth-full-name"
                       type="text"
-                      placeholder="Enter your full name"
+                      placeholder={t("auth.namePlaceholder")}
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       required
@@ -554,7 +551,7 @@ export default function AuthPage() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="auth-password">
-                      {mode === "reset-password" ? "New Password" : "Password"}
+                      {mode === "reset-password" ? t("auth.newPasswordLabel") : t("auth.passwordLabel")}
                     </Label>
                     {mode === "login" && (
                       <button
@@ -562,7 +559,7 @@ export default function AuthPage() {
                         className="text-xs font-semibold text-primary transition-colors hover:text-primary/80"
                         onClick={() => switchMode("forgot-password")}
                       >
-                        Forgot password?
+                        {t("auth.forgotPassword")}
                       </button>
                     )}
                   </div>
@@ -573,7 +570,7 @@ export default function AuthPage() {
                     <Input
                       id="auth-password"
                       type={showPassword ? "text" : "password"}
-                      placeholder={mode === "reset-password" ? "Enter a new password" : "Enter your password"}
+                      placeholder={mode === "reset-password" ? t("auth.newPasswordPlaceholder") : t("auth.passwordPlaceholder")}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
@@ -600,7 +597,7 @@ export default function AuthPage() {
               {/* Confirm password */}
               {(mode === "signup" || mode === "reset-password") && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="auth-confirm-password">Confirm Password</Label>
+                  <Label htmlFor="auth-confirm-password">{t("auth.confirmPasswordLabel")}</Label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Lock className="h-4 w-4 text-muted-foreground/70" />
@@ -608,7 +605,7 @@ export default function AuthPage() {
                     <Input
                       id="auth-confirm-password"
                       type={showConfirmPassword ? "text" : "password"}
-                      placeholder="Re-enter your password"
+                      placeholder={t("auth.confirmPasswordPlaceholder")}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       required
@@ -624,10 +621,10 @@ export default function AuthPage() {
 
               {/* Contextual hint */}
               <p className="text-xs leading-5 text-muted-foreground">
-                {mode === "login" && "Sign in with your email and password."}
-                {mode === "signup" && "Create your account with email and password."}
-                {mode === "forgot-password" && "Enter your email address and we'll send you a password reset link."}
-                {mode === "reset-password" && "Choose a strong new password, then use it the next time you sign in."}
+                {mode === "login" && t("auth.hintLogin")}
+                {mode === "signup" && t("auth.hintSignup")}
+                {mode === "forgot-password" && t("auth.hintForgot")}
+                {mode === "reset-password" && t("auth.hintReset")}
               </p>
 
               {/* Error */}
@@ -655,7 +652,7 @@ export default function AuthPage() {
                   disabled={resendingConfirmation || !EMAIL_PATTERN.test(email.trim())}
                 >
                   {resendingConfirmation ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                  {resendingConfirmation ? "Sending confirmation…" : "Resend confirmation email"}
+                  {resendingConfirmation ? t("auth.resending") : t("auth.resendButton")}
                 </Button>
               )}
 
@@ -664,7 +661,7 @@ export default function AuthPage() {
                 {submitting ? (
                   <>
                     <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Processing…
+                    {t("auth.processing")}
                   </>
                 ) : submitLabel}
               </Button>

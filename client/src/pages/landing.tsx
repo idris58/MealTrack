@@ -27,7 +27,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
-import { LANDING_FAQS } from "@shared/landing-content";
+import { useI18n } from "@/lib/i18n";
+import { LocaleToggle } from "@/components/locale-toggle";
 
 /* ------------------------------------------------------------------ */
 /* Scroll-reveal hook                                                   */
@@ -245,6 +246,7 @@ const signBtnClass =
 
 export default function LandingPage() {
   const year = new Date().getFullYear();
+  const { t } = useI18n();
 
   /* Navbar background on scroll */
   const [scrolled, setScrolled] = useState(false);
@@ -268,7 +270,7 @@ export default function LandingPage() {
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-lg focus:ring-2 focus:ring-primary"
       >
-        Skip to content
+        {t("nav.skipToContent")}
       </a>
 
       <GlowBackdrop />
@@ -284,24 +286,25 @@ export default function LandingPage() {
       >
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <BrandLockup />
-          <nav className="hidden items-center gap-6 md:flex" aria-label="Product">
+          <nav className="hidden items-center gap-6 md:flex" aria-label={t("nav.productAria")}>
             <a href="#features" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              Features
+              {t("nav.features")}
             </a>
             <a href="#how-it-works" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              How it works
+              {t("nav.howItWorks")}
             </a>
             <a href="#faq" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              FAQ
+              {t("nav.faq")}
             </a>
           </nav>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <LocaleToggle />
             <ThemeToggle />
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-              <a href="/app/auth">Sign in</a>
+              <a href="/app/auth">{t("nav.signIn")}</a>
             </Button>
             <Button asChild size="sm" className="shadow-sm shadow-primary/20">
-              <a href="/app/auth?mode=signup">Create your mess</a>
+              <a href="/app/auth?mode=signup">{t("nav.createMess")}</a>
             </Button>
           </div>
         </div>
@@ -319,42 +322,41 @@ export default function LandingPage() {
                   heroReveal.visible ?"translate-y-0" : "translate-y-8",
                 )}
               >
-                <Eyebrow icon={Sparkles}>Free for every mess</Eyebrow>
+                <Eyebrow icon={Sparkles}>{t("hero.eyebrowFree")}</Eyebrow>
                 <h1 className="mt-5 font-heading text-[2.5rem] font-bold leading-[1.08] tracking-tight sm:text-5xl xl:text-[3.5rem]">
-                  Every meal counted.
+                  {t("hero.titleA")}
                   <br />
                   <span className="bg-gradient-to-r from-primary via-emerald-500 to-teal-500 bg-clip-text text-transparent">
-                    Every taka settled.
+                    {t("hero.titleB")}
                   </span>
                 </h1>
                 <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-[17px] sm:leading-8">
-                  MealTrack is the shared ledger for messes and shared households — log meals and
-                  bazar costs, track deposits, and close the month with every balance already computed.
+                  {t("hero.lede")}
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                   <Button asChild size="lg" className="w-full shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] sm:w-auto">
                     <a href="/app/auth?mode=signup" className="gap-2">
-                      Create your mess — it&apos;s free
+                      {t("hero.createMessFree")}
                       <ArrowRight className="h-4 w-4" />
                     </a>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-                    <a href="/app/auth">Sign in</a>
+                    <a href="/app/auth">{t("hero.signIn")}</a>
                   </Button>
                 </div>
                 <div className="mt-5 space-y-1.5">
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                    Free to create · No credit card · Private to your mess
+                    {t("hero.trustFree")}
                   </p>
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <Link2 className="h-3.5 w-3.5" />
-                    Joining a mess? Your manager sends an invite link — open it and you&apos;re in.
+                    {t("hero.inviteHint")}
                   </p>
                 </div>
               </div>
 
-              {/* Product preview placeholder */}
+              {/* Product photo — real home-style meal (Unsplash, free license) */}
               <div
                 className={cn(
                   "relative lg:col-span-6 transition-all duration-700 delay-200",
@@ -365,28 +367,22 @@ export default function LandingPage() {
                   aria-hidden="true"
                   className="absolute -right-6 -top-10 h-56 w-56 rounded-full bg-primary/10 blur-[90px] sm:-right-10 sm:h-72 sm:w-72"
                 />
-                <div className="relative rounded-3xl border border-border/70 bg-card p-2 shadow-2xl shadow-primary/10 transition-transform duration-500 hover:-translate-y-1.5 dark:border-white/10">
-                  <div className="flex items-center gap-1.5 rounded-2xl border-b border-border/60 bg-muted/60 px-3 py-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-destructive/60" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-warning/60" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-success/60" />
-                    <span className="flex-1 text-center text-[10px] font-medium text-muted-foreground">
-                      MealTrack — current cycle
-                    </span>
-                    <span className="h-2.5 w-2.5 opacity-0" />
-                  </div>
-                  <div className="rounded-2xl bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 p-4 sm:p-6">
-                    <CommandPanel />
-                  </div>
+                <div className="relative overflow-hidden rounded-3xl border border-border/70 shadow-2xl shadow-primary/10 ring-1 ring-black/5 transition-transform duration-500 hover:-translate-y-1.5 dark:border-white/10 dark:ring-white/10">
+                  <img
+                    src="/hero-meal.jpg"
+                    alt={t("hero.altPhoto")}
+                    width={1024}
+                    height={572}
+                    className="block aspect-[16/9] w-full object-cover"
+                    loading="eager"
+                    fetchPriority="high"
+                  />
                 </div>
-                <p className="mt-3 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                  Illustrative preview
-                </p>
               </div>
             </div>
 
             <p className="mt-8 text-center text-xs text-muted-foreground sm:mt-10 sm:text-sm">
-              Replaces paper registers, calculator apps and end-of-month math.
+              {t("hero.replaces")}
             </p>
           </div>
         </section>
@@ -394,11 +390,11 @@ export default function LandingPage() {
         {/* ============ Logos / social proof strip ============ */}
         <section className="border-y border-border/50 bg-muted/30 py-4 sm:py-5">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-4 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:gap-x-12 sm:text-xs">
-            <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-primary" /> Works offline</span>
-            <span className="flex items-center gap-1.5"><Bell className="h-3.5 w-3.5 text-primary" /> Push reminders</span>
-            <span className="flex items-center gap-1.5"><Share2 className="h-3.5 w-3.5 text-primary" /> Shareable reports</span>
-            <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Row-level security</span>
-            <span className="flex items-center gap-1.5"><Utensils className="h-3.5 w-3.5 text-primary" /> ½-meal precision</span>
+            <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-primary" /> {t("strip.offline")}</span>
+            <span className="flex items-center gap-1.5"><Bell className="h-3.5 w-3.5 text-primary" /> {t("strip.push")}</span>
+            <span className="flex items-center gap-1.5"><Share2 className="h-3.5 w-3.5 text-primary" /> {t("strip.reports")}</span>
+            <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> {t("strip.rls")}</span>
+            <span className="flex items-center gap-1.5"><Utensils className="h-3.5 w-3.5 text-primary" /> {t("strip.halfMeal")}</span>
           </div>
         </section>
 
@@ -412,20 +408,18 @@ export default function LandingPage() {
             )}
           >
             <div className="lg:col-span-5">
-              <Eyebrow muted>The command center</Eyebrow>
+              <Eyebrow muted>{t("showcase.kicker")}</Eyebrow>
               <h2 className="mt-4 font-heading text-3xl font-bold leading-[1.15] tracking-tight sm:text-4xl">
-                Know the balance before the month ends.
+                {t("showcase.title")}
               </h2>
               <p className="mt-4 leading-7 text-muted-foreground">
-                One live picture for the manager — deposits in, costs out, meal rate per mouth,
-                remaining cash, and exactly who owes what when the cycle closes. Fixed costs are
-                shared equally (time-prorated); meal costs follow the meals actually eaten.
+                {t("showcase.body")}
               </p>
               <ul className="mt-6 space-y-3.5 text-sm leading-6 text-foreground">
                 {[
-                  "Meal rate updates as you log — no spreadsheet formulas, ever.",
-                  "Deposits tracked per member against meals and fixed costs.",
-                  "Settlements rounded to whole taka — totals always add up exactly.",
+                  t("showcase.b1"),
+                  t("showcase.b2"),
+                  t("showcase.b3"),
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2.5">
                     <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
@@ -439,7 +433,7 @@ export default function LandingPage() {
                 <PanelOrbs />
                 <CommandPanel className="relative" />
                 <figcaption className="sr-only">
-                  Illustrative preview of MealTrack&apos;s manager dashboard: financial-health
+                  {t("hero.illPreview")} of MealTrack&apos;s manager dashboard: financial-health
                   summary for a sample cycle.
                 </figcaption>
               </figure>
@@ -457,9 +451,9 @@ export default function LandingPage() {
             )}
           >
             <div className="text-center">
-              <Eyebrow muted>How it works</Eyebrow>
+              <Eyebrow muted>{t("how.kicker")}</Eyebrow>
               <h2 className="mt-4 font-heading text-3xl font-bold tracking-tight sm:text-4xl">
-                Three steps to a settled month.
+                {t("how.title")}
               </h2>
             </div>
             <div className="relative mt-10 grid items-start gap-4 sm:gap-6 md:grid-cols-3">
@@ -471,20 +465,20 @@ export default function LandingPage() {
               {[
                 {
                   step: "1",
-                  title: "Create your mess",
-                  body: "Sign up free, name your mess, and add the people you live with. You become the manager.",
+                  title: t("how.step1Title"),
+                  body: t("how.step1Body"),
                   icon: UsersRound,
                 },
                 {
                   step: "2",
-                  title: "Log as you live",
-                  body: "Mark meals, grocery runs and shared bills in seconds. Every change updates the shared ledger instantly.",
+                  title: t("how.step2Title"),
+                  body: t("how.step2Body"),
                   icon: Utensils,
                 },
                 {
                   step: "3",
-                  title: "Settle, don't argue",
-                  body: "Close the cycle and MealTrack computes each member's balance — deposited vs. consumed, to the whole taka.",
+                  title: t("how.step3Title"),
+                  body: t("how.step3Body"),
                   icon: Scale,
                 },
               ].map(({ step, title, body, icon: StepIcon }, i) => (
@@ -500,7 +494,7 @@ export default function LandingPage() {
                     <StepIcon className="h-6 w-6 text-primary" />
                   </div>
                   <span className="mt-3 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">
-                    Step {step}
+                    {t("how.stepBadge")} {step}
                   </span>
                   <h3 className="mt-3 text-base font-semibold text-foreground">{title}</h3>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p>
@@ -510,9 +504,8 @@ export default function LandingPage() {
             <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 text-center text-sm leading-6 sm:flex-row sm:text-left">
               <UsersRound className="h-5 w-5 shrink-0 text-primary" />
               <p className="text-muted-foreground">
-                <span className="font-semibold text-foreground">Joining instead?</span> Open the
-                invite link your manager sent you — you&apos;ll be a member of their mess in about
-                a minute.
+                <span className="font-semibold text-foreground">{t("how.invitePrefix")}</span>{" "}
+                {t("how.inviteRest")}
               </p>
             </div>
           </div>
@@ -522,13 +515,12 @@ export default function LandingPage() {
         <section id="features" className="relative scroll-mt-20 py-10 sm:py-14">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
-              <Eyebrow muted>What you get</Eyebrow>
+              <Eyebrow muted>{t("features.kicker")}</Eyebrow>
               <h2 className="mt-4 font-heading text-3xl font-bold tracking-tight sm:text-4xl">
-                Built for the whole cycle — not just the math.
+                {t("features.title")}
               </h2>
               <p className="mt-3 leading-7 text-muted-foreground">
-                From the first meal of the month to the final settlement, everything a mess runs
-                on lives in one place.
+                {t("features.subtitle")}
               </p>
             </div>
             <div className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
@@ -537,48 +529,48 @@ export default function LandingPage() {
                 icon={Utensils}
                 iconClass="text-emerald-600 dark:text-emerald-400"
                 iconBgClass="bg-emerald-500/10 dark:bg-emerald-400/10"
-                title="Meal logging that sticks"
-                description="Breakfast, lunch, dinner — per member, per day. Meal rate recalculates live from real meals, not estimates."
+                title={t("features.mealTitle")}
+                description={t("features.mealBody")}
               />
               <FeatureCard
                 index={1}
                 icon={Wallet}
                 iconClass="text-emerald-600 dark:text-emerald-400"
                 iconBgClass="bg-emerald-500/10 dark:bg-emerald-400/10"
-                title="Deposits without the chase"
-                description="Record who topped up, when and how much. Balances update instantly — nothing is settled from memory."
+                title={t("features.depositsTitle")}
+                description={t("features.depositsBody")}
               />
               <FeatureCard
                 index={2}
                 icon={ShoppingBasket}
                 iconClass="text-slate-600 dark:text-slate-300"
                 iconBgClass="bg-slate-500/10 dark:bg-slate-400/10"
-                title="Bazar & bills, shared fairly"
-                description="Grocery runs split by meal consumption; utility costs — rent share, gas, Wi-Fi, electricity — split equally, time-prorated."
+                title={t("features.bazarTitle")}
+                description={t("features.bazarBody")}
               />
               <FeatureCard
                 index={3}
                 icon={Scale}
                 iconClass="text-primary"
                 iconBgClass="bg-primary/10"
-                title="Settlements in one tap"
-                description="Close the cycle and get exact per-member balances — negative means pays in, positive means gets back."
+                title={t("features.settleTitle")}
+                description={t("features.settleBody")}
               />
               <FeatureCard
                 index={4}
                 icon={UsersRound}
                 iconClass="text-primary"
                 iconBgClass="bg-primary/10"
-                title="Manager & member views"
-                description="Managers run cycles, deposits and reports. Members mark their own meals and see exactly where they stand."
+                title={t("features.rolesTitle")}
+                description={t("features.rolesBody")}
               />
               <FeatureCard
                 index={5}
                 icon={History}
                 iconClass="text-slate-600 dark:text-slate-300"
                 iconBgClass="bg-slate-500/10 dark:bg-slate-400/10"
-                title="Reports & history"
-                description="Every closed cycle archived read-only — totals, meal rate, per-member breakdown. Export a PDF report when you need proof."
+                title={t("features.reportsTitle")}
+                description={t("features.reportsBody")}
               />
             </div>
           </div>
@@ -594,9 +586,9 @@ export default function LandingPage() {
             )}
           >
             <div className="text-center">
-              <Eyebrow muted>Who it&apos;s for</Eyebrow>
+              <Eyebrow muted>{t("roles.kicker")}</Eyebrow>
               <h2 className="mt-4 font-heading text-3xl font-bold tracking-tight sm:text-4xl">
-                One mess, two seats.
+                {t("roles.title")}
               </h2>
             </div>
             <div className="mt-12 grid items-stretch gap-5 sm:gap-8 lg:grid-cols-2">
@@ -605,17 +597,17 @@ export default function LandingPage() {
                 <PanelOrbs />
                 <div className="relative">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200/70">
-                    For the manager
+                    {t("roles.managerEyebrow")}
                   </p>
                   <h3 className="mt-3 font-heading text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                    Run the mess. Not the drama.
+                    {t("roles.managerTitle")}
                   </h3>
                   <ul className="mt-6 space-y-3.5 text-sm leading-6 text-emerald-50/95">
                     {[
-                      "Create the mess, set the cycle, invite members",
-                      "Approve deposits and track the shared fund",
-                      "Close cycles and publish read-only reports",
-                      "Full visibility — meals, costs, balances, settlement",
+                      t("roles.m1"),
+                      t("roles.m2"),
+                      t("roles.m3"),
+                      t("roles.m4"),
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2.5">
                         <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
@@ -632,7 +624,7 @@ export default function LandingPage() {
                       "bg-primary px-5 py-3 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98]",
                     )}
                   >
-                    Create your mess — it&apos;s free
+                    {t("roles.managerCta")}
                     <ArrowRight className="h-4 w-4" />
                   </a>
                 </div>
@@ -642,17 +634,17 @@ export default function LandingPage() {
               <div className="group flex flex-col rounded-3xl border border-border/70 bg-card/85 p-6 shadow-xl shadow-primary/5 backdrop-blur-xl sm:p-8 dark:border-white/10 dark:bg-white/5 transition-transform duration-500 hover:-translate-y-1">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-400">
-                    For the member
+                    {t("roles.memberEyebrow")}
                   </p>
                   <h3 className="mt-3 font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                    Eat. Log. See your balance. Done.
+                    {t("roles.memberTitle")}
                   </h3>
                   <ul className="mt-6 space-y-3.5 text-sm leading-6 text-muted-foreground">
                     {[
-                      "Join in a minute with your manager's invite link",
-                      "Mark your own meals — breakfast, lunch, dinner",
-                      "See your balance, meal rate and what you'll get back (or pay in) at cycle close",
-                      "Same numbers the manager sees — no parallel ledgers, no doubt",
+                      t("roles.p1"),
+                      t("roles.p2"),
+                      t("roles.p3"),
+                      t("roles.p4"),
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2.5">
                         <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -663,7 +655,7 @@ export default function LandingPage() {
                 </div>
                 <div className="mt-auto pt-8">
                   <Button asChild variant="outline">
-                    <a href="/app/auth">Have an invite? Sign in</a>
+                    <a href="/app/auth">{t("roles.memberCta")}</a>
                   </Button>
                 </div>
               </div>
@@ -681,13 +673,20 @@ export default function LandingPage() {
             )}
           >
             <div className="text-center">
-              <Eyebrow muted>FAQ</Eyebrow>
+              <Eyebrow muted>{t("faq.kicker")}</Eyebrow>
               <h2 className="mt-4 font-heading text-3xl font-bold tracking-tight sm:text-4xl">
-                Fair questions, straight answers.
+                {t("faq.title")}
               </h2>
             </div>
             <Accordion type="single" collapsible className="mt-8 w-full">
-              {LANDING_FAQS.map(({ q, a }, i) => (
+              {[
+                { q: t("faq.q1"), a: t("faq.a1") },
+                { q: t("faq.q2"), a: t("faq.a2") },
+                { q: t("faq.q3"), a: t("faq.a3") },
+                { q: t("faq.q4"), a: t("faq.a4") },
+                { q: t("faq.q5"), a: t("faq.a5") },
+                { q: t("faq.q6"), a: t("faq.a6") },
+              ].map(({ q, a }, i) => (
                 <AccordionItem key={q} value={`faq-${i}`}>
                   <AccordionTrigger className="text-left text-sm font-semibold sm:text-base">
                     {q}
@@ -722,11 +721,10 @@ export default function LandingPage() {
                 }}
               />
               <h2 className="relative mx-auto max-w-3xl font-heading text-3xl font-extrabold leading-[1.12] tracking-tight text-white sm:text-5xl">
-                Close your next cycle without the drama.
+                {t("cta.title")}
               </h2>
               <p className="relative mx-auto mt-5 max-w-xl text-base leading-7 text-emerald-100/80 sm:text-lg">
-                Create your mess in two minutes — free to start, private to your household,
-                settled down to the last taka.
+                {t("cta.sub")}
               </p>
               <div className="relative mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Button
@@ -735,7 +733,7 @@ export default function LandingPage() {
                   className="w-full shadow-lg shadow-black/30 hover:scale-[1.02] active:scale-[0.98] transition-all sm:w-auto"
                 >
                   <a href="/app/auth?mode=signup" className="gap-2">
-                    Create your mess — it&apos;s free
+                    {t("cta.button")}
                     <ArrowRight className="h-4 w-4" />
                   </a>
                 </Button>
@@ -746,11 +744,11 @@ export default function LandingPage() {
                     "w-full border border-white/20 bg-white/5 px-6 py-3 text-emerald-50 hover:bg-white/10 sm:w-auto",
                   )}
                 >
-                  Sign in
+                  {t("cta.signIn")}
                 </a>
               </div>
               <p className="relative mt-4 text-xs text-emerald-100/60">
-                Free to create · No credit card · Invite your housemates after setup
+                {t("cta.micro")}
               </p>
             </div>
           </div>
@@ -764,28 +762,28 @@ export default function LandingPage() {
             <div>
               <BrandLockup compact />
               <p className="mt-3 max-w-xs text-xs leading-5 text-muted-foreground">
-                The shared meal, deposit and settlement tracker for messes and shared households.
+                {t("footer.brandLine")}
               </p>
             </div>
-            <nav aria-label="Product">
+            <nav aria-label={t("nav.productAria")}>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Product
+                {t("footer.product")}
               </p>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="transition-colors hover:text-foreground">Features</a></li>
-                <li><a href="#how-it-works" className="transition-colors hover:text-foreground">How it works</a></li>
-                <li><a href="#faq" className="transition-colors hover:text-foreground">FAQ</a></li>
-                <li><a href="#showcase" className="transition-colors hover:text-foreground">The command center</a></li>
+                <li><a href="#features" className="transition-colors hover:text-foreground">{t("footer.features")}</a></li>
+                <li><a href="#how-it-works" className="transition-colors hover:text-foreground">{t("footer.howItWorks")}</a></li>
+                <li><a href="#faq" className="transition-colors hover:text-foreground">{t("footer.faq")}</a></li>
+                <li><a href="#showcase" className="transition-colors hover:text-foreground">{t("footer.commandCenter")}</a></li>
               </ul>
             </nav>
-            <nav aria-label="Account">
+            <nav aria-label={t("nav.accountAria")}>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Account
+                {t("footer.account")}
               </p>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li><a href="/app/auth?mode=signup" className="transition-colors hover:text-foreground">Create your mess</a></li>
-                <li><a href="/app/auth" className="transition-colors hover:text-foreground">Sign in</a></li>
-                <li><a href="/app/auth" className="transition-colors hover:text-foreground">Join with an invite</a></li>
+                <li><a href="/app/auth?mode=signup" className="transition-colors hover:text-foreground">{t("footer.createMess")}</a></li>
+                <li><a href="/app/auth" className="transition-colors hover:text-foreground">{t("nav.signIn")}</a></li>
+                <li><a href="/app/auth" className="transition-colors hover:text-foreground">{t("footer.joinInvite")}</a></li>
               </ul>
             </nav>
           </div>
