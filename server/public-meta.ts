@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase-admin";
+import { LANDING_FAQS } from "@shared/landing-content";
 
 /**
  * Resolves per-path <head> metadata for the SPA shell. User-facing link
@@ -177,7 +178,7 @@ export function buildMetaBlock(meta: ResolvedMeta, origin: string, pathname: str
   const title = escapeHtmlAttr(meta.title);
   const description = escapeHtmlAttr(meta.description);
   const robots = meta.indexable ? "index, follow" : "noindex, nofollow";
-  const ogImage = `${origin}/opengraph.jpg`;
+  const ogImage = `${origin}/og-landing.png`;
   const ogUrl = `${origin}${pathname === "/" ? "/" : pathname}`;
 
   const lines = [
@@ -190,12 +191,14 @@ export function buildMetaBlock(meta: ResolvedMeta, origin: string, pathname: str
     `<meta property="og:site_name" content="MealTrack" />`,
     `<meta property="og:url" content="${escapeHtmlAttr(ogUrl)}" />`,
     `<meta property="og:image" content="${escapeHtmlAttr(ogImage)}" />`,
+    `<meta property="og:image:alt" content="${title}" />`,
     `<meta property="og:image:width" content="1280" />`,
     `<meta property="og:image:height" content="720" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
     `<meta name="twitter:title" content="${title}" />`,
     `<meta name="twitter:description" content="${description}" />`,
     `<meta name="twitter:image" content="${escapeHtmlAttr(ogImage)}" />`,
+    `<meta name="twitter:image:alt" content="${title}" />`,
   ];
 
   if (meta.canonicalHome) {
@@ -205,12 +208,24 @@ export function buildMetaBlock(meta: ResolvedMeta, origin: string, pathname: str
   if (meta.jsonLd) {
     const jsonLd = {
       "@context": "https://schema.org",
-      "@type": "WebApplication",
-      name: "MealTrack",
-      url: `${origin}/`,
-      description: HOME_DESCRIPTION,
-      applicationCategory: "FinanceApplication",
-      operatingSystem: "Any",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          name: "MealTrack",
+          url: `${origin}/`,
+          description: HOME_DESCRIPTION,
+          applicationCategory: "FinanceApplication",
+          operatingSystem: "Any",
+        },
+        {
+          "@type": "FAQPage",
+          mainEntity: LANDING_FAQS.map(({ q, a }) => ({
+            "@type": "Question",
+            name: q,
+            acceptedAnswer: { "@type": "Answer", text: a },
+          })),
+        },
+      ],
     };
     lines.push(`<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`);
   }

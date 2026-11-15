@@ -27,6 +27,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { LANDING_FAQS } from "@shared/landing-content";
 
 /* ------------------------------------------------------------------ */
 /* Scroll-reveal hook                                                   */
@@ -36,9 +37,16 @@ function useReveal<T extends HTMLElement = HTMLDivElement>(
   threshold = 0.15,
 ) {
   const ref = useRef<T>(null);
-  const [visible, setVisible] = useState(false);
+  // Users who prefer reduced motion (and anything uncrawlable) get the final
+  // layout immediately — content is never hidden, only nudged into place.
+  const [visible, setVisible] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
 
   useEffect(() => {
+    if (visible) return;
     const el = ref.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -47,7 +55,7 @@ function useReveal<T extends HTMLElement = HTMLDivElement>(
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [threshold]);
+  }, [threshold, visible]);
 
   return { ref, visible };
 }
@@ -119,10 +127,10 @@ function FeatureCard({
   return (
     <div
       ref={ref}
-      style={{ transitionDelay: `${index * 80}ms` }}
+      style={{ transitionDelay: visible ? "0ms" : `${index * 80}ms` }}
       className={cn(
         "group flex items-start gap-3.5 rounded-2xl border border-border/70 bg-card/75 p-5 shadow-sm backdrop-blur-sm transition-all duration-500 hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/[0.08]",
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+        visible ? "translate-y-0" : "translate-y-6",
       )}
     >
       <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110", iconBgClass)}>
@@ -308,7 +316,7 @@ export default function LandingPage() {
                 ref={heroReveal.ref}
                 className={cn(
                   "lg:col-span-6 transition-all duration-700",
-                  heroReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8",
+                  heroReveal.visible ?"translate-y-0" : "translate-y-8",
                 )}
               >
                 <Eyebrow icon={Sparkles}>Free for every mess</Eyebrow>
@@ -350,7 +358,7 @@ export default function LandingPage() {
               <div
                 className={cn(
                   "relative lg:col-span-6 transition-all duration-700 delay-200",
-                  heroReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8",
+                  heroReveal.visible ?"translate-y-0" : "translate-y-8",
                 )}
               >
                 <div
@@ -400,7 +408,7 @@ export default function LandingPage() {
             ref={showcaseReveal.ref}
             className={cn(
               "mx-auto grid max-w-6xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-12 lg:gap-14 lg:px-8 transition-all duration-700",
-              showcaseReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8",
+              showcaseReveal.visible ?"translate-y-0" : "translate-y-8",
             )}
           >
             <div className="lg:col-span-5">
@@ -445,7 +453,7 @@ export default function LandingPage() {
             ref={howReveal.ref}
             className={cn(
               "mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 transition-all duration-700",
-              howReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8",
+              howReveal.visible ?"translate-y-0" : "translate-y-8",
             )}
           >
             <div className="text-center">
@@ -482,10 +490,10 @@ export default function LandingPage() {
               ].map(({ step, title, body, icon: StepIcon }, i) => (
                 <div
                   key={step}
-                  style={{ transitionDelay: `${i * 120}ms` }}
+                  style={{ transitionDelay: howReveal.visible ? "0ms" : `${i * 120}ms` }}
                   className={cn(
                     "group relative rounded-2xl border border-border/70 bg-card/75 p-6 text-center backdrop-blur-sm shadow-sm transition-all duration-500 hover:shadow-lg hover:border-primary/25 hover:-translate-y-0.5 dark:border-white/10 dark:bg-white/5",
-                    howReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+                    howReveal.visible ? "translate-y-0" : "translate-y-6",
                   )}
                 >
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20 transition-transform duration-300 group-hover:scale-110">
@@ -582,7 +590,7 @@ export default function LandingPage() {
             ref={rolesReveal.ref}
             className={cn(
               "mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 transition-all duration-700",
-              rolesReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8",
+              rolesReveal.visible ?"translate-y-0" : "translate-y-8",
             )}
           >
             <div className="text-center">
@@ -669,7 +677,7 @@ export default function LandingPage() {
             ref={faqReveal.ref}
             className={cn(
               "mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 transition-all duration-700",
-              faqReveal.visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8",
+              faqReveal.visible ?"translate-y-0" : "translate-y-8",
             )}
           >
             <div className="text-center">
@@ -679,32 +687,7 @@ export default function LandingPage() {
               </h2>
             </div>
             <Accordion type="single" collapsible className="mt-8 w-full">
-              {[
-                {
-                  q: "Is MealTrack free?",
-                  a: "Yes. Anyone can sign up and create a mess for free — no card, no trial countdown. Joining a mess is free too; your manager's invite link is all you need.",
-                },
-                {
-                  q: "How do I invite my housemates?",
-                  a: "The manager creates an invite link from inside the app and shares it however works — chat, SMS, anything. Anyone who opens it can sign up and join that mess.",
-                },
-                {
-                  q: "How does MealTrack split costs?",
-                  a: "Meal expenses are split by meals actually eaten (meal rate = meal costs ÷ total meals). Utility and other fixed costs are split equally, prorated to how long each member was in the mess during the cycle.",
-                },
-                {
-                  q: "What happens when the month ends?",
-                  a: "The manager closes the cycle. MealTrack computes every member's balance — who pays in, who gets a refund — to whole-taka precision, and archives the cycle read-only in History.",
-                },
-                {
-                  q: "Who can see my mess's data?",
-                  a: "Only the members of your mess. Numbers are never public. If the manager enables a shared (\u201cMeal Code\u201d) view, it\u2019s read-only and meant for sharing balances \u2014 and they control it.",
-                },
-                {
-                  q: "Do I need to install anything?",
-                  a: "No. It runs in your browser on phone and desktop. If you want it on your home screen, it's installable as a web app — and it updates itself.",
-                },
-              ].map(({ q, a }, i) => (
+              {LANDING_FAQS.map(({ q, a }, i) => (
                 <AccordionItem key={q} value={`faq-${i}`}>
                   <AccordionTrigger className="text-left text-sm font-semibold sm:text-base">
                     {q}
@@ -724,7 +707,7 @@ export default function LandingPage() {
             ref={ctaReveal.ref}
             className={cn(
               "mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 transition-all duration-700",
-              ctaReveal.visible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-8 scale-[0.97]",
+              ctaReveal.visible ? "translate-y-0 scale-100" : "translate-y-8 scale-[0.97]",
             )}
           >
             <div className="relative overflow-hidden rounded-3xl border border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 px-6 py-12 text-center text-white shadow-2xl shadow-emerald-950/20 sm:py-16 dark:border-white/10">
