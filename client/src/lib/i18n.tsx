@@ -3,8 +3,9 @@
  *
  * Deliberately dependency-free (no react-i18next) — two locales, a flat
  * dot-key dictionary, localStorage persistence, and <html lang> sync.
- * English stays the default and the SEO surface; Bengali is a user choice
- * persisted per browser.
+ * English is the default; Bengali is a first-class, independently indexed
+ * locale (the prerendered /bn page links here with ?lang=bn so the choice
+ * carries through into the app).
  */
 import {
   createContext,
@@ -49,12 +50,25 @@ export function useI18n(): I18nContextValue {
 
 function readInitialLocale(): Locale {
   if (typeof window === "undefined") return "en";
+  // An explicit ?lang=bn from the prerendered Bengali landing page wins, so a
+  // visitor who chose বাংলা keeps that choice after navigating into the app.
+  const fromUrl = new URLSearchParams(window.location.search).get("lang");
+  if (fromUrl === "bn" || fromUrl === "en") return fromUrl;
   const saved = window.localStorage.getItem(STORAGE_KEY);
   return saved === "bn" || saved === "en" ? saved : "en";
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(readInitialLocale);
+export function I18nProvider({
+  children,
+  initialLocale,
+}: {
+  children: ReactNode;
+  /** Used by the build-time prerenderer; runtime callers leave this unset. */
+  initialLocale?: Locale;
+}) {
+  const [locale, setLocaleState] = useState<Locale>(
+    () => initialLocale ?? readInitialLocale(),
+  );
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);

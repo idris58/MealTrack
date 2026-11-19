@@ -1,7 +1,8 @@
-import express, { type Express, type Request } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import fs from "fs";
 import path from "path";
 import { buildMetaBlock, resolvePublicMeta } from "./public-meta";
+import { PUBLIC_SEO_PATHS, absoluteUrl, buildAlternateLinks } from "@shared/seo-meta";
 
 const META_BLOCK_PATTERN = /<!--\s*MT:META:START\s*-->([\s\S]*?)<!--\s*MT:META:END\s*-->/;
 const SAFE_HOST_PATTERN = /^[A-Za-z0-9.\-:[\]]+$/;
@@ -47,13 +48,35 @@ export function serveStatic(app: Express) {
   });
 
   app.get("/sitemap.xml", (req, res) => {
-    const origin = xmlEscape(requestOrigin(req));
+    const rawOrigin = requestOrigin(req);
+    let lastmod = new Date().toISOString().slice(0, 10);
+    try {
+      const stat = fs.statSync(path.join(distPath, "seo", "index.html"));
+      lastmod = stat.mtime.toISOString().slice(0, 10);
+    } catch {
+      /* no prerendered file yet — today is a safe fallback */
+    }
+    const alternates = buildAlternateLinks(rawOrigin)
+      .map((link) => `    ${link.replace(/^<link\b/, "<xhtml:link")}`)
+      .join("\n");
+    const entries = PUBLIC_SEO_PATHS.map((pathname) =>
+      [
+        "  <url>",
+        `    <loc>${xmlEscape(absoluteUrl(rawOrigin, pathname))}</loc>`,
+        `    <lastmod>${lastmod}</lastmod>`,
+        "    <changefreq>monthly</changefreq>",
+        `    <priority>${pathname === "/" ? "1.0" : "0.9"}</priority>`,
+        alternates,
+        "  </url>",
+      ].join("\n"),
+    ).join("\n");
+
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.type("application/xml").send(
       [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-        `  <url><loc>${origin}/</loc><changefreq>monthly</changefreq><priority>1.0</priority></url>`,
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+        entries,
         "</urlset>",
         "",
       ].join("\n"),
@@ -76,6 +99,24 @@ export function serveStatic(app: Express) {
       }
     },
   }));
+
+  // Fully crawlable public pages, served ahead of the SPA catch-all. The SPA
+  // shell remains at /index.html so the service worker and /app/* are intact.
+  const sendSeoPage = (relativePath: string) =>
+    (_req: Request, res: Response, next: NextFunction) => {
+      const file = path.join(distPath, "seo", relativePath);
+      if (!fs.existsSync(file)) {
+        next();
+        return;
+      }
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("X-Robots-Tag", "index, follow");
+      res.type("html").sendFile(file);
+    };
+
+  app.get("/", sendSeoPage("index.html"));
+  app.get("/bn", sendSeoPage(path.join("bn", "index.html")));
+  app.get("/bn/", sendSeoPage(path.join("bn", "index.html")));
 
   const indexHtml = fs.readFileSync(path.resolve(distPath, "index.html"), "utf8");
 

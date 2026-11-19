@@ -16,6 +16,8 @@ import {
   Zap,
   Bell,
   Share2,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -42,8 +44,11 @@ function useReveal<T extends HTMLElement = HTMLDivElement>(
   // layout immediately — content is never hidden, only nudged into place.
   const [visible, setVisible] = useState(
     () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      // During build-time prerendering there is no window: render the final,
+      // fully visible state so all copy is present in the served HTML.
+      typeof window === "undefined"
+        ? true
+        : window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
 
   useEffect(() => {
@@ -240,13 +245,39 @@ function PanelOrbs() {
 const signBtnClass =
   "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+/** Theme button for the prerendered (no-React) pages, driven by /seo-landing.js. */
+function StaticThemeToggle() {
+  return (
+    <button
+      type="button"
+      data-seo-theme
+      aria-label="Switch theme"
+      aria-pressed="false"
+      className="relative h-9 w-[3.25rem] rounded-full border border-primary/20 bg-primary/[0.04] p-0 shadow-sm transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-md"
+    >
+      <span className="absolute left-1 flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-sm">
+        <Sun className="absolute h-4 w-4 text-amber-500" aria-hidden="true" />
+        <Moon className="absolute h-4 w-4 text-indigo-400 opacity-0" aria-hidden="true" />
+      </span>
+      <span className="sr-only">Switch theme</span>
+    </button>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Page                                                                 */
 /* ------------------------------------------------------------------ */
 
-export default function LandingPage() {
+export default function LandingPage({ seoStatic = false }: { seoStatic?: boolean }) {
   const year = new Date().getFullYear();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+
+  // On the prerendered Bengali page carry the locale into the app so the
+  // choice survives the jump from /bn to /app/auth.
+  const withLang = (url: string): string => {
+    if (!seoStatic || locale !== "bn") return url;
+    return url.includes("?") ? `${url}&lang=bn` : `${url}?lang=bn`;
+  };
 
   /* Navbar background on scroll */
   const [scrolled, setScrolled] = useState(false);
@@ -298,13 +329,24 @@ export default function LandingPage() {
             </a>
           </nav>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <LocaleToggle />
-            <ThemeToggle />
+            {seoStatic ? (
+              <a
+                href={locale === "bn" ? "/" : "/bn"}
+                aria-label={t("nav.switchLang")}
+                title={t("nav.switchLang")}
+                className="inline-flex h-9 items-center rounded-full border border-primary/20 bg-primary/[0.04] px-3 text-[11px] font-bold text-foreground shadow-sm"
+              >
+                {t("nav.switchLang")}
+              </a>
+            ) : (
+              <LocaleToggle />
+            )}
+            {seoStatic ? <StaticThemeToggle /> : <ThemeToggle />}
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-              <a href="/app/auth">{t("nav.signIn")}</a>
+              <a href={withLang("/app/auth")}>{t("nav.signIn")}</a>
             </Button>
             <Button asChild size="sm" className="shadow-sm shadow-primary/20">
-              <a href="/app/auth?mode=signup">{t("nav.createMess")}</a>
+              <a href={withLang("/app/auth?mode=signup")}>{t("nav.createMess")}</a>
             </Button>
           </div>
         </div>
@@ -335,13 +377,13 @@ export default function LandingPage() {
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                   <Button asChild size="lg" className="w-full shadow-lg shadow-primary/25 transition-all hover:shadow-xl hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] sm:w-auto">
-                    <a href="/app/auth?mode=signup" className="gap-2">
+                    <a href={withLang("/app/auth?mode=signup")} className="gap-2">
                       {t("hero.createMessFree")}
                       <ArrowRight className="h-4 w-4" />
                     </a>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-                    <a href="/app/auth">{t("hero.signIn")}</a>
+                    <a href={withLang("/app/auth")}>{t("hero.signIn")}</a>
                   </Button>
                 </div>
                 <div className="mt-5 space-y-1.5">
@@ -618,7 +660,7 @@ export default function LandingPage() {
                 </div>
                 <div className="relative mt-auto pt-8">
                   <a
-                    href="/app/auth?mode=signup"
+                    href={withLang("/app/auth?mode=signup")}
                     className={cn(
                       signBtnClass,
                       "bg-primary px-5 py-3 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98]",
@@ -655,7 +697,7 @@ export default function LandingPage() {
                 </div>
                 <div className="mt-auto pt-8">
                   <Button asChild variant="outline">
-                    <a href="/app/auth">{t("roles.memberCta")}</a>
+                    <a href={withLang("/app/auth")}>{t("roles.memberCta")}</a>
                   </Button>
                 </div>
               </div>
@@ -678,25 +720,43 @@ export default function LandingPage() {
                 {t("faq.title")}
               </h2>
             </div>
-            <Accordion type="single" collapsible className="mt-8 w-full">
-              {[
-                { q: t("faq.q1"), a: t("faq.a1") },
-                { q: t("faq.q2"), a: t("faq.a2") },
-                { q: t("faq.q3"), a: t("faq.a3") },
-                { q: t("faq.q4"), a: t("faq.a4") },
-                { q: t("faq.q5"), a: t("faq.a5") },
-                { q: t("faq.q6"), a: t("faq.a6") },
-              ].map(({ q, a }, i) => (
-                <AccordionItem key={q} value={`faq-${i}`}>
-                  <AccordionTrigger className="text-left text-sm font-semibold sm:text-base">
-                    {q}
-                  </AccordionTrigger>
-                  <AccordionContent className="leading-6 text-muted-foreground">
-                    {a}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            {seoStatic ? (
+              // Native <details> keeps every answer in the served HTML (and
+              // works without JS) so the FAQPage JSON-LD has visible content.
+              <div className="mt-8 w-full divide-y divide-border/70 rounded-2xl border border-border/70 bg-card/60">
+                {Array.from({ length: 6 }, (_, i) => ({
+                  q: t(`faq.q${i + 1}`),
+                  a: t(`faq.a${i + 1}`),
+                })).map(({ q, a }) => (
+                  <details key={q} className="group px-5 py-4">
+                    <summary className="cursor-pointer list-none text-left text-sm font-semibold sm:text-base [&::-webkit-details-marker]:hidden">
+                      {q}
+                    </summary>
+                    <p className="mt-3 leading-6 text-muted-foreground">{a}</p>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <Accordion type="single" collapsible className="mt-8 w-full">
+                {[
+                  { q: t("faq.q1"), a: t("faq.a1") },
+                  { q: t("faq.q2"), a: t("faq.a2") },
+                  { q: t("faq.q3"), a: t("faq.a3") },
+                  { q: t("faq.q4"), a: t("faq.a4") },
+                  { q: t("faq.q5"), a: t("faq.a5") },
+                  { q: t("faq.q6"), a: t("faq.a6") },
+                ].map(({ q, a }, i) => (
+                  <AccordionItem key={q} value={`faq-${i}`}>
+                    <AccordionTrigger className="text-left text-sm font-semibold sm:text-base">
+                      {q}
+                    </AccordionTrigger>
+                    <AccordionContent className="leading-6 text-muted-foreground">
+                      {a}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
           </div>
         </section>
 
@@ -732,13 +792,13 @@ export default function LandingPage() {
                   size="lg"
                   className="w-full shadow-lg shadow-black/30 hover:scale-[1.02] active:scale-[0.98] transition-all sm:w-auto"
                 >
-                  <a href="/app/auth?mode=signup" className="gap-2">
+                  <a href={withLang("/app/auth?mode=signup")} className="gap-2">
                     {t("cta.button")}
                     <ArrowRight className="h-4 w-4" />
                   </a>
                 </Button>
                 <a
-                  href="/app/auth"
+                  href={withLang("/app/auth")}
                   className={cn(
                     signBtnClass,
                     "w-full border border-white/20 bg-white/5 px-6 py-3 text-emerald-50 hover:bg-white/10 sm:w-auto",
@@ -781,9 +841,9 @@ export default function LandingPage() {
                 {t("footer.account")}
               </p>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li><a href="/app/auth?mode=signup" className="transition-colors hover:text-foreground">{t("footer.createMess")}</a></li>
-                <li><a href="/app/auth" className="transition-colors hover:text-foreground">{t("nav.signIn")}</a></li>
-                <li><a href="/app/auth" className="transition-colors hover:text-foreground">{t("footer.joinInvite")}</a></li>
+                <li><a href={withLang("/app/auth?mode=signup")} className="transition-colors hover:text-foreground">{t("footer.createMess")}</a></li>
+                <li><a href={withLang("/app/auth")} className="transition-colors hover:text-foreground">{t("nav.signIn")}</a></li>
+                <li><a href={withLang("/app/auth")} className="transition-colors hover:text-foreground">{t("footer.joinInvite")}</a></li>
               </ul>
             </nav>
           </div>

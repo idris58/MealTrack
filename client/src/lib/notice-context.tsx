@@ -9,7 +9,7 @@
  * – Exposes postNotice, updateNotice, deleteNotice, dismissNotice,
  *   restoreNotice and broadcastToServer (fires the push delivery).
  */
-import React, {
+import {
   createContext,
   useCallback,
   useContext,

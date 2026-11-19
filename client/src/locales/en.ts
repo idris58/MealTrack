@@ -1,3 +1,5 @@
+import { LANDING_FAQS, faqDictionaryEntries } from "@shared/landing-content";
+
 const en = {
   // Nav
   "nav.skipToContent": "Skip to content",
@@ -103,27 +105,10 @@ const en = {
   "roles.p4": "Same numbers the manager sees — no parallel ledgers, no doubt",
   "roles.memberCta": "Have an invite? Sign in",
 
-  // FAQ
+  // FAQ — Q&A comes from the shared source so it matches the JSON-LD exactly
   "faq.kicker": "FAQ",
   "faq.title": "Fair questions, straight answers.",
-  "faq.q1": "Is MealTrack free?",
-  "faq.a1":
-    "Yes. Anyone can sign up and create a mess for free — no card, no trial countdown. Joining a mess is free too; your manager's invite link is all you need.",
-  "faq.q2": "How do I invite my housemates?",
-  "faq.a2":
-    "The manager creates an invite link from inside the app and shares it however works — chat, SMS, anything. Anyone who opens it can sign up and join that mess.",
-  "faq.q3": "How does MealTrack split costs?",
-  "faq.a3":
-    "Meal expenses are split by meals actually eaten (meal rate = meal costs ÷ total meals). Utility and other fixed costs are split equally, prorated to how long each member was in the mess during the cycle.",
-  "faq.q4": "What happens when the month ends?",
-  "faq.a4":
-    "The manager closes the cycle. MealTrack computes every member's balance — who pays in, who gets a refund — to whole-taka precision, and archives the cycle read-only in History.",
-  "faq.q5": "Who can see my mess's data?",
-  "faq.a5":
-    "Only the members of your mess. Numbers are never public. If the manager enables a shared (“Meal Code”) view, it's read-only and meant for sharing balances — and they control it.",
-  "faq.q6": "Do I need to install anything?",
-  "faq.a6":
-    "No. It runs in your browser on phone and desktop. If you want it on your home screen, it's installable as a web app — and it updates itself.",
+  ...faqDictionaryEntries(LANDING_FAQS),
 
   // Final CTA
   "cta.title": "Close your next cycle without the drama.",

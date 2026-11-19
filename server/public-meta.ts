@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase-admin";
-import { LANDING_FAQS } from "@shared/landing-content";
+import { SEO, buildSeoJsonLd, escapeHtmlAttr } from "@shared/seo-meta";
 
 /**
  * Resolves per-path <head> metadata for the SPA shell. User-facing link
@@ -22,9 +22,8 @@ export interface ResolvedMeta {
   jsonLd?: boolean;
 }
 
-export const HOME_TITLE = "MealTrack — Shared Meal & Cost Tracker";
-export const HOME_DESCRIPTION =
-  "Free shared ledger for messes and shared households — log meals and bazar costs, track deposits, settle monthly balances automatically. Create your mess today.";
+export const HOME_TITLE = SEO.en.title;
+export const HOME_DESCRIPTION = SEO.en.description;
 
 const GENERIC_TITLE = "MealTrack";
 const SHARED_FALLBACK: ResolvedMeta = {
@@ -164,15 +163,6 @@ export async function resolvePublicMeta(pathname: string): Promise<ResolvedMeta>
   return remember(path, meta);
 }
 
-export function escapeHtmlAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /** Renders the HTML that replaces the MT:META marker block in index.html. */
 export function buildMetaBlock(meta: ResolvedMeta, origin: string, pathname: string): string {
   const title = escapeHtmlAttr(meta.title);
@@ -206,28 +196,7 @@ export function buildMetaBlock(meta: ResolvedMeta, origin: string, pathname: str
   }
 
   if (meta.jsonLd) {
-    const jsonLd = {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebApplication",
-          name: "MealTrack",
-          url: `${origin}/`,
-          description: HOME_DESCRIPTION,
-          applicationCategory: "FinanceApplication",
-          operatingSystem: "Any",
-        },
-        {
-          "@type": "FAQPage",
-          mainEntity: LANDING_FAQS.map(({ q, a }) => ({
-            "@type": "Question",
-            name: q,
-            acceptedAnswer: { "@type": "Answer", text: a },
-          })),
-        },
-      ],
-    };
-    lines.push(`<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`);
+    lines.push(`<script type="application/ld+json">${buildSeoJsonLd(origin, "en")}</script>`);
   }
 
   return lines.join("\n    ");

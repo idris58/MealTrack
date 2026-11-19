@@ -43,7 +43,14 @@ registerRoute(
       headers,
     });
   }, {
-    denylist: [/^\/api\//, /^\/robots\.txt(\?.*)?$/, /^\/sitemap\.xml(\?.*)?$/],
+    denylist: [
+      /^\/api\//,
+      /^\/robots\.txt(\?.*)?$/,
+      /^\/sitemap\.xml(\?.*)?$/,
+      // /bn is a distinct prerendered locale page — always go to the network
+      // instead of handing the cached English app shell to Bengali visitors.
+      /^\/bn(\/|\?|$)/,
+    ],
   }),
 );
 

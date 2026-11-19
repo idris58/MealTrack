@@ -355,7 +355,7 @@ function AppShell() {
 
     const isMemberRole = profile?.role === "member";
     const pageTitleMap: Record<string, string> = {
-      "/": "MealTrack — Shared Meal & Cost Tracker",
+      "/": "MealTrack - Mess Management & Meal Tracking Software",
       "/app": "Dashboard - MealTrack",
       "/members": isMemberRole ? "Deposits - MealTrack" : "Members - MealTrack",
       "/app/members": isMemberRole ? "Deposits - MealTrack" : "Members - MealTrack",
