@@ -245,22 +245,70 @@ function PanelOrbs() {
 const signBtnClass =
   "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** Theme button for the prerendered (no-React) pages, driven by /seo-landing.js. */
+/**
+ * Markup-identical stand-ins for the React toggles on prerendered pages.
+ * /seo-landing.js supplies the behaviour (no React is loaded there).
+ */
 function StaticThemeToggle() {
   return (
     <button
       type="button"
       data-seo-theme
-      aria-label="Switch theme"
+      aria-label="Switch to dark mode"
       aria-pressed="false"
-      className="relative h-9 w-[3.25rem] rounded-full border border-primary/20 bg-primary/[0.04] p-0 shadow-sm transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-md"
+      className="relative inline-flex h-9 w-[3.25rem] items-center justify-center rounded-full border border-primary/20 bg-primary/[0.04] p-0 shadow-sm transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-md"
     >
-      <span className="absolute left-1 flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-sm">
-        <Sun className="absolute h-4 w-4 text-amber-500" aria-hidden="true" />
-        <Moon className="absolute h-4 w-4 text-indigo-400 opacity-0" aria-hidden="true" />
+      <span
+        data-seo-theme-knob
+        className="absolute left-1 flex h-7 w-7 items-center justify-center rounded-full bg-background shadow-sm transition-transform duration-300"
+      >
+        <Sun
+          data-seo-theme-sun
+          className="absolute h-4 w-4 rotate-0 text-amber-500 transition-all duration-300"
+          aria-hidden="true"
+        />
+        <Moon
+          data-seo-theme-moon
+          className="absolute h-4 w-4 -rotate-90 text-indigo-400 opacity-0 transition-all duration-300"
+          aria-hidden="true"
+        />
       </span>
       <span className="sr-only">Switch theme</span>
     </button>
+  );
+}
+
+function StaticLocaleToggle({ locale }: { locale: "en" | "bn" }) {
+  return (
+    <div
+      role="group"
+      aria-label="Change language"
+      title="Change language"
+      className="inline-flex h-9 items-center rounded-full border border-primary/20 bg-primary/[0.04] p-0.5 shadow-sm"
+    >
+      {[
+        { value: "en", label: "EN", href: "/", full: "English" },
+        { value: "bn", label: "বাং", href: "/bn", full: "বাংলা" },
+      ].map(({ value, label, href, full }) => {
+        const active = locale === value;
+        return (
+          <a
+            key={value}
+            href={href}
+            aria-label={full}
+            aria-pressed={active}
+            className={cn(
+              "flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-[11px] font-bold leading-none transition-all duration-200",
+              active
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </a>
+        );
+      })}
+    </div>
   );
 }
 
@@ -329,18 +377,7 @@ export default function LandingPage({ seoStatic = false }: { seoStatic?: boolean
             </a>
           </nav>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            {seoStatic ? (
-              <a
-                href={locale === "bn" ? "/" : "/bn"}
-                aria-label={t("nav.switchLang")}
-                title={t("nav.switchLang")}
-                className="inline-flex h-9 items-center rounded-full border border-primary/20 bg-primary/[0.04] px-3 text-[11px] font-bold text-foreground shadow-sm"
-              >
-                {t("nav.switchLang")}
-              </a>
-            ) : (
-              <LocaleToggle />
-            )}
+            {seoStatic ? <StaticLocaleToggle locale={locale} /> : <LocaleToggle />}
             {seoStatic ? <StaticThemeToggle /> : <ThemeToggle />}
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
               <a href={withLang("/app/auth")}>{t("nav.signIn")}</a>
