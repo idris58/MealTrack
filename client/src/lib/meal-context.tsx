@@ -76,6 +76,9 @@ type MealOffRequestsData = {
   error: string | null;
 };
 const MealOffRequestsContext = createContext<MealOffRequestsData | undefined>(undefined);
+type BootstrapNotice = { id: string; title: string; content: string; expires_at: string; created_at: string } | null;
+type MealBootstrapData = { scopeKey: string | null; notice: BootstrapNotice };
+const MealBootstrapContext = createContext<MealBootstrapData | undefined>(undefined);
 type MealRowsData = Pick<MealDataState, 'expenses' | 'deposits' | 'mealLogs'>;
 type MealCyclesData = Pick<MealDataState, 'cycles' | 'activeCycle' | 'pendingCycle'>;
 type MealCycleDetailsData = Pick<MealDataState, 'getCycleDetails' | 'isCycleDetailsLoading' | 'getCycleDetailsError'> & { revision: unknown };
@@ -147,6 +150,16 @@ type CycleDepositRow = {
   kind: DepositKind | null;
   note: string | null;
   created_at: string;
+};
+
+type MessBootstrapPayload = {
+  members: MemberRow[];
+  cycles: CycleRow[];
+  deposits: CycleDepositRow[];
+  expenses: ExpenseRow[];
+  meal_logs: MealLogRow[];
+  notice: BootstrapNotice;
+  meal_off_requests: MealOffRequest[];
 };
 
 type MealDataSnapshot = {
@@ -369,6 +382,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [mealOffRequestsLoading, setMealOffRequestsLoading] = useState(true);
   const [mealOffRequestsError, setMealOffRequestsError] = useState<string | null>(null);
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvents>({ notices: 0, mealOffRequests: 0, profiles: 0 });
+  const [bootstrapNotice, setBootstrapNotice] = useState<BootstrapNotice>(null);
+  const [bootstrapScopeKey, setBootstrapScopeKey] = useState<string | null>(null);
+  const mealOffBootstrapScopeRef = useRef<string | null>(null);
   const [loadedCycleIds, setLoadedCycleIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -381,14 +397,22 @@ export function MealProvider({ children }: { children: ReactNode }) {
   React.useEffect(() => {
     let active = true;
     if (!messId) {
+      mealOffBootstrapScopeRef.current = null;
       setMealOffRequests([]);
       setMealOffRequestsLoading(false);
       setMealOffRequestsError(null);
       return () => { active = false; };
     }
 
-    setMealOffRequests([]);
-    setMealOffRequestsLoading(true);
+    const scopeKey = `${userId}:${messId}`;
+    if (mealOffBootstrapScopeRef.current !== scopeKey) {
+      mealOffBootstrapScopeRef.current = scopeKey;
+      setMealOffRequests([]);
+      setMealOffRequestsLoading(true);
+      setMealOffRequestsError(null);
+      return () => { active = false; };
+    }
+
     setMealOffRequestsError(null);
     void supabase
       .from('meal_off_requests')
@@ -410,7 +434,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       });
 
     return () => { active = false; };
-  }, [messId, realtimeEvents.mealOffRequests]);
+  }, [userId, messId, realtimeEvents.mealOffRequests]);
 
   const mealOffRequestsValue = useMemo<MealOffRequestsData>(() => ({
     requests: mealOffRequests,
@@ -515,11 +539,6 @@ export function MealProvider({ children }: { children: ReactNode }) {
     return fetchCycleRowsForScope(messId, [cycleId]);
   }, [userId, messId]);
 
-  const fetchCycleRowsForCycles = useCallback(async (cycleIds: string[]) => {
-    if (!userId || !messId) return { deposits: [], expenses: [], mealLogs: [] };
-    return fetchCycleRowsForScope(messId, cycleIds);
-  }, [userId, messId]);
-
   const cycleLoader = useCycleLoader({
     enabled: Boolean(userId && messId),
     isLoaded: (cycleId) => computedCycleDetails.getCycleDetails(cycleId) !== null,
@@ -612,25 +631,10 @@ export function MealProvider({ children }: { children: ReactNode }) {
     try {
       if (isInitialLoad && !snapshot) setLoading(true);
 
-      const [membersResult, cyclesResult] = await Promise.all([
-        supabase
-          .from('members')
-          .select('id, name, avatar, created_at, deleted_at, delete_expires_at, profile_id')
-          .eq('mess_id', messId)
-          .order('sort_order', { ascending: true, nullsFirst: false })
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('cycles')
-          .select('id, name, status, started_at, closed_at, finalized_at, members_snapshot, settlement_snapshot')
-          .eq('mess_id', messId)
-          .is('deleted_at', null)
-          .order('started_at', { ascending: false }),
-      ]);
-
-      if (membersResult.error) throw membersResult.error;
-      if (cyclesResult.error) throw cyclesResult.error;
-
-      const memberRows = (membersResult.data || []) as MemberRow[];
+      const { data, error } = await supabase.rpc('get_mess_bootstrap');
+      if (error) throw error;
+      const bootstrap = (data ?? {}) as unknown as MessBootstrapPayload;
+      const memberRows = bootstrap.members ?? [];
       const nextMembers = memberRows
         .filter((member) => !member.deleted_at)
         .map((member) => ({
@@ -660,7 +664,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           archived: !member.delete_expires_at,
         }));
 
-      const nextCycles = ((cyclesResult.data || []) as CycleRow[])
+      const nextCycles = (bootstrap.cycles ?? [])
         .map((cycle) => ({
           id: cycle.id,
           name: cycle.name || getDefaultCycleBaseName(cycle.started_at),
@@ -675,10 +679,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const initialCycleIds = nextCycles
         .filter((cycle) => cycle.status === 'active' || cycle.status === 'pending')
         .map((cycle) => cycle.id);
-      const initialRows = await fetchCycleRowsForCycles(initialCycleIds);
-      const nextDeposits = initialRows.deposits;
-      const nextExpenses = initialRows.expenses;
-      const nextMealLogs = initialRows.mealLogs;
+      const nextDeposits = mapDepositRows(bootstrap.deposits ?? []);
+      const nextExpenses = mapExpenseRows(bootstrap.expenses ?? []);
+      const nextMealLogs = mapMealLogRows(bootstrap.meal_logs ?? []);
       const rowsWithQueue = overlayQueuedOperations({
         deposits: nextDeposits,
         expenses: nextExpenses,
@@ -692,11 +695,19 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setAllExpenses(rowsWithQueue.expenses);
       setAllMealLogs(rowsWithQueue.mealLogs);
       setLoadedCycleIds(new Set(initialCycleIds));
+      setMealOffRequests(bootstrap.meal_off_requests ?? []);
+      mealOffBootstrapScopeRef.current = `${userId}:${messId}`;
+      setMealOffRequestsError(null);
+      setMealOffRequestsLoading(false);
+      setBootstrapNotice(bootstrap.notice ?? null);
+      setBootstrapScopeKey(`${userId}:${messId}`);
       setDataError(null);
       hasLoadedDataRef.current = true;
 
     } catch (error) {
       console.error('Error loading data:', error);
+      setMealOffRequestsError(error instanceof Error ? error.message : 'Unable to load meal-off requests.');
+      setMealOffRequestsLoading(false);
 
       // If we go offline mid-load, try falling back to cache
       if (!navigator.onLine) {
@@ -741,7 +752,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, messId, fetchCycleRowsForCycles, setAllChangelogEntries]);
+  }, [userId, messId, setAllChangelogEntries]);
 
   React.useEffect(() => {
     if (!userId || !messId || !hasLoadedDataRef.current || loadedScopeRef.current !== `${userId}:${messId}`) return;
@@ -1367,6 +1378,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   ]);
 
   return (
+    <MealBootstrapContext.Provider value={{ scopeKey: bootstrapScopeKey, notice: bootstrapNotice }}>
     <MealOffRequestsContext.Provider value={mealOffRequestsValue}>
     <RealtimeEventsContext.Provider value={realtimeEvents}>
       <MealActionsContext.Provider value={actionsValue}>
@@ -1388,6 +1400,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       </MealActionsContext.Provider>
     </RealtimeEventsContext.Provider>
     </MealOffRequestsContext.Provider>
+    </MealBootstrapContext.Provider>
   );
 }
 
@@ -1412,6 +1425,10 @@ export function useRealtimeEvents() {
 
 export function useMealOffRequests() {
   return requireMealContext(useContext(MealOffRequestsContext), 'useMealOffRequests');
+}
+
+export function useMealBootstrap() {
+  return requireMealContext(useContext(MealBootstrapContext), 'useMealBootstrap');
 }
 
 export function useMealActions() {

@@ -1420,3 +1420,101 @@ $$;
 revoke all on function public.fetch_cycle_rows_for_scope(uuid, uuid[]) from public, anon;
 grant execute on function public.fetch_cycle_rows_for_scope(uuid, uuid[]) to authenticated, service_role;
 
+-- Initial app payload: one authenticated request for the mess roster, cycle
+-- summaries, active/pending cycle rows, current notice, and meal-off requests.
+-- Keep this SECURITY INVOKER so all existing tenant RLS policies still apply.
+create or replace function public.get_mess_bootstrap()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with scope as (
+    select public.current_mess_id() as mess_id
+  ),
+  visible_cycles as (
+    select c.id, c.name, c.status, c.started_at, c.closed_at, c.finalized_at,
+           c.members_snapshot, c.settlement_snapshot
+    from public.cycles c
+    where c.mess_id = (select mess_id from scope)
+      and c.deleted_at is null
+  )
+  select jsonb_build_object(
+    'members', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', m.id, 'name', m.name, 'avatar', m.avatar,
+        'created_at', m.created_at, 'deleted_at', m.deleted_at,
+        'delete_expires_at', m.delete_expires_at, 'profile_id', m.profile_id
+      ) order by m.sort_order asc nulls last, m.created_at asc)
+      from public.members m
+      where m.mess_id = (select mess_id from scope)
+    ), '[]'::jsonb),
+    'cycles', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'name', c.name, 'status', c.status,
+        'started_at', c.started_at, 'closed_at', c.closed_at,
+        'finalized_at', c.finalized_at,
+        'members_snapshot', c.members_snapshot,
+        'settlement_snapshot', c.settlement_snapshot
+      ) order by c.started_at desc)
+      from visible_cycles c
+    ), '[]'::jsonb),
+    'deposits', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', d.id, 'cycle_id', d.cycle_id, 'member_id', d.member_id,
+        'amount', d.amount, 'kind', d.kind, 'note', d.note, 'created_at', d.created_at
+      ) order by d.created_at asc, d.id asc)
+      from public.cycle_deposits d
+      where d.mess_id = (select mess_id from scope)
+        and d.cycle_id in (select id from visible_cycles where status in ('active', 'pending'))
+    ), '[]'::jsonb),
+    'expenses', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', e.id, 'cycle_id', e.cycle_id, 'amount', e.amount,
+        'description', e.description, 'type', e.type, 'date', e.date,
+        'paid_by', e.paid_by, 'updated_at', e.updated_at
+      ) order by e.date desc, e.id asc)
+      from public.expenses e
+      where e.mess_id = (select mess_id from scope)
+        and e.cycle_id in (select id from visible_cycles where status in ('active', 'pending'))
+        and e.deleted_at is null
+    ), '[]'::jsonb),
+    'meal_logs', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', ml.id, 'cycle_id', ml.cycle_id, 'member_id', ml.member_id,
+        'date', ml.date, 'count', ml.count, 'updated_at', ml.updated_at
+      ) order by ml.date desc, ml.id asc)
+      from public.meal_logs ml
+      where ml.mess_id = (select mess_id from scope)
+        and ml.cycle_id in (select id from visible_cycles where status in ('active', 'pending'))
+    ), '[]'::jsonb),
+    'notice', (
+      select jsonb_build_object(
+        'id', n.id, 'title', n.title, 'content', n.content,
+        'expires_at', n.expires_at, 'created_at', n.created_at
+      )
+      from public.notices n
+      where n.mess_id = (select mess_id from scope)
+        and n.expires_at > now()
+      order by n.created_at desc
+      limit 1
+    ),
+    'meal_off_requests', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', r.id, 'mess_id', r.mess_id, 'cycle_id', r.cycle_id,
+        'member_id', r.member_id, 'requested_by_profile_id', r.requested_by_profile_id,
+        'start_date', r.start_date, 'end_date', r.end_date,
+        'meal_period', r.meal_period, 'status', r.status,
+        'note', r.note, 'created_at', r.created_at
+      ) order by r.start_date asc, r.created_at desc)
+      from public.meal_off_requests r
+      where r.mess_id = (select mess_id from scope)
+        and r.status in ('pending', 'approved')
+    ), '[]'::jsonb)
+  );
+$$;
+
+revoke all on function public.get_mess_bootstrap() from public, anon;
+grant execute on function public.get_mess_bootstrap() to authenticated;
+

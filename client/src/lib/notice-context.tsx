@@ -20,7 +20,7 @@ import {
 } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth-context';
-import { useRealtimeEvents } from './meal-context';
+import { useMealBootstrap, useRealtimeEvents } from './meal-context';
 import { parseISO } from 'date-fns';
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -98,10 +98,13 @@ function pruneDismissedNoticeKeys(activeNotice: Notice | null) {
 export function NoticeProvider({ children }: { children: ReactNode }) {
   const { user, profile, session } = useAuth();
   const { notices: noticeRevision } = useRealtimeEvents();
+  const bootstrap = useMealBootstrap();
   const [notice, setNotice] = useState<Notice | null>(null);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(false);
   const expireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedBootstrapScopeRef = useRef<string | null>(null);
+  const consumedNoticeRevisionRef = useRef<number>(noticeRevision);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -182,8 +185,27 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     if (!user?.id || !profile?.mess_id) {
       setNotice(null);
       setLoading(false);
+      initializedBootstrapScopeRef.current = null;
       return;
     }
+    const scopeKey = `${user.id}:${profile.mess_id}`;
+    if (bootstrap.scopeKey !== scopeKey) {
+      setLoading(true);
+      return;
+    }
+
+    if (initializedBootstrapScopeRef.current !== scopeKey) {
+      const n = bootstrap.notice ? rowToNotice(bootstrap.notice) : null;
+      setNotice(n);
+      checkDismissed(n);
+      if (n) scheduleExpiry(n);
+      initializedBootstrapScopeRef.current = scopeKey;
+      consumedNoticeRevisionRef.current = noticeRevision;
+      setLoading(false);
+      return;
+    }
+    if (consumedNoticeRevisionRef.current === noticeRevision) return;
+    consumedNoticeRevisionRef.current = noticeRevision;
     let active = true;
 
     const load = async () => {
@@ -215,7 +237,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     void load();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, profile?.mess_id, noticeRevision]);
+  }, [user?.id, profile?.mess_id, noticeRevision, bootstrap.scopeKey, bootstrap.notice, checkDismissed]);
 
   useEffect(() => {
     if (loading) return;
