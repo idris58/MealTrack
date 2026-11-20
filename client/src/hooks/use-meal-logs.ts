@@ -85,70 +85,22 @@ export function useMealLogs(options: Options) {
       return;
     }
 
-    const memberIds = Array.from(new Set(entries.map((entry) => entry.memberId)));
-    let existing;
-    try {
-      const result = await withRequestTimeout((signal) => supabase.from('meal_logs')
-        .select('id, member_id, count, updated_at')
-        .eq('cycle_id', targetCycleId).eq('date', date).in('member_id', memberIds)
-        .abortSignal(signal));
-      if (result.error) {
-        if (isTransientRequestError(result.error)) {
-          await queueMealChanges();
-          return;
-        }
-        throw new Error('Unable to compare existing meal logs. Please try again.');
-      }
-      existing = result.data ?? [];
-    } catch (error) {
-      if (!isTransientRequestError(error)) throw error;
-      await queueMealChanges();
-      return;
-    }
-
-    const existingByMember = new Map(existing.map((log) => [log.member_id, log]));
     const expectedByMember = new Map(expected.map((entry) => [entry.memberId, entry]));
-    const changedEntries = entries.filter((entry) => {
-      const current = existingByMember.get(entry.memberId);
-      const nextCount = Number.isNaN(entry.count) ? 0 : entry.count;
-      if (current && Number(current.count) === nextCount) return false;
-      const baseline = expectedByMember.get(entry.memberId);
-      if (!baseline) return true;
-      const matchesBaseline = baseline.exists
-        ? Boolean(current)
-          && Number(current?.count) === baseline.count
-          && (!baseline.updatedAt || current?.updated_at === baseline.updatedAt)
-        : !current;
-      if (!matchesBaseline) {
-        const conflict = new Error('This meal log changed on another device. Reload it before saving again.') as Error & { code?: string };
-        conflict.code = 'OFFLINE_CONFLICT';
-        throw conflict;
-      }
-      return true;
-    });
-    if (!changedEntries.length) {
-      setMealLogs((previousLogs) => [
-        ...previousLogs.filter((log) => !(log.cycleId === targetCycleId && log.date === date && memberIds.includes(log.memberId))),
-        ...existing.map((log) => ({ id: log.id, cycleId: targetCycleId, memberId: log.member_id, date, count: Number(log.count), updatedAt: log.updated_at })),
-      ]);
-      return;
-    }
 
     try {
-      const expectedForRpc = changedEntries.map((entry) => {
+      const expectedForRpc = entries.map((entry) => {
         const baseline = expectedByMember.get(entry.memberId);
-        const current = existingByMember.get(entry.memberId);
         return {
           memberId: entry.memberId,
-          exists: baseline?.exists ?? Boolean(current),
-          count: baseline?.count ?? Number(current?.count ?? 0),
-          updatedAt: baseline?.updatedAt ?? current?.updated_at ?? null,
+          exists: baseline?.exists ?? false,
+          count: baseline?.count ?? 0,
+          updatedAt: baseline?.updatedAt ?? null,
         };
       });
       const { data, error } = await withRequestTimeout((signal) => supabase.rpc('save_meal_logs', {
         cycle_id_input: targetCycleId,
         date_input: date,
-        entries_input: changedEntries.map((entry) => ({
+        entries_input: entries.map((entry) => ({
           memberId: entry.memberId,
           count: Number.isNaN(entry.count) ? 0 : entry.count,
         })),
@@ -164,7 +116,7 @@ export function useMealLogs(options: Options) {
         updated_at: string;
       }>;
       setMealLogs((previousLogs) => [
-        ...previousLogs.filter((log) => !changedEntries.some((entry) => log.memberId === entry.memberId && log.date === date && log.cycleId === targetCycleId)),
+        ...previousLogs.filter((log) => !entries.some((entry) => log.memberId === entry.memberId && log.date === date && log.cycleId === targetCycleId)),
         ...savedRows.map((log) => ({ id: log.id, cycleId: log.cycle_id, memberId: log.member_id, date: log.date, count: Number(log.count), updatedAt: log.updated_at })),
       ]);
     } catch (error) {
