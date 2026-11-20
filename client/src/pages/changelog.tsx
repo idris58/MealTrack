@@ -803,14 +803,22 @@ export default function ChangelogPage() {
   const [actionFilter, setActionFilter] = useState<ChangelogAction | 'all'>('all');
   const [entityFilter, setEntityFilter] = useState<ChangelogEntityType | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const cycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
+
+  // Debounce the search input so typing doesn't fire a query on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const displayedActiveEntries = collapseEditChains(collapseRestorePairs(activeCycleChangelogEntries));
   const displayedPendingEntries = collapseEditChains(collapseRestorePairs(pendingCycleChangelogEntries));
 
   useEffect(() => {
     const scopedCycleIds = [pendingCycle?.id, activeCycle?.id].filter((id): id is string => Boolean(id));
-    if (scopedCycleIds.length) void loadMoreChangelogEntries(scopedCycleIds, entityFilter, actionFilter, search, true);
-  }, [activeCycle?.id, pendingCycle?.id, actionFilter, entityFilter, search, loadMoreChangelogEntries]);
+    if (scopedCycleIds.length) void loadMoreChangelogEntries(scopedCycleIds, entityFilter, actionFilter, debouncedSearch, true);
+  }, [activeCycle?.id, pendingCycle?.id, actionFilter, entityFilter, debouncedSearch, loadMoreChangelogEntries]);
 
   useEffect(() => {
     if (profile?.role === 'member') setLocation('/app');
@@ -954,7 +962,7 @@ export default function ChangelogPage() {
                 id="changelog-load-more"
                 type="button"
                 variant="outline"
-                onClick={() => void loadMoreChangelogEntries(cycleIds, entityFilter, actionFilter, search)}
+                onClick={() => void loadMoreChangelogEntries(cycleIds, entityFilter, actionFilter, debouncedSearch)}
                 disabled={changelogLoading}
                 className="gap-2"
               >
