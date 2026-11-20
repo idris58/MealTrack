@@ -13,6 +13,7 @@ type Options = {
   setPendingSyncIds: Dispatch<SetStateAction<Set<string>>>;
   getCycleId: (cycleId?: string) => string | null;
   broadcast: () => void;
+  markRealtimeWrite: (table: 'meal_logs', id: string, version: string | undefined) => void;
 };
 
 export function useMealLogs(options: Options) {
@@ -25,7 +26,7 @@ export function useMealLogs(options: Options) {
     cycleId?: string,
     replayExpected?: MealLogVersion[],
   ) => {
-    const { userId, messId, mealLogs, setMealLogs, setPendingSyncIds, getCycleId, broadcast } = latest.current;
+    const { userId, messId, mealLogs, setMealLogs, setPendingSyncIds, getCycleId, broadcast, markRealtimeWrite } = latest.current;
     if (!userId || !messId) throw new Error('Sign in and join a mess before saving meal logs.');
     if (!entries.length) throw new Error('There are no meal entries to save.');
     const targetCycleId = getCycleId(cycleId);
@@ -115,10 +116,38 @@ export function useMealLogs(options: Options) {
         count: number;
         updated_at: string;
       }>;
-      setMealLogs((previousLogs) => [
-        ...previousLogs.filter((log) => !entries.some((entry) => log.memberId === entry.memberId && log.date === date && log.cycleId === targetCycleId)),
-        ...savedRows.map((log) => ({ id: log.id, cycleId: log.cycle_id, memberId: log.member_id, date: log.date, count: Number(log.count), updatedAt: log.updated_at })),
-      ]);
+      for (const row of savedRows) markRealtimeWrite('meal_logs', row.id, row.updated_at);
+      for (const entry of entries) {
+        const nextCount = Number.isNaN(entry.count) ? 0 : entry.count;
+        if (nextCount !== 0) continue;
+        const removed = mealLogs.find((log) => log.memberId === entry.memberId && log.date === date && log.cycleId === targetCycleId);
+        if (removed) markRealtimeWrite('meal_logs', removed.id, removed.updatedAt);
+      }
+      setMealLogs((previousLogs) => {
+        const memberIds = new Set(entries.map((entry) => entry.memberId));
+        const relevant = previousLogs.filter((log) => log.cycleId === targetCycleId && log.date === date && memberIds.has(log.memberId));
+        const savedByMember = new Map(savedRows.map((row) => [row.member_id, row]));
+        const currentByMember = new Map(relevant.map((log) => [log.memberId, log]));
+        const unchanged = relevant.length === savedRows.length && savedRows.every((row) => {
+          const current = currentByMember.get(row.member_id);
+          return current?.id === row.id
+            && current.count === Number(row.count)
+            && current.updatedAt === row.updated_at;
+        });
+        if (unchanged) return previousLogs;
+
+        return [
+          ...previousLogs.filter((log) => !(log.cycleId === targetCycleId && log.date === date && memberIds.has(log.memberId))),
+          ...Array.from(savedByMember.values()).map((row) => ({
+            id: row.id,
+            cycleId: row.cycle_id,
+            memberId: row.member_id,
+            date: row.date,
+            count: Number(row.count),
+            updatedAt: row.updated_at,
+          })),
+        ];
+      });
     } catch (error) {
       if (!isTransientRequestError(error)) {
         const value = error as { code?: string; status?: number; message?: string };

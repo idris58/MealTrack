@@ -53,7 +53,6 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
   const [manualView, setManualView] = useState<'days' | 'grid' | null>(null);
   const view = manualView ?? (isMobile ? 'days' : 'grid');
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [hoverCol, setHoverCol] = useState<string | null>(null);
 
   // Scope: one month (default) or everything.
   const [showAll, setShowAll] = useState(false);
@@ -98,12 +97,36 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
     return map;
   }, [mealLogs]);
 
-  const shownMembers = focusId ? members.filter((m) => m.id === focusId) : members;
+  const shownMembers = useMemo(() => focusId ? members.filter((m) => m.id === focusId) : members, [focusId, members]);
   const countFor = (day: Date, memberId: string) => lookup.get(cellKey(dayPresentation.get(day)?.key ?? '', memberId))?.count ?? 0;
-  const dayTotal = (day: Date) => shownMembers.reduce((sum, m) => sum + countFor(day, m.id), 0);
-  const memberTotal = (id: string) => scopeDays.reduce((s, d) => s + countFor(d, id), 0);
+  const { dayTotals, memberTotals, scopeTotal } = useMemo(() => {
+    const dayTotals = new Map<string, number>();
+    const memberTotals = new Map<string, number>(shownMembers.map((member) => [member.id, 0]));
+    let scopeTotal = 0;
+
+    for (const day of scopeDays) {
+      const key = dayPresentation.get(day)?.key ?? '';
+      let total = 0;
+      for (const member of shownMembers) {
+        const count = lookup.get(cellKey(key, member.id))?.count ?? 0;
+        total += count;
+        memberTotals.set(member.id, (memberTotals.get(member.id) ?? 0) + count);
+      }
+      dayTotals.set(key, total);
+      scopeTotal += total;
+    }
+    return { dayTotals, memberTotals, scopeTotal };
+  }, [scopeDays, shownMembers, lookup, dayPresentation]);
+  const dayTotal = (day: Date) => dayTotals.get(dayPresentation.get(day)?.key ?? '') ?? 0;
+  const memberTotal = (id: string) => memberTotals.get(id) ?? 0;
   const grandTotal =
-    showAll && !focusId && totalMeals !== undefined ? totalMeals : scopeDays.reduce((s, d) => s + dayTotal(d), 0);
+    showAll && !focusId && totalMeals !== undefined ? totalMeals : scopeTotal;
+
+  const columnHoverStyles = useMemo(() => shownMembers.map((_, index) => `
+    .meal-log-grid:has([data-meal-column="${index}"]:hover) [data-meal-column="${index}"] {
+      background-color: hsl(var(--muted) / 0.65);
+    }
+  `).join('\n'), [shownMembers]);
 
   // Infinite scroll for All mode.
   useEffect(() => {
@@ -327,16 +350,17 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
       {/* ── Grid (heatmap) view ────────────────────────────────── */}
       {view === 'grid' && (
         <div ref={scrollRef} className={cn(maxHeight, 'overflow-auto overscroll-auto [scrollbar-gutter:stable]')}>
-          <table className="w-full min-w-max border-separate border-spacing-0 text-sm" onMouseLeave={() => setHoverCol(null)}>
+          <style>{columnHoverStyles}</style>
+          <table className="meal-log-grid w-full min-w-max border-separate border-spacing-0 text-sm">
             <thead>
               <tr>
                 <th className="sticky left-0 top-0 z-30 border-b border-r bg-card px-4 py-3 text-left text-xs font-semibold text-muted-foreground">Date</th>
-                {shownMembers.map((m) => (
+                {shownMembers.map((m, memberIndex) => (
                   <th
                     key={m.id}
+                    data-meal-column={memberIndex}
                     className={cn(
                       'sticky top-0 z-20 min-w-[76px] border-b bg-card px-2 py-2 text-center transition-colors',
-                      hoverCol === m.id && 'bg-muted',
                     )}
                   >
                     <div className="flex flex-col items-center gap-1">
@@ -361,14 +385,14 @@ export function MealLogTable({ members, mealLogs, days, onDayClick, renderLog, t
                       <span className={cn('block font-medium leading-tight', isToday(day) && 'text-primary')}>{presentation.label}</span>
                       <span className="block text-xs text-muted-foreground">{presentation.weekdayLong}</span>
                     </td>
-                    {shownMembers.map((m) => {
+                    {shownMembers.map((m, memberIndex) => {
                       const log = lookup.get(cellKey(dk, m.id));
                       const count = log?.count ?? 0;
                       return (
                         <td
                           key={m.id}
-                          onMouseEnter={() => setHoverCol(m.id)}
-                          className={cn('border-b p-1 text-center transition-colors group-hover:bg-muted/50', hoverCol === m.id && 'bg-muted/40')}
+                          data-meal-column={memberIndex}
+                          className="border-b p-1 text-center transition-colors group-hover:bg-muted/50"
                         >
                           <span className={cn('mx-auto flex h-9 min-w-[3rem] items-center justify-center rounded-lg font-mono text-sm font-semibold tabular-nums', heat(count))}>
                             {count > 0 ? (log && renderLog ? renderLog(log) : fmt(count)) : '·'}

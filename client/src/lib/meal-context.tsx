@@ -178,6 +178,8 @@ type RealtimeRowPayload = {
   new: Record<string, unknown>;
   old: Record<string, unknown>;
 };
+type CycleRowTable = 'cycle_deposits' | 'expenses' | 'meal_logs';
+type CycleRowRealtimeEvent = { table: CycleRowTable; payload: RealtimeRowPayload };
 
 function upsertById<T extends { id: string }>(rows: T[], row: T): T[] {
   const index = rows.findIndex((item) => item.id === row.id);
@@ -382,6 +384,9 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [mealOffRequestsLoading, setMealOffRequestsLoading] = useState(true);
   const [mealOffRequestsError, setMealOffRequestsError] = useState<string | null>(null);
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvents>({ notices: 0, mealOffRequests: 0, profiles: 0 });
+  const recentRealtimeWritesRef = useRef(new Map<string, { version: string; expiresAt: number }>());
+  const cycleRowEventsRef = useRef<CycleRowRealtimeEvent[]>([]);
+  const cycleRowFrameRef = useRef<number | null>(null);
   const [bootstrapNotice, setBootstrapNotice] = useState<BootstrapNotice>(null);
   const [bootstrapScopeKey, setBootstrapScopeKey] = useState<string | null>(null);
   const mealOffBootstrapScopeRef = useRef<string | null>(null);
@@ -880,35 +885,95 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setCycles((rows) => upsertById(rows, cycle).sort((a, b) => b.startedAt.localeCompare(a.startedAt)));
   }, [messId]);
 
-  const applyCycleRowRealtime = useCallback((table: 'cycle_deposits' | 'expenses' | 'meal_logs', payload: RealtimeRowPayload) => {
-    const source = payload.eventType === 'DELETE' ? payload.old : payload.new;
-    const id = String(source.id ?? '');
-    if (!id) return;
-    if (payload.eventType === 'DELETE') {
-      if (table === 'cycle_deposits') setAllDeposits((rows) => removeById(rows, id));
-      else if (table === 'expenses') setAllExpenses((rows) => removeById(rows, id));
-      else setAllMealLogs((rows) => removeById(rows, id));
-      return;
+  const markRealtimeWrite = useCallback((table: CycleRowTable, id: string, version: string | undefined) => {
+    if (!version) return;
+    const writes = recentRealtimeWritesRef.current;
+    const now = Date.now();
+    for (const [key, marker] of Array.from(writes.entries())) if (marker.expiresAt <= now) writes.delete(key);
+    writes.set(`${table}:${id}`, { version, expiresAt: now + 10_000 });
+  }, []);
+
+  const applyCycleRowRealtimeBatch = useCallback((batch: CycleRowRealtimeEvent[]) => {
+    const now = Date.now();
+    for (const [key, marker] of Array.from(recentRealtimeWritesRef.current.entries())) {
+      if (marker.expiresAt <= now) recentRealtimeWritesRef.current.delete(key);
+    }
+    const changes: {
+      cycle_deposits: Map<string, CycleDeposit | null>;
+      expenses: Map<string, Expense | null>;
+      meal_logs: Map<string, MealLog | null>;
+    } = {
+      cycle_deposits: new Map(),
+      expenses: new Map(),
+      meal_logs: new Map(),
+    };
+
+    for (const { table, payload } of batch) {
+      const source = payload.eventType === 'DELETE' ? payload.old : payload.new;
+      const id = String(source.id ?? '');
+      if (!id) continue;
+      if (table === 'meal_logs') {
+        const markerKey = `${table}:${id}`;
+        const marker = recentRealtimeWritesRef.current.get(markerKey);
+        const version = String(source.updated_at ?? '');
+        if (marker && marker.expiresAt > Date.now() && marker.version === version) {
+          recentRealtimeWritesRef.current.delete(markerKey);
+          continue;
+        }
+        if (marker && marker.expiresAt <= Date.now()) recentRealtimeWritesRef.current.delete(markerKey);
+      }
+      if (payload.eventType === 'DELETE') {
+        changes[table].set(id, null);
+        continue;
+      }
+
+      if (table === 'cycle_deposits') {
+        const row = payload.new as unknown as CycleDepositRow & { mess_id?: string };
+        if (row.mess_id !== messId) continue;
+        changes.cycle_deposits.set(id, mapDepositRows([row])[0]);
+      } else if (table === 'expenses') {
+        const row = payload.new as unknown as ExpenseRow & { mess_id?: string; deleted_at?: string | null };
+        if (row.mess_id !== messId) continue;
+        changes.expenses.set(id, row.deleted_at ? null : mapExpenseRows([row])[0]);
+      } else {
+        const row = payload.new as unknown as MealLogRow & { mess_id?: string };
+        if (row.mess_id !== messId) continue;
+        changes.meal_logs.set(id, mapMealLogRows([row])[0]);
+      }
     }
 
-    if (table === 'cycle_deposits') {
-      const row = payload.new as unknown as CycleDepositRow & { mess_id?: string };
-      if (row.mess_id !== messId) return;
-      setAllDeposits((rows) => upsertById(rows, mapDepositRows([row])[0]));
-    } else if (table === 'expenses') {
-      const row = payload.new as unknown as ExpenseRow & { mess_id?: string; deleted_at?: string | null };
-      if (row.mess_id !== messId) return;
-      if (row.deleted_at) {
-        setAllExpenses((rows) => removeById(rows, row.id));
-        return;
+    const applyChanges = <T extends { id: string }>(previous: T[], updates: Map<string, T | null>) => {
+      if (!updates.size) return previous;
+      const byId = new Map(previous.map((row) => [row.id, row]));
+      let changed = false;
+      for (const [id, row] of Array.from(updates.entries())) {
+        if (row === null) {
+          changed = byId.delete(id) || changed;
+          continue;
+        }
+        const current = byId.get(id);
+        if (current && JSON.stringify(current) === JSON.stringify(row)) continue;
+        byId.set(id, row);
+        changed = true;
       }
-      setAllExpenses((rows) => upsertById(rows, mapExpenseRows([row])[0]));
-    } else {
-      const row = payload.new as unknown as MealLogRow & { mess_id?: string };
-      if (row.mess_id !== messId) return;
-      setAllMealLogs((rows) => upsertById(rows, mapMealLogRows([row])[0]));
-    }
+      return changed ? Array.from(byId.values()) : previous;
+    };
+
+    setAllDeposits((previous) => applyChanges(previous, changes.cycle_deposits));
+    setAllExpenses((previous) => applyChanges(previous, changes.expenses));
+    setAllMealLogs((previous) => applyChanges(previous, changes.meal_logs));
   }, [messId]);
+
+  const enqueueCycleRowRealtime = useCallback((table: CycleRowTable, payload: RealtimeRowPayload) => {
+    cycleRowEventsRef.current.push({ table, payload });
+    if (cycleRowFrameRef.current !== null) return;
+    cycleRowFrameRef.current = window.requestAnimationFrame(() => {
+      cycleRowFrameRef.current = null;
+      const batch = cycleRowEventsRef.current;
+      cycleRowEventsRef.current = [];
+      applyCycleRowRealtimeBatch(batch);
+    });
+  }, [applyCycleRowRealtimeBatch]);
 
   useMealScopeLoader({
     userId,
@@ -965,7 +1030,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       for (const table of ['cycle_deposits', 'expenses', 'meal_logs'] as const) {
         channel.on('postgres_changes', {
           event: '*', schema: 'public', table, filter: `cycle_id=eq.${cycleId}`,
-        }, (payload) => applyCycleRowRealtime(table, payload as unknown as RealtimeRowPayload));
+        }, (payload) => enqueueCycleRowRealtime(table, payload as unknown as RealtimeRowPayload));
       }
     }
 
@@ -999,9 +1064,16 @@ export function MealProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', handleOnline);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      if (cycleRowFrameRef.current !== null) {
+        window.cancelAnimationFrame(cycleRowFrameRef.current);
+        cycleRowFrameRef.current = null;
+        const pendingBatch = cycleRowEventsRef.current;
+        cycleRowEventsRef.current = [];
+        if (pendingBatch.length) applyCycleRowRealtimeBatch(pendingBatch);
+      }
       void supabase.removeChannel(channel);
     };
-  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData, applyMemberRealtime, applyCycleRealtime, applyCycleRowRealtime, notifyRealtimeCollection]);
+  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData, applyMemberRealtime, applyCycleRealtime, applyCycleRowRealtimeBatch, enqueueCycleRowRealtime, notifyRealtimeCollection]);
 
   const retryLoadData = useCallback(() => {
     if (userId && messId) {
@@ -1216,6 +1288,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     setPendingSyncIds,
     getCycleId: getRequiredCycleId,
     broadcast: broadcastUpdate,
+    markRealtimeWrite,
   });
   saveMealLogsForReplayRef.current = mealLogActions.saveMealLogs;
 
