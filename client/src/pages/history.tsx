@@ -626,11 +626,16 @@ function ClosedCycleCard({
   const { loadCycleDetails, deleteCycle } = useMealActions();
   const { canManageCycles } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [lastMealCount, setLastMealCount] = useState<string | null>(null);
   const details = getCycleDetails(cycle.id);
   const isLoading = isCycleDetailsLoading(cycle.id);
   const loadError = getCycleDetailsError(cycle.id);
   const memberCount = details?.members.length ?? cycle.membersSnapshot?.length ?? 0;
   const mealCount = details ? formatMealCount(details.stats.totalMealsConsumed) : null;
+
+  useEffect(() => {
+    if (mealCount) setLastMealCount(mealCount);
+  }, [mealCount]);
 
   useEffect(() => {
     if (isExpanded && !details && !isLoading && !loadError) {
@@ -658,7 +663,7 @@ function ClosedCycleCard({
             <div className="min-w-0 text-left">
               <p className="font-bold">{cycle.name}</p>
               <p className="text-sm text-muted-foreground">
-                Closed: {format(new Date(cycle.finalizedAt || cycle.closedAt || cycle.startedAt), 'PPP')} • {memberCount} Members{mealCount ? ` • ${mealCount} Meals` : ''}
+                Closed: {format(new Date(cycle.finalizedAt || cycle.closedAt || cycle.startedAt), 'PPP')} • {memberCount} Members{(mealCount ?? lastMealCount) ? ` • ${mealCount ?? lastMealCount} Meals` : ''}
               </p>
             </div>
           </AccordionPrimitive.Trigger>
@@ -886,7 +891,7 @@ function StatCard({
 export default function HistoryPage() {
   const { cycles } = useMealCycles();
   const { getCycleDetails } = useCycleDetails();
-  const { restoreCycle } = useMealActions();
+  const { restoreCycle, evictCycleDetails } = useMealActions();
   const { profile } = useAuth();
 
   const [openClosedCycleId, setOpenClosedCycleId] = useState('');
@@ -899,6 +904,16 @@ export default function HistoryPage() {
 
   const closedCycles = cycles
     .filter((cycle) => cycle.status === 'closed');
+  const closedCycleIds = useMemo(
+    () => cycles.filter((cycle) => cycle.status === 'closed').map((cycle) => cycle.id),
+    [cycles],
+  );
+
+  useEffect(() => {
+    for (const cycleId of closedCycleIds) {
+      if (cycleId !== openClosedCycleId) evictCycleDetails(cycleId);
+    }
+  }, [closedCycleIds, openClosedCycleId, evictCycleDetails]);
 
   const handleClosedCycleDeleted = (details: CycleDetails) => {
     setDeletedClosedCycles((prev) => [
@@ -982,7 +997,12 @@ export default function HistoryPage() {
             collapsible
             className="space-y-4"
             value={openClosedCycleId}
-            onValueChange={setOpenClosedCycleId}
+            onValueChange={(cycleId) => {
+              if (openClosedCycleId && openClosedCycleId !== cycleId) {
+                evictCycleDetails(openClosedCycleId);
+              }
+              setOpenClosedCycleId(cycleId);
+            }}
           >
             {closedCycleRows.map((row) => {
               if (row.type === 'deleted') {

@@ -373,9 +373,10 @@ export function ManagerDashboard() {
     const start = startOfDay(parseISO(activeCycle.startedAt));
     const elapsed = Math.min(400, Math.max(1, differenceInCalendarDays(today, start) + 1));
     const keys = Array.from({ length: elapsed }, (_, i) => dayKey(addDays(start, i)));
+    const indexByKey = new Map(keys.map((key, index) => [key, index]));
     const idxOf = (key: string) => {
-      const i = keys.indexOf(key);
-      if (i >= 0) return i;
+      const i = indexByKey.get(key);
+      if (i !== undefined) return i;
       return key < keys[0] ? 0 : keys.length - 1;
     };
 

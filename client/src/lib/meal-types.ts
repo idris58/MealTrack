@@ -179,6 +179,7 @@ export interface MealActionsContextType {
   deleteCycle: (cycleId: string) => Promise<void>;
   restoreCycle: (cycleId: string) => Promise<void>;
   loadCycleDetails: (cycleId: string, options?: { force?: boolean }) => Promise<void>;
+  evictCycleDetails: (cycleId: string) => void;
   loadMoreChangelogEntries: (
     cycleIds: string[],
     entityType: ChangelogEntityType | 'all',
