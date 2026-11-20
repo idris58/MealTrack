@@ -77,7 +77,7 @@ type MealOffRequestsData = {
 };
 const MealOffRequestsContext = createContext<MealOffRequestsData | undefined>(undefined);
 type BootstrapNotice = { id: string; title: string; content: string; expires_at: string; created_at: string } | null;
-type MealBootstrapData = { scopeKey: string | null; notice: BootstrapNotice };
+type MealBootstrapData = { scopeKey: string | null; notice: BootstrapNotice; revision: number };
 const MealBootstrapContext = createContext<MealBootstrapData | undefined>(undefined);
 type MealRowsData = Pick<MealDataState, 'expenses' | 'deposits' | 'mealLogs'>;
 type MealCyclesData = Pick<MealDataState, 'cycles' | 'activeCycle' | 'pendingCycle'>;
@@ -160,6 +160,7 @@ type MessBootstrapPayload = {
   meal_logs: MealLogRow[];
   notice: BootstrapNotice;
   meal_off_requests: MealOffRequest[];
+  sync_time?: string;
 };
 
 type MealDataSnapshot = {
@@ -171,6 +172,7 @@ type MealDataSnapshot = {
   mealLogs: MealLog[];
   changelog?: ChangelogEntry[];
   loadedCycleIds?: string[];
+  syncAt?: string;
 };
 
 type RealtimeRowPayload = {
@@ -332,25 +334,81 @@ function mapDepositRows(rows: CycleDepositRow[]): CycleDeposit[] {
   }));
 }
 
-async function fetchCycleRowsForScope(messId: string, cycleIds: string[]) {
-  if (!cycleIds.length) return { deposits: [] as CycleDeposit[], expenses: [] as Expense[], mealLogs: [] as MealLog[] };
-
+async function fetchCycleRowsForScope(
+  messId: string,
+  cycleIds: string[] | null,
+  changedAfter?: string | null,
+  previousCycleIds: string[] = [],
+) {
   const { data, error } = await supabase.rpc('fetch_cycle_rows_for_scope', {
     mess_id_input: messId,
     cycle_ids_input: cycleIds,
+    changed_after_input: changedAfter ?? null,
+    previous_cycle_ids_input: previousCycleIds,
   });
   if (error) throw error;
   const rows = (data ?? {}) as unknown as {
     deposits: CycleDepositRow[];
     expenses: ExpenseRow[];
     meal_logs: MealLogRow[];
+    deleted_expense_ids: string[];
+    members?: MemberRow[];
+    cycles?: CycleRow[];
+    notice?: BootstrapNotice;
+    meal_off_requests?: MealOffRequest[];
+    sync_time?: string;
   };
 
   return {
     deposits: mapDepositRows(rows.deposits ?? []),
     expenses: mapExpenseRows(rows.expenses ?? []),
     mealLogs: mapMealLogRows(rows.meal_logs ?? []),
+    deletedExpenseIds: rows.deleted_expense_ids ?? [],
+    members: rows.members,
+    cycles: rows.cycles,
+    notice: rows.notice,
+    mealOffRequests: rows.meal_off_requests,
+    syncAt: rows.sync_time,
   };
+}
+
+function mapMemberRows(memberRows: MemberRow[]) {
+  const mapMember = (member: MemberRow): Member => ({
+    id: member.id,
+    name: member.name,
+    deposit: 0,
+    mealsEaten: 0,
+    avatar: toAvatar(member.name, member.avatar),
+    profileId: member.profile_id ?? null,
+    createdAt: member.created_at ?? null,
+    deletedAt: member.deleted_at ?? null,
+  });
+  return {
+    members: memberRows.filter((member) => !member.deleted_at).map(mapMember),
+    archivedMembers: memberRows.filter((member) => Boolean(member.deleted_at)).map((member) => ({
+      ...mapMember(member), archived: !member.delete_expires_at,
+    })),
+  };
+}
+
+function mapCycleRows(cycleRows: CycleRow[]): Cycle[] {
+  return cycleRows.map((cycle) => ({
+    id: cycle.id,
+    name: cycle.name || getDefaultCycleBaseName(cycle.started_at),
+    status: cycle.status,
+    startedAt: cycle.started_at,
+    closedAt: cycle.closed_at,
+    finalizedAt: cycle.finalized_at,
+    membersSnapshot: cycle.members_snapshot,
+    settlementSnapshot: cycle.settlement_snapshot,
+  }));
+}
+
+function mergeRowsById<T extends { id: string }>(current: T[], changed: T[]): T[] {
+  if (!changed.length) return current;
+  const rows = new Map(current.map((row) => [row.id, row]));
+  for (const row of changed) rows.set(row.id, row);
+  return Array.from(rows.values());
 }
 
 function toAvatar(name: string, fallback?: string | null) {
@@ -380,6 +438,10 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const [allMealLogs, setAllMealLogs] = useState<MealLog[]>([]);
   const [allDeposits, setAllDeposits] = useState<CycleDeposit[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
+  const currentOpenCycleIdsRef = useRef<string[]>([]);
+  currentOpenCycleIdsRef.current = cycles
+    .filter((cycle) => cycle.status === 'active' || cycle.status === 'pending')
+    .map((cycle) => cycle.id);
   const [mealOffRequests, setMealOffRequests] = useState<MealOffRequest[]>([]);
   const [mealOffRequestsLoading, setMealOffRequestsLoading] = useState(true);
   const [mealOffRequestsError, setMealOffRequestsError] = useState<string | null>(null);
@@ -389,6 +451,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const cycleRowFrameRef = useRef<number | null>(null);
   const [bootstrapNotice, setBootstrapNotice] = useState<BootstrapNotice>(null);
   const [bootstrapScopeKey, setBootstrapScopeKey] = useState<string | null>(null);
+  const [bootstrapRevision, setBootstrapRevision] = useState(0);
+  const lastSyncAtRef = useRef<string | null>(null);
   const mealOffBootstrapScopeRef = useRef<string | null>(null);
   const [loadedCycleIds, setLoadedCycleIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -587,6 +651,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         setAllMealLogs(snapshotWithQueue.mealLogs);
         setAllChangelogEntries(snapshotWithQueue.changelog ?? []);
         setLoadedCycleIds(new Set(snapshotWithQueue.loadedCycleIds ?? []));
+        lastSyncAtRef.current = snapshotWithQueue.syncAt ?? null;
         setDataError(null);
         hasLoadedDataRef.current = true;
         setLoading(false);
@@ -605,6 +670,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
             mealLogs: MealLog[];
             changelog: ChangelogEntry[];
             loadedCycleIds: string[];
+            syncAt?: string;
           }>(cacheKey);
         if (snap) {
           const snapshotWithQueue = overlayQueuedOperations(snap, queuedOperations);
@@ -616,6 +682,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           setAllMealLogs(snapshotWithQueue.mealLogs);
           setAllChangelogEntries(snapshotWithQueue.changelog ?? []);
           setLoadedCycleIds(new Set(snapshotWithQueue.loadedCycleIds ?? []));
+          lastSyncAtRef.current = snapshotWithQueue.syncAt ?? null;
           setDataError(null);
           hasLoadedDataRef.current = true;
           setLoading(false);
@@ -640,46 +707,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       const bootstrap = (data ?? {}) as unknown as MessBootstrapPayload;
       const memberRows = bootstrap.members ?? [];
-      const nextMembers = memberRows
-        .filter((member) => !member.deleted_at)
-        .map((member) => ({
-          id: member.id,
-          name: member.name,
-          deposit: 0,
-          mealsEaten: 0,
-          avatar: toAvatar(member.name, member.avatar),
-          profileId: member.profile_id ?? null,
-          createdAt: member.created_at ?? null,
-          deletedAt: member.deleted_at ?? null,
-        }));
-      const nextArchivedMembers = memberRows
-        // Include both permanent archives and members still in the undo window.
-        // Cycle membership only restores one into calculations when that cycle
-        // actually has meal/deposit history for the member.
-        .filter((member) => Boolean(member.deleted_at))
-        .map((member) => ({
-          id: member.id,
-          name: member.name,
-          deposit: 0,
-          mealsEaten: 0,
-          avatar: toAvatar(member.name, member.avatar),
-          profileId: member.profile_id ?? null,
-          createdAt: member.created_at ?? null,
-          deletedAt: member.deleted_at ?? null,
-          archived: !member.delete_expires_at,
-        }));
-
-      const nextCycles = (bootstrap.cycles ?? [])
-        .map((cycle) => ({
-          id: cycle.id,
-          name: cycle.name || getDefaultCycleBaseName(cycle.started_at),
-          status: cycle.status,
-          startedAt: cycle.started_at,
-          closedAt: cycle.closed_at,
-          finalizedAt: cycle.finalized_at,
-          membersSnapshot: cycle.members_snapshot,
-          settlementSnapshot: cycle.settlement_snapshot,
-        }));
+      const { members: nextMembers, archivedMembers: nextArchivedMembers } = mapMemberRows(memberRows);
+      const nextCycles = mapCycleRows(bootstrap.cycles ?? []);
 
       const initialCycleIds = nextCycles
         .filter((cycle) => cycle.status === 'active' || cycle.status === 'pending')
@@ -706,6 +735,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setMealOffRequestsLoading(false);
       setBootstrapNotice(bootstrap.notice ?? null);
       setBootstrapScopeKey(`${userId}:${messId}`);
+      setBootstrapRevision((revision) => revision + 1);
+      lastSyncAtRef.current = bootstrap.sync_time ?? lastSyncAtRef.current;
       setDataError(null);
       hasLoadedDataRef.current = true;
 
@@ -726,6 +757,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
               mealLogs: MealLog[];
               changelog: ChangelogEntry[];
               loadedCycleIds: string[];
+              syncAt?: string;
             }>(cacheKey);
           if (snap) {
             const snapshotWithQueue = overlayQueuedOperations(snap, queuedOperations);
@@ -737,6 +769,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
             setAllMealLogs(snapshotWithQueue.mealLogs);
             setAllChangelogEntries(snapshotWithQueue.changelog ?? []);
             setLoadedCycleIds(new Set(snapshotWithQueue.loadedCycleIds ?? []));
+            lastSyncAtRef.current = snapshotWithQueue.syncAt ?? null;
             setDataError(null);
             hasLoadedDataRef.current = true;
             setLoading(false);
@@ -758,6 +791,66 @@ export function MealProvider({ children }: { children: ReactNode }) {
       setRefreshing(false);
     }
   }, [userId, messId, setAllChangelogEntries]);
+
+  const syncAfterRealtimeGap = useCallback(async () => {
+    if (!userId || !messId || !navigator.onLine || !hasLoadedDataRef.current) return;
+    try {
+      const previousSyncAt = lastSyncAtRef.current;
+      // A short overlap catches transactions that began before the previous
+      // snapshot but committed after it. Merging by ID makes replay harmless.
+      const changedAfter = previousSyncAt
+        ? new Date(Date.parse(previousSyncAt) - 30_000).toISOString()
+        : null;
+      const result = await fetchCycleRowsForScope(messId, null, changedAfter, currentOpenCycleIdsRef.current);
+      const nextCycles = mapCycleRows(result.cycles ?? []);
+      const validCycleIds = new Set(nextCycles.map((cycle) => cycle.id));
+      const currentRowCycleIds = new Set(nextCycles
+        .filter((cycle) => cycle.status === 'active' || cycle.status === 'pending')
+        .map((cycle) => cycle.id));
+      const queuedOperations = (await dequeueAll({ userId, messId })).filter(
+        (operation) => operation.status !== 'failed' && operation.status !== 'conflict',
+      );
+      const mergeCurrent = <T extends { id: string; cycleId: string }>(
+        current: T[], changed: T[], deletedIds: string[] = [],
+      ) => {
+        const retained = current.filter((row) => validCycleIds.has(row.cycleId) && !deletedIds.includes(row.id));
+        const base = changedAfter
+          ? retained
+          : retained.filter((row) => !currentRowCycleIds.has(row.cycleId));
+        return mergeRowsById(base, changed).filter((row) => validCycleIds.has(row.cycleId));
+      };
+
+      setMemberRoster(mapMemberRows(result.members ?? []).members);
+      setArchivedMemberRoster(mapMemberRows(result.members ?? []).archivedMembers);
+      setCycles(nextCycles);
+      setAllDeposits((current) => overlayQueuedOperations({
+        deposits: mergeCurrent(current, result.deposits), expenses: [], mealLogs: [],
+      }, queuedOperations).deposits);
+      setAllExpenses((current) => overlayQueuedOperations({
+        deposits: [], expenses: mergeCurrent(current, result.expenses, result.deletedExpenseIds), mealLogs: [],
+      }, queuedOperations).expenses);
+      setAllMealLogs((current) => overlayQueuedOperations({
+        deposits: [], expenses: [], mealLogs: mergeCurrent(current, result.mealLogs),
+      }, queuedOperations).mealLogs);
+      setLoadedCycleIds((current) => {
+        const next = new Set(Array.from(current).filter((id) => validCycleIds.has(id)));
+        currentRowCycleIds.forEach((id) => next.add(id));
+        return next;
+      });
+      setMealOffRequests(result.mealOffRequests ?? []);
+      mealOffBootstrapScopeRef.current = `${userId}:${messId}`;
+      setMealOffRequestsError(null);
+      setMealOffRequestsLoading(false);
+      setBootstrapNotice(result.notice ?? null);
+      setBootstrapScopeKey(`${userId}:${messId}`);
+      setBootstrapRevision((revision) => revision + 1);
+      lastSyncAtRef.current = result.syncAt ?? null;
+      setRealtimeEvents((previous) => ({ ...previous, profiles: previous.profiles + 1 }));
+    } catch (error) {
+      // Recovery is best effort; Realtime and the cached view remain usable.
+      console.error('Unable to sync changes after reconnect:', error);
+    }
+  }, [userId, messId]);
 
   React.useEffect(() => {
     if (!userId || !messId || !hasLoadedDataRef.current || loadedScopeRef.current !== `${userId}:${messId}`) return;
@@ -789,6 +882,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         mealLogs: allMealLogs.filter((mealLog) => cachedCycleIds.has(mealLog.cycleId)),
         changelog: allChangelogEntries.filter((entry) => cachedCycleIds.has(entry.cycleId)),
         loadedCycleIds: Array.from(loadedCycleIds).filter((cycleId) => cachedCycleIds.has(cycleId)),
+        syncAt: lastSyncAtRef.current ?? undefined,
       }).catch(() => {
         // Cache can be unavailable or over quota; persistence is best-effort.
       });
@@ -809,7 +903,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       if (timeoutId !== null) window.clearTimeout(timeoutId);
       if (idleCallbackId !== null) idleWindow.cancelIdleCallback?.(idleCallbackId);
     };
-  }, [userId, messId, memberRoster, archivedMemberRoster, cycles, allDeposits, allExpenses, allMealLogs, allChangelogEntries, loadedCycleIds]);
+  }, [userId, messId, memberRoster, archivedMemberRoster, cycles, allDeposits, allExpenses, allMealLogs, allChangelogEntries, loadedCycleIds, bootstrapRevision]);
 
   const clearDataError = useCallback(() => {
     setDataError(null);
@@ -994,15 +1088,11 @@ export function MealProvider({ children }: { children: ReactNode }) {
     let hiddenAt: number | null = document.visibilityState === 'hidden' ? Date.now() : null;
     const scheduleRecoveryRefresh = () => {
       if (!navigator.onLine || document.visibilityState !== 'visible') return;
-      setRealtimeEvents((previous) => ({
-        notices: previous.notices + 1,
-        mealOffRequests: previous.mealOffRequests + 1,
-        profiles: previous.profiles + 1,
-      }));
+      setRealtimeEvents((previous) => ({ ...previous, profiles: previous.profiles + 1 }));
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         refreshTimer = null;
-        void loadData();
+        void syncAfterRealtimeGap();
       }, 150);
     };
 
@@ -1073,7 +1163,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       }
       void supabase.removeChannel(channel);
     };
-  }, [userId, messId, activeCycle?.id, pendingCycle?.id, loadData, applyMemberRealtime, applyCycleRealtime, applyCycleRowRealtimeBatch, enqueueCycleRowRealtime, notifyRealtimeCollection]);
+  }, [userId, messId, activeCycle?.id, pendingCycle?.id, syncAfterRealtimeGap, applyMemberRealtime, applyCycleRealtime, applyCycleRowRealtimeBatch, enqueueCycleRowRealtime, notifyRealtimeCollection]);
 
   const retryLoadData = useCallback(() => {
     if (userId && messId) {
@@ -1237,10 +1327,31 @@ export function MealProvider({ children }: { children: ReactNode }) {
       : operation.id
   ), []);
 
-  const afterOfflineSync = useCallback(() => {
+  const afterOfflineSync = useCallback((discardedOperation?: OfflineOp) => {
     void broadcastSharedUpdate();
-    void loadData();
-  }, [loadData]);
+    if (!discardedOperation || !userId || !messId) return;
+    const cycleId = String(discardedOperation.payload.cycleId ?? '');
+    if (!cycleId) return;
+    void (async () => {
+      try {
+        const rows = await fetchCycleRowsForScope(messId, [cycleId]);
+        const pending = (await dequeueAll({ userId, messId })).filter(
+          (operation) => operation.status !== 'failed' && operation.status !== 'conflict',
+        );
+        setAllDeposits((current) => overlayQueuedOperations({
+          deposits: [...current.filter((row) => row.cycleId !== cycleId), ...rows.deposits], expenses: [], mealLogs: [],
+        }, pending).deposits);
+        setAllExpenses((current) => overlayQueuedOperations({
+          deposits: [], expenses: [...current.filter((row) => row.cycleId !== cycleId), ...rows.expenses], mealLogs: [],
+        }, pending).expenses);
+        setAllMealLogs((current) => overlayQueuedOperations({
+          deposits: [], expenses: [], mealLogs: [...current.filter((row) => row.cycleId !== cycleId), ...rows.mealLogs],
+        }, pending).mealLogs);
+      } catch (error) {
+        console.error('Unable to refresh the discarded offline change:', error);
+      }
+    })();
+  }, [messId, userId]);
 
   const offlineScope = useMemo(() => userId && messId ? { userId, messId } : null, [userId, messId]);
 
@@ -1453,7 +1564,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
   ]);
 
   return (
-    <MealBootstrapContext.Provider value={{ scopeKey: bootstrapScopeKey, notice: bootstrapNotice }}>
+    <MealBootstrapContext.Provider value={{ scopeKey: bootstrapScopeKey, notice: bootstrapNotice, revision: bootstrapRevision }}>
     <MealOffRequestsContext.Provider value={mealOffRequestsValue}>
     <RealtimeEventsContext.Provider value={realtimeEvents}>
       <MealActionsContext.Provider value={actionsValue}>

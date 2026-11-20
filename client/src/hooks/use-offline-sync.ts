@@ -12,7 +12,7 @@ import { isTransientRequestError, retryDelayMs } from '@/lib/request-retry';
 type UseOfflineSyncOptions = {
   scope: OfflineQueueScope | null;
   replay: (operation: OfflineOp) => Promise<void>;
-  afterSync: () => void;
+  afterSync: (discardedOperation?: OfflineOp) => void;
   pendingItemId: (operation: OfflineOp) => string;
 };
 
@@ -179,7 +179,7 @@ export function useOfflineSync({
       return next;
     });
     setFailedSyncOps((previous) => previous.filter((item) => item.id !== id));
-    afterSync();
+    afterSync(operation);
   }, [afterSync, pendingItemId, scope]);
 
   return {

@@ -1356,13 +1356,17 @@ $$;
 revoke all on function public.claim_meal_log_reminders(text) from public, anon, authenticated;
 grant execute on function public.claim_meal_log_reminders(text) to service_role;
 
--- Fetch all financial and meal rows for one mess and a set of cycles in one
--- request, without PostgREST's 1,000-row response cap. Authenticated callers
--- remain subject to the tables' tenant RLS policies; service_role callers are
--- used by the trusted shared-view and push routes.
+-- Fetch rows for a requested cycle set, or perform a recovery sync when the
+-- cycle array is NULL. Recovery returns roster/cycle/notice/meal-off metadata
+-- plus only financial rows newer than the supplied watermark. The short client
+-- overlap handles transactions that commit around the previous sync boundary.
+drop function if exists public.fetch_cycle_rows_for_scope(uuid, uuid[]);
+drop function if exists public.fetch_cycle_rows_for_scope(uuid, uuid[], timestamptz);
 create or replace function public.fetch_cycle_rows_for_scope(
   mess_id_input uuid,
-  cycle_ids_input uuid[]
+  cycle_ids_input uuid[],
+  changed_after_input timestamptz default null,
+  previous_cycle_ids_input uuid[] default '{}'::uuid[]
 )
 returns jsonb
 language sql
@@ -1370,55 +1374,104 @@ stable
 security invoker
 set search_path = public
 as $$
+  with target_cycles as (
+    select c.id
+    from public.cycles c
+    where c.mess_id = mess_id_input
+      and c.deleted_at is null
+      and (
+        (cycle_ids_input is null and (
+          c.status in ('active', 'pending')
+          or c.id = any(coalesce(previous_cycle_ids_input, '{}'::uuid[]))
+        ))
+        or (cycle_ids_input is not null and c.id = any(cycle_ids_input))
+      )
+  )
   select jsonb_build_object(
     'deposits', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', d.id,
-        'cycle_id', d.cycle_id,
-        'member_id', d.member_id,
-        'amount', d.amount,
-        'kind', d.kind,
-        'note', d.note,
-        'created_at', d.created_at
+        'id', d.id, 'cycle_id', d.cycle_id, 'member_id', d.member_id,
+        'amount', d.amount, 'kind', d.kind, 'note', d.note, 'created_at', d.created_at
       ) order by d.created_at asc, d.id asc)
       from public.cycle_deposits d
       where d.mess_id = mess_id_input
-        and d.cycle_id = any(coalesce(cycle_ids_input, '{}'::uuid[]))
+        and d.cycle_id in (select id from target_cycles)
+        and (changed_after_input is null or d.created_at > changed_after_input)
     ), '[]'::jsonb),
     'expenses', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', e.id,
-        'cycle_id', e.cycle_id,
-        'amount', e.amount,
-        'description', e.description,
-        'type', e.type,
-        'date', e.date,
-        'paid_by', e.paid_by,
-        'updated_at', e.updated_at
+        'id', e.id, 'cycle_id', e.cycle_id, 'amount', e.amount,
+        'description', e.description, 'type', e.type, 'date', e.date,
+        'paid_by', e.paid_by, 'updated_at', e.updated_at
       ) order by e.date desc, e.id asc)
       from public.expenses e
       where e.mess_id = mess_id_input
-        and e.cycle_id = any(coalesce(cycle_ids_input, '{}'::uuid[]))
+        and e.cycle_id in (select id from target_cycles)
         and e.deleted_at is null
+        and (changed_after_input is null or e.updated_at > changed_after_input)
+    ), '[]'::jsonb),
+    'deleted_expense_ids', coalesce((
+      select jsonb_agg(e.id)
+      from public.expenses e
+      where changed_after_input is not null
+        and e.mess_id = mess_id_input
+        and e.cycle_id in (select id from target_cycles)
+        and e.deleted_at is not null
+        and e.updated_at > changed_after_input
     ), '[]'::jsonb),
     'meal_logs', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', ml.id,
-        'cycle_id', ml.cycle_id,
-        'member_id', ml.member_id,
-        'date', ml.date,
-        'count', ml.count,
-        'updated_at', ml.updated_at
+        'id', ml.id, 'cycle_id', ml.cycle_id, 'member_id', ml.member_id,
+        'date', ml.date, 'count', ml.count, 'updated_at', ml.updated_at
       ) order by ml.date desc, ml.id asc)
       from public.meal_logs ml
       where ml.mess_id = mess_id_input
-        and ml.cycle_id = any(coalesce(cycle_ids_input, '{}'::uuid[]))
-    ), '[]'::jsonb)
+        and ml.cycle_id in (select id from target_cycles)
+        and (changed_after_input is null or ml.updated_at > changed_after_input)
+    ), '[]'::jsonb),
+    'members', case when cycle_ids_input is null then coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', m.id, 'name', m.name, 'avatar', m.avatar,
+        'created_at', m.created_at, 'deleted_at', m.deleted_at,
+        'delete_expires_at', m.delete_expires_at, 'profile_id', m.profile_id
+      ) order by m.sort_order asc nulls last, m.created_at asc)
+      from public.members m where m.mess_id = mess_id_input
+    ), '[]'::jsonb) else '[]'::jsonb end,
+    'cycles', case when cycle_ids_input is null then coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'name', c.name, 'status', c.status,
+        'started_at', c.started_at, 'closed_at', c.closed_at,
+        'finalized_at', c.finalized_at, 'members_snapshot', c.members_snapshot,
+        'settlement_snapshot', c.settlement_snapshot
+      ) order by c.started_at desc)
+      from public.cycles c
+      where c.mess_id = mess_id_input and c.deleted_at is null
+    ), '[]'::jsonb) else '[]'::jsonb end,
+    'notice', case when cycle_ids_input is null then (
+      select jsonb_build_object(
+        'id', n.id, 'title', n.title, 'content', n.content,
+        'expires_at', n.expires_at, 'created_at', n.created_at
+      ) from public.notices n
+      where n.mess_id = mess_id_input and n.expires_at > now()
+      order by n.created_at desc limit 1
+    ) else null end,
+    'meal_off_requests', case when cycle_ids_input is null then coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', r.id, 'mess_id', r.mess_id, 'cycle_id', r.cycle_id,
+        'member_id', r.member_id, 'requested_by_profile_id', r.requested_by_profile_id,
+        'start_date', r.start_date, 'end_date', r.end_date,
+        'meal_period', r.meal_period, 'status', r.status,
+        'note', r.note, 'created_at', r.created_at
+      ) order by r.start_date asc, r.created_at desc)
+      from public.meal_off_requests r
+      where r.mess_id = mess_id_input and r.status in ('pending', 'approved')
+    ), '[]'::jsonb) else '[]'::jsonb end,
+    'sync_time', now()
   );
 $$;
 
-revoke all on function public.fetch_cycle_rows_for_scope(uuid, uuid[]) from public, anon;
-grant execute on function public.fetch_cycle_rows_for_scope(uuid, uuid[]) to authenticated, service_role;
+revoke all on function public.fetch_cycle_rows_for_scope(uuid, uuid[], timestamptz, uuid[]) from public, anon;
+grant execute on function public.fetch_cycle_rows_for_scope(uuid, uuid[], timestamptz, uuid[]) to authenticated, service_role;
 
 -- Initial app payload: one authenticated request for the mess roster, cycle
 -- summaries, active/pending cycle rows, current notice, and meal-off requests.

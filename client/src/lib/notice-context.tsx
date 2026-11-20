@@ -104,6 +104,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
   const [dismissed, setDismissed] = useState(false);
   const expireTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedBootstrapScopeRef = useRef<string | null>(null);
+  const appliedBootstrapRevisionRef = useRef<number>(-1);
   const consumedNoticeRevisionRef = useRef<number>(noticeRevision);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -186,6 +187,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       setNotice(null);
       setLoading(false);
       initializedBootstrapScopeRef.current = null;
+      appliedBootstrapRevisionRef.current = -1;
       return;
     }
     const scopeKey = `${user.id}:${profile.mess_id}`;
@@ -200,6 +202,17 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       checkDismissed(n);
       if (n) scheduleExpiry(n);
       initializedBootstrapScopeRef.current = scopeKey;
+      appliedBootstrapRevisionRef.current = bootstrap.revision;
+      consumedNoticeRevisionRef.current = noticeRevision;
+      setLoading(false);
+      return;
+    }
+    if (appliedBootstrapRevisionRef.current !== bootstrap.revision) {
+      const n = bootstrap.notice ? rowToNotice(bootstrap.notice) : null;
+      setNotice(n);
+      checkDismissed(n);
+      if (n) scheduleExpiry(n);
+      appliedBootstrapRevisionRef.current = bootstrap.revision;
       consumedNoticeRevisionRef.current = noticeRevision;
       setLoading(false);
       return;
@@ -237,7 +250,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     void load();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, profile?.mess_id, noticeRevision, bootstrap.scopeKey, bootstrap.notice, checkDismissed]);
+  }, [user?.id, profile?.mess_id, noticeRevision, bootstrap.scopeKey, bootstrap.notice, bootstrap.revision, checkDismissed]);
 
   useEffect(() => {
     if (loading) return;
