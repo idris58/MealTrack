@@ -24,6 +24,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/lib/auth-context';
 import { cn, getInitials } from '@/lib/utils';
+import { prefetchRoute } from '@/lib/route-prefetch';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { useNotice } from '@/lib/notice-context';
 import { NoticeBanner } from '@/components/notice-banner';
@@ -147,6 +148,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const mobileNavItems = isMember ? MEMBER_MOBILE_NAV_ITEMS : MANAGER_MOBILE_NAV_ITEMS;
   const isMoreActive = !isMember && ['/app/reports', '/app/history', '/app/changelog'].includes(currentPath);
+
+  useEffect(() => {
+    const likelyNextRoutes = isMember ? ['/app/meals', '/app/members'] : ['/app/meals', '/app/expenses'];
+    const prefetchLikelyNextRoutes = () => likelyNextRoutes.forEach(prefetchRoute);
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(prefetchLikelyNextRoutes, { timeout: 2500 });
+      return () => idleWindow.cancelIdleCallback?.(handle);
+    }
+    const handle = window.setTimeout(prefetchLikelyNextRoutes, 1200);
+    return () => window.clearTimeout(handle);
+  }, [isMember]);
 
   const initials = getInitials(profile?.full_name, user?.email);
 
@@ -297,7 +313,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <aside className="hidden h-[calc(100dvh-4rem)] w-64 shrink-0 flex-col border-r bg-card md:sticky md:top-16 md:flex">
           <nav className="flex-1 space-y-2 p-4 pt-6">
             {sidebarNavItems.map((item) => (
-              <Link key={item.href} href={item.href} aria-current={isHistoryNavActive(item.href) ? 'page' : undefined}>
+              <Link key={item.href} href={item.href} aria-current={isHistoryNavActive(item.href) ? 'page' : undefined} onMouseEnter={() => prefetchRoute(item.href)} onFocus={() => prefetchRoute(item.href)}>
                 <div
                   className={cn(
                     'flex cursor-pointer items-center gap-3 rounded-md px-4 py-3 transition-colors',
@@ -332,7 +348,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {mobileNavItems.map((item) => {
             const isActive = isHistoryNavActive(item.href);
             return (
-              <Link key={item.href} href={item.href} aria-current={isActive ? 'page' : undefined} className="flex h-full min-w-0 w-full items-center justify-center">
+              <Link key={item.href} href={item.href} aria-current={isActive ? 'page' : undefined} onMouseEnter={() => prefetchRoute(item.href)} onFocus={() => prefetchRoute(item.href)} className="flex h-full min-w-0 w-full items-center justify-center">
                 <div
                   className={cn(
                     'flex h-full w-full min-w-0 flex-col items-center justify-center py-1 font-medium transition-colors select-none',
@@ -409,6 +425,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     href={item.href}
                     aria-current={isActive ? 'page' : undefined}
+                    onMouseEnter={() => prefetchRoute(item.href)}
+                    onFocus={() => prefetchRoute(item.href)}
                     onClick={() => setIsMoreSheetOpen(false)}
                     className={cn(
                       'flex items-center justify-between rounded-xl border p-3 transition-colors',

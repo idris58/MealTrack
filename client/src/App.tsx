@@ -68,6 +68,23 @@ function AppLoadingSkeleton({ message }: { message: string }) {
   );
 }
 
+function PageLoadingSkeleton() {
+  return (
+    <div className="space-y-5" aria-label="Loading page" role="status">
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-64 max-w-full" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <Skeleton className="h-28 rounded-xl" />
+        <Skeleton className="h-28 rounded-xl" />
+        <Skeleton className="h-28 rounded-xl sm:col-span-2 xl:col-span-1" />
+      </div>
+      <Skeleton className="h-72 rounded-xl" />
+    </div>
+  );
+}
+
 const ROUTE_TITLES: Record<string, string> = {
   "/app": "Dashboard",
   "/app/members": "Members",
@@ -117,18 +134,20 @@ function Router() {
   return (
     <Layout>
       <ErrorBoundary key={location}>
-        <Switch>
-          <Route path="/app" component={Dashboard} />
-          <Route path="/app/members" component={Members} />
-          <Route path="/app/expenses" component={Expenses} />
-          <Route path="/app/meals" component={Meals} />
-          <Route path="/app/reports" component={ReportsPage} />
-          <Route path="/app/history" component={HistoryPage} />
-          <Route path="/app/changelog" component={ChangelogPage} />
-          <Route path="/app/settings" component={Settings} />
-          <Route path="/app/profile" component={ProfilePage} />
-          <Route component={NotFound} />
-        </Switch>
+        <Suspense fallback={<PageLoadingSkeleton />}>
+          <Switch>
+            <Route path="/app" component={Dashboard} />
+            <Route path="/app/members" component={Members} />
+            <Route path="/app/expenses" component={Expenses} />
+            <Route path="/app/meals" component={Meals} />
+            <Route path="/app/reports" component={ReportsPage} />
+            <Route path="/app/history" component={HistoryPage} />
+            <Route path="/app/changelog" component={ChangelogPage} />
+            <Route path="/app/settings" component={Settings} />
+            <Route path="/app/profile" component={ProfilePage} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
       </ErrorBoundary>
     </Layout>
   );
