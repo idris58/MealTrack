@@ -49,6 +49,25 @@ describe("cycle math", () => {
     expect(result.stats.remainingCash).toBe(10);
   });
 
+  it("distributes utility cost from unstaffed slices when a cycle is backdated", () => {
+    const result = computeCycleMath({
+      members: [
+        { id: "joined-mid-cycle", name: "A", createdAt: "2026-01-06T00:00:00.000Z" },
+        { id: "joined-at-end", name: "B", createdAt: "2026-01-11T00:00:00.000Z" },
+      ],
+      deposits: [],
+      expenses: [{ amount: 100, type: "utility" }],
+      mealLogs: [],
+      cycleStartedAt: "2026-01-01T00:00:00.000Z",
+      cycleEndedAt: "2026-01-11T00:00:00.000Z",
+    });
+
+    const allocatedUtility = result.members.reduce((sum, member) => sum + member.fixedCost, 0);
+    expect(result.members.map((member) => member.fixedCost)).toEqual([75, 25]);
+    expect(allocatedUtility).toBeCloseTo(result.stats.totalFixedExpenses);
+    expect(result.stats.fixedCostPerMember).toBe(50);
+  });
+
   it("ignores deposits and meal logs for members outside the cycle roster", () => {
     const result = computeCycleMath({
       members: [{ id: "known", name: "Known" }],

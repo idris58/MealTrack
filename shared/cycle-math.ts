@@ -67,6 +67,7 @@ function prorateFixedCosts<TMember extends CycleMathMember>(
   ])).sort((left, right) => left - right);
   const perMember = new Map(members.map((member) => [member.id, 0]));
   const cycleDuration = cycleEnd - cycleStart;
+  let unallocatedTotal = 0;
   for (let index = 0; index < boundaries.length - 1; index += 1) {
     const start = boundaries[index];
     const end = boundaries[index + 1];
@@ -74,10 +75,24 @@ function prorateFixedCosts<TMember extends CycleMathMember>(
     if (duration <= 0) continue;
     const midpoint = start + duration / 2;
     const activeMembers = intervals.filter((interval) => interval.start <= midpoint && midpoint < interval.end);
-    if (activeMembers.length === 0) continue;
+    if (activeMembers.length === 0) {
+      unallocatedTotal += totalFixedExpenses * duration / cycleDuration;
+      continue;
+    }
     const intervalCost = totalFixedExpenses * duration / cycleDuration / activeMembers.length;
     for (const member of activeMembers) {
       perMember.set(member.id, (perMember.get(member.id) ?? 0) + intervalCost);
+    }
+  }
+
+  // Member creation dates can leave early or late cycle slices without an
+  // active member (for example, when a cycle is backdated). Keep every unit
+  // of utility cost in the settlement by sharing those slices across the
+  // cycle roster as a fallback.
+  if (members.length > 0 && unallocatedTotal !== 0) {
+    const remainderPerMember = unallocatedTotal / members.length;
+    for (const member of members) {
+      perMember.set(member.id, (perMember.get(member.id) ?? 0) + remainderPerMember);
     }
   }
 
