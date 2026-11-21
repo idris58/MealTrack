@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   addDays,
@@ -346,6 +346,7 @@ export function ManagerDashboard() {
   const { mealLogs, expenses, deposits } = useMealRows();
   const { activeCycle, pendingCycle } = useMealCycles();
   const { activeCycleChangelogEntries } = useMealChangelog();
+  const { loadMoreChangelogEntries } = useMealActions();
   const { pendingSyncIds, failedSyncOps } = useMealStatus();
   const { pendingCount: sharedPendingMealOff } = useMealOffRequests();
   const { profile, canManageExpenses, canOperateMeals, canManageDeposits, canManageCycles } = useAuth();
@@ -455,6 +456,15 @@ export function ManagerDashboard() {
 
   const recentExpenses = useMemo(() => [...expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6), [expenses]);
   const recentActivity = activeCycleChangelogEntries.slice(0, 6);
+  const activeCycleId = activeCycle?.id;
+
+  useEffect(() => {
+    if (!activeCycleId) return;
+    const timer = window.setTimeout(() => {
+      void loadMoreChangelogEntries([activeCycleId], 'all', 'all', '', true);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [activeCycleId, expenses, deposits, mealLogs, loadMoreChangelogEntries]);
 
   const attention = useMemo<Attention[]>(() => {
     const list: Attention[] = [];
