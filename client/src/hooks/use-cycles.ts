@@ -15,6 +15,7 @@ type Options = {
   pendingCycle: Cycle | null;
   getCycleMembers: (cycleId: string) => Member[];
   getCycleDetails?: (cycleId: string) => CycleDetails | null;
+  setMembers: Dispatch<SetStateAction<Member[]>>;
   setCycles: Dispatch<SetStateAction<Cycle[]>>;
   setLoadedCycleIds: Dispatch<SetStateAction<Set<string>>>;
   setDeposits: Dispatch<SetStateAction<CycleDeposit[]>>;
@@ -86,7 +87,7 @@ export function useCycles(options: Options) {
   }, []);
 
   const startNewCycle = useCallback(async (name: string, startedAt?: string, carryForwards?: Array<{ memberId: string; amount: number }>) => {
-    const { userId, messId, cycles, activeCycle, pendingCycle, setCycles, setLoadedCycleIds, reload, broadcast } = latest.current;
+    const { userId, messId, cycles, activeCycle, pendingCycle, setMembers, setCycles, setLoadedCycleIds, reload, broadcast } = latest.current;
     if (!userId || !messId) return;
     if (activeCycle) throw new Error('Close the current active cycle before starting a new one.');
     const trimmed = name.trim();
@@ -99,6 +100,13 @@ export function useCycles(options: Options) {
       carry_forwards_input: carryForwards ?? [],
     });
     if (error || !data) throw new Error(error?.code === '23505' ? 'A cycle with this name already exists.' : error?.message || 'Unable to start a new cycle. Please try again.');
+    const cycleStart = Date.parse(data.started_at);
+    setMembers((previous) => previous.map((member) => ({
+      ...member,
+      joinedAt: member.createdAt && Date.parse(member.createdAt) > cycleStart
+        ? member.createdAt
+        : data.started_at,
+    })));
     setCycles((previous) => [{ id: data.id, name: data.name ?? trimmed, status: data.status, startedAt: data.started_at, closedAt: data.closed_at, finalizedAt: data.finalized_at, membersSnapshot: data.members_snapshot }, ...previous]);
     setLoadedCycleIds((previous) => new Set(previous).add(data.id));
     if (carryForwards?.length) reload();

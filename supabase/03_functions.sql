@@ -43,9 +43,38 @@ $$;
 create or replace function public.set_member_joined_at_on_restore()
 returns trigger language plpgsql set search_path = public
 as $$
+declare active_cycle_started_at timestamptz;
 begin
   if old.deleted_at is not null and new.deleted_at is null then
-    new.joined_at := now();
+    select c.started_at into active_cycle_started_at
+    from public.cycles c
+    where c.mess_id = new.mess_id and c.status = 'active' and c.deleted_at is null
+    order by c.started_at desc
+    limit 1;
+
+    if active_cycle_started_at is not null
+      and old.deleted_at > active_cycle_started_at
+      and old.joined_at <= active_cycle_started_at then
+      -- The member was active from this cycle's start before being removed.
+      -- Keep that baseline when restored during the same cycle.
+      new.joined_at := old.joined_at;
+    else
+      -- The old membership ended before this cycle, or began mid-cycle.
+      new.joined_at := now();
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.reset_member_join_dates_on_cycle_start()
+returns trigger language plpgsql set search_path = public
+as $$
+begin
+  if new.status = 'active' and new.mess_id is not null then
+    update public.members
+    set joined_at = greatest(new.started_at, coalesce(created_at, new.started_at))
+    where mess_id = new.mess_id and deleted_at is null;
   end if;
   return new;
 end;
@@ -301,6 +330,13 @@ begin
   insert into public.cycles (name, status, user_id, mess_id, started_at)
   values (trim(cycle_name_input), 'active', auth.uid(), current_mess, coalesce(started_at_input, now()))
   returning * into new_cycle;
+
+  -- Freeze the current roster's membership baseline to this cycle's start.
+  -- The previous cycle already has its own member snapshot, so this does not
+  -- rewrite historical settlement dates.
+  update public.members
+  set joined_at = new_cycle.started_at
+  where mess_id = current_mess and deleted_at is null;
 
   for carry_item in select value from jsonb_array_elements(carry_forwards_input)
   loop

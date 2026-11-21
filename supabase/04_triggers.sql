@@ -18,6 +18,11 @@ create trigger members_set_joined_at_on_restore
 before update of deleted_at on public.members
 for each row execute function public.set_member_joined_at_on_restore();
 
+drop trigger if exists cycles_reset_member_join_dates on public.cycles;
+create trigger cycles_reset_member_join_dates
+after insert on public.cycles
+for each row execute function public.reset_member_join_dates_on_cycle_start();
+
 -- Audit log triggers for tamper-proof and atomic changelog recording
 drop trigger if exists audit_expenses_trigger on public.expenses;
 create trigger audit_expenses_trigger

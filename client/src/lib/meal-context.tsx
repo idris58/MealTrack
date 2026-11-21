@@ -1435,6 +1435,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     pendingCycle,
     getCycleMembers,
     getCycleDetails: computedCycleDetails.getCycleDetails,
+    setMembers: setMemberRoster,
     setCycles,
     setLoadedCycleIds,
     setDeposits: setAllDeposits,
