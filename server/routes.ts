@@ -93,6 +93,7 @@ type MemberRow = {
   avatar: string | null;
   deleted_at: string | null;
   created_at: string | null;
+  joined_at: string | null;
   sort_order: number | null;
 };
 
@@ -101,6 +102,7 @@ type SnapshotMember = {
   name: string;
   avatar?: string;
   createdAt?: string | null;
+  joinedAt?: string | null;
   deletedAt?: string | null;
 };
 
@@ -200,6 +202,7 @@ function buildSharedPayload(
         name: member.name,
         avatar: member.avatar || member.name.substring(0, 2).toUpperCase(),
         createdAt: member.createdAt,
+        joinedAt: member.joinedAt,
         deletedAt: member.deletedAt,
       }))
     : selectCycleMembers(
@@ -208,6 +211,7 @@ function buildSharedPayload(
           name: member.name,
           avatar: member.avatar || member.name.substring(0, 2).toUpperCase(),
           createdAt: member.created_at,
+          joinedAt: member.joined_at,
           deletedAt: member.deleted_at,
         })),
         historyMemberIds,
@@ -539,7 +543,7 @@ async function loadSharedPayloadForScope(scope: Scope): Promise<SharedPayload | 
     await Promise.all([
       supabaseAdmin
         .from("members")
-        .select("id, name, avatar, created_at, deleted_at, sort_order")
+        .select("id, name, avatar, created_at, joined_at, deleted_at, sort_order")
         .eq(...scopeFilter(scope))
         .order("sort_order", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true }),
@@ -880,12 +884,13 @@ export async function registerRoutes(
       id: string;
       name: string;
       created_at: string | null;
+      joined_at: string | null;
       deleted_at: string | null;
       sort_order: number | null;
     }>(async (from, to) =>
       await supabaseAdmin
         .from("members")
-        .select("id, name, created_at, deleted_at, sort_order")
+        .select("id, name, created_at, joined_at, deleted_at, sort_order")
         .eq("mess_id", messId)
         .order("sort_order", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true })
@@ -903,7 +908,7 @@ export async function registerRoutes(
     const mealLogs = cycleRows.meal_logs ?? [];
 
     const members = roster ?? selectCycleMembers(
-      liveRoster.map((member) => ({ ...member, deletedAt: member.deleted_at })),
+      liveRoster.map((member) => ({ ...member, joinedAt: member.joined_at, deletedAt: member.deleted_at })),
       [
         ...deposits.map((deposit) => deposit.member_id),
         ...mealLogs.map((log) => log.member_id),

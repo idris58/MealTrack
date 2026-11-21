@@ -68,6 +68,33 @@ describe("cycle math", () => {
     expect(result.stats.fixedCostPerMember).toBe(50);
   });
 
+  it("starts a restored member's utility proration at their rejoin date", () => {
+    const result = computeCycleMath({
+      members: [
+        {
+          id: "restored",
+          name: "Restored member",
+          createdAt: "2026-04-10T00:00:00.000Z",
+          joinedAt: "2026-01-06T00:00:00.000Z",
+        },
+        {
+          id: "continuing",
+          name: "Continuing member",
+          createdAt: "2026-04-10T00:00:00.000Z",
+          joinedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      deposits: [],
+      expenses: [{ amount: 100, type: "utility" }],
+      mealLogs: [],
+      cycleStartedAt: "2026-01-01T00:00:00.000Z",
+      cycleEndedAt: "2026-01-11T00:00:00.000Z",
+    });
+
+    expect(result.members.map((member) => member.fixedCost)).toEqual([25, 75]);
+    expect(result.members.reduce((sum, member) => sum + member.fixedCost, 0)).toBe(100);
+  });
+
   it("ignores deposits and meal logs for members outside the cycle roster", () => {
     const result = computeCycleMath({
       members: [{ id: "known", name: "Known" }],

@@ -40,6 +40,17 @@ begin
 end;
 $$;
 
+create or replace function public.set_member_joined_at_on_restore()
+returns trigger language plpgsql set search_path = public
+as $$
+begin
+  if old.deleted_at is not null and new.deleted_at is null then
+    new.joined_at := now();
+  end if;
+  return new;
+end;
+$$;
+
 create or replace function public.create_mess(mess_name text)
 returns public.messes language plpgsql security definer set search_path = public
 as $$
@@ -1432,7 +1443,7 @@ as $$
     'members', case when cycle_ids_input is null then coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', m.id, 'name', m.name, 'avatar', m.avatar,
-        'created_at', m.created_at, 'deleted_at', m.deleted_at,
+        'created_at', m.created_at, 'joined_at', m.joined_at, 'deleted_at', m.deleted_at,
         'delete_expires_at', m.delete_expires_at, 'profile_id', m.profile_id
       ) order by m.sort_order asc nulls last, m.created_at asc)
       from public.members m where m.mess_id = mess_id_input
@@ -1497,7 +1508,7 @@ as $$
     'members', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', m.id, 'name', m.name, 'avatar', m.avatar,
-        'created_at', m.created_at, 'deleted_at', m.deleted_at,
+        'created_at', m.created_at, 'joined_at', m.joined_at, 'deleted_at', m.deleted_at,
         'delete_expires_at', m.delete_expires_at, 'profile_id', m.profile_id
       ) order by m.sort_order asc nulls last, m.created_at asc)
       from public.members m

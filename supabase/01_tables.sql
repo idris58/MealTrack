@@ -42,6 +42,7 @@ create table if not exists public.members (
   name text not null,
   avatar text,
   created_at timestamptz default now(),
+  joined_at timestamptz,
   user_id uuid references auth.users(id) on delete set null,
   mess_id uuid references public.messes(id) on delete set null,
   profile_id uuid references public.profiles(id) on delete set null,
@@ -49,6 +50,13 @@ create table if not exists public.members (
   delete_expires_at timestamptz,
   sort_order integer default 0
 );
+
+-- joined_at tracks the current membership period after a member is restored.
+-- Existing members retain their original creation date as their first join.
+alter table public.members add column if not exists joined_at timestamptz;
+update public.members set joined_at = coalesce(created_at, now()) where joined_at is null;
+alter table public.members alter column joined_at set default now();
+alter table public.members alter column joined_at set not null;
 
 create table if not exists public.cycles (
   id uuid primary key default gen_random_uuid(),

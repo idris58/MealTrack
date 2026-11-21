@@ -109,6 +109,7 @@ type MemberRow = {
   delete_expires_at?: string | null;
   profile_id?: string | null;
   created_at?: string | null;
+  joined_at?: string | null;
 };
 
 type CycleRow = {
@@ -381,6 +382,7 @@ function mapMemberRows(memberRows: MemberRow[]) {
     avatar: toAvatar(member.name, member.avatar),
     profileId: member.profile_id ?? null,
     createdAt: member.created_at ?? null,
+    joinedAt: member.joined_at ?? member.created_at ?? null,
     deletedAt: member.deleted_at ?? null,
   });
   return {
@@ -389,6 +391,20 @@ function mapMemberRows(memberRows: MemberRow[]) {
       ...mapMember(member), archived: !member.delete_expires_at,
     })),
   };
+}
+
+async function ensureMemberJoinDates(messId: string, memberRows: MemberRow[]): Promise<MemberRow[]> {
+  if (memberRows.length === 0 || memberRows.every((member) => member.joined_at != null)) return memberRows;
+  const { data, error } = await supabase
+    .from('members')
+    .select('id, joined_at')
+    .eq('mess_id', messId);
+  if (error) throw error;
+  const joinedAtById = new Map((data ?? []).map((member) => [member.id, member.joined_at]));
+  return memberRows.map((member) => ({
+    ...member,
+    joined_at: joinedAtById.get(member.id) ?? member.created_at ?? null,
+  }));
 }
 
 function mapCycleRows(cycleRows: CycleRow[]): Cycle[] {
@@ -585,12 +601,18 @@ export function MealProvider({ children }: { children: ReactNode }) {
         mealsEaten: 0,
         avatar: toAvatar(member.name, member.avatar),
         createdAt: member.createdAt ?? currentMember?.createdAt,
+        joinedAt: member.joinedAt ?? (cycle.status === 'active' ? currentMember?.joinedAt : undefined),
         deletedAt: member.deletedAt ?? currentMember?.deletedAt,
       };
     });
     const archivedHistoryMembers = archivedMemberRoster
       .filter((member) => cycleHistoryMemberIds.has(member.id) && !cycleMemberIds.has(member.id))
-      .map((member) => ({ ...member, deposit: 0, mealsEaten: 0 }));
+      .map((member) => ({
+        ...member,
+        joinedAt: cycle.status === 'active' ? member.joinedAt : undefined,
+        deposit: 0,
+        mealsEaten: 0,
+      }));
     return [...snapshotMembers, ...archivedHistoryMembers];
   }, [cycles, memberRoster, archivedMemberRoster, historyMemberIdsByCycle]);
 
@@ -706,7 +728,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.rpc('get_mess_bootstrap');
       if (error) throw error;
       const bootstrap = (data ?? {}) as unknown as MessBootstrapPayload;
-      const memberRows = bootstrap.members ?? [];
+      const memberRows = await ensureMemberJoinDates(messId, bootstrap.members ?? []);
       const { members: nextMembers, archivedMembers: nextArchivedMembers } = mapMemberRows(memberRows);
       const nextCycles = mapCycleRows(bootstrap.cycles ?? []);
 
@@ -802,6 +824,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
         ? new Date(Date.parse(previousSyncAt) - 30_000).toISOString()
         : null;
       const result = await fetchCycleRowsForScope(messId, null, changedAfter, currentOpenCycleIdsRef.current);
+      const memberRows = await ensureMemberJoinDates(messId, result.members ?? []);
       const nextCycles = mapCycleRows(result.cycles ?? []);
       const validCycleIds = new Set(nextCycles.map((cycle) => cycle.id));
       const currentRowCycleIds = new Set(nextCycles
@@ -820,8 +843,8 @@ export function MealProvider({ children }: { children: ReactNode }) {
         return mergeRowsById(base, changed).filter((row) => validCycleIds.has(row.cycleId));
       };
 
-      setMemberRoster(mapMemberRows(result.members ?? []).members);
-      setArchivedMemberRoster(mapMemberRows(result.members ?? []).archivedMembers);
+      setMemberRoster(mapMemberRows(memberRows).members);
+      setArchivedMemberRoster(mapMemberRows(memberRows).archivedMembers);
       setCycles(nextCycles);
       setAllDeposits((current) => overlayQueuedOperations({
         deposits: mergeCurrent(current, result.deposits), expenses: [], mealLogs: [],
@@ -940,6 +963,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
       avatar: toAvatar(row.name, row.avatar),
       profileId: row.profile_id ?? null,
       createdAt: row.created_at ?? null,
+      joinedAt: row.joined_at ?? row.created_at ?? null,
       deletedAt: row.deleted_at ?? null,
       archived: Boolean(row.deleted_at && !row.delete_expires_at),
     };

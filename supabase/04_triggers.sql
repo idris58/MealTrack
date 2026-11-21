@@ -13,6 +13,11 @@ create trigger prevent_member_history_cascade_delete
 before delete on public.members
 for each row execute function public.prevent_member_history_cascade_delete();
 
+drop trigger if exists members_set_joined_at_on_restore on public.members;
+create trigger members_set_joined_at_on_restore
+before update of deleted_at on public.members
+for each row execute function public.set_member_joined_at_on_restore();
+
 -- Audit log triggers for tamper-proof and atomic changelog recording
 drop trigger if exists audit_expenses_trigger on public.expenses;
 create trigger audit_expenses_trigger

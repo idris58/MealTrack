@@ -4,6 +4,7 @@ export type CycleMathMember = {
   id: string;
   name: string;
   createdAt?: string | null;
+  joinedAt?: string | null;
   deletedAt?: string | null;
 };
 
@@ -53,7 +54,8 @@ function prorateFixedCosts<TMember extends CycleMathMember>(
   }
 
   const intervals = members.map((member) => {
-    const joinedAt = member.createdAt ? new Date(member.createdAt).getTime() : cycleStart;
+    const joinedAtValue = member.joinedAt ?? member.createdAt;
+    const joinedAt = joinedAtValue ? new Date(joinedAtValue).getTime() : cycleStart;
     const leftAt = member.deletedAt ? new Date(member.deletedAt).getTime() : cycleEnd;
     const start = Math.max(cycleStart, Number.isFinite(joinedAt) ? joinedAt : cycleStart);
     const end = Math.min(cycleEnd, Number.isFinite(leftAt) ? leftAt : cycleEnd);

@@ -41,6 +41,8 @@ export function useMembers(options: Options) {
     setMembers((previous) => [...previous, {
       id: data.id, name: data.name, deposit: 0, mealsEaten: 0,
       avatar: avatarFor(data.name, data.avatar),
+      createdAt: data.created_at ?? null,
+      joinedAt: data.joined_at ?? data.created_at ?? null,
     }]);
     broadcast();
   }, []);
@@ -106,13 +108,15 @@ export function useMembers(options: Options) {
     const { data, error } = await supabase.from('members')
       .update({ deleted_at: null, delete_expires_at: null })
       .eq('id', id).eq('mess_id', messId).not('deleted_at', 'is', null)
-      .select('id, name, avatar').maybeSingle();
+      .select('id, name, avatar, created_at, joined_at').maybeSingle();
     if (error) throw new Error('Unable to restore member. Please try again.');
     if (data) {
       setArchivedMembers((previous) => previous.filter((member) => member.id !== data.id));
       setMembers((previous) => previous.some((member) => member.id === data.id) ? previous : [...previous, {
         id: data.id, name: data.name, deposit: 0, mealsEaten: 0,
         avatar: avatarFor(data.name, data.avatar),
+        createdAt: data.created_at ?? null,
+        joinedAt: data.joined_at ?? data.created_at ?? null,
       }]);
     }
     reload();

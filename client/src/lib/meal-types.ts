@@ -8,6 +8,7 @@ export interface Member {
   avatar?: string;
   profileId?: string | null;
   createdAt?: string | null;
+  joinedAt?: string | null;
   deletedAt?: string | null;
   hasPendingDeposit?: boolean;
   archived?: boolean;
@@ -106,6 +107,7 @@ export interface SnapshotMember {
   name: string;
   avatar?: string;
   createdAt?: string | null;
+  joinedAt?: string | null;
   deletedAt?: string | null;
 }
 

@@ -56,7 +56,7 @@ export function useCycles(options: Options) {
     const details = getCycleDetails?.(activeCycle.id);
     if (!details) throw new Error('Load the current cycle details before closing it.');
     const closedAt = new Date().toISOString();
-    const snapshot: SnapshotMember[] = getCycleMembers(activeCycle.id).map(({ id, name, avatar, createdAt, deletedAt }) => ({ id, name, avatar, createdAt, deletedAt }));
+    const snapshot: SnapshotMember[] = getCycleMembers(activeCycle.id).map(({ id, name, avatar, createdAt, joinedAt, deletedAt }) => ({ id, name, avatar, createdAt, joinedAt, deletedAt }));
     const settlement = computeCycleMath({
       members: details.members,
       deposits: details.deposits,
