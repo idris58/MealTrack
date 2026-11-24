@@ -372,7 +372,7 @@ export function ManagerMembersView() {
   };
 
   const handleClaimMember = async (memberId: string) => {
-    if (!user || !canManageRoles || claimingMemberId) return;
+    if (!user || !canManageRoles || claimingMemberId || members.some((member) => member.profileId === user.id)) return;
     setClaimingMemberId(memberId);
     try {
       const { error } = await supabase.rpc('link_member_profile', {
@@ -504,6 +504,7 @@ export function ManagerMembersView() {
     }
     return cards;
   }, [deletedMembers, members]);
+  const managerAlreadyLinked = !!user && members.some((member) => member.profileId === user.id);
   const visibleArchivedMembers = archivedMembers.filter((member) => !countdownMemberIds.has(member.id));
   const restoreArchivedMember = async (memberId: string) => {
     try {
@@ -751,7 +752,7 @@ export function ManagerMembersView() {
                   const stats = getMemberStats(item.member.id);
                   const linkedProfile = profiles.find((profile) => profile.id === item.member.profileId);
                   const coordinatorAction = canManageRoles && linkedProfile && linkedProfile.role !== 'manager' ? () => void toggleCoordinator(linkedProfile.id, linkedProfile.role === 'coordinator' ? 'member' : 'coordinator') : undefined;
-                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} onClaim={canManageRoles && user && !item.member.profileId ? () => void handleClaimMember(item.member.id) : undefined} claimDisabled={claimingMemberId === item.member.id} />;
+                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} onClaim={canManageRoles && user && !managerAlreadyLinked && !item.member.profileId ? () => void handleClaimMember(item.member.id) : undefined} claimDisabled={claimingMemberId === item.member.id} />;
                 })}
               </div>
             </SortableContext>
