@@ -83,16 +83,36 @@ $$;
 create or replace function public.create_mess(mess_name text)
 returns public.messes language plpgsql security definer set search_path = public
 as $$
-declare new_mess public.messes;
-  existing_mess_id uuid;
+declare
+  new_mess public.messes;
+  creator_profile public.profiles;
 begin
   if auth.uid() is null then raise exception 'Authentication is required to create a mess'; end if;
-  select mess_id into existing_mess_id from public.profiles where id = auth.uid() for update;
+  select * into creator_profile from public.profiles where id = auth.uid() for update;
   if not found then raise exception 'Profile not found'; end if;
-  if existing_mess_id is not null then raise exception 'Your account already belongs to a mess'; end if;
+  if creator_profile.mess_id is not null then raise exception 'Your account already belongs to a mess'; end if;
   if nullif(trim(mess_name), '') is null then raise exception 'Mess name is required'; end if;
-  insert into public.messes (name, creator_id) values (trim(mess_name), auth.uid()) returning * into new_mess;
-  update public.profiles set mess_id = new_mess.id, role = 'manager', updated_at = now() where id = auth.uid();
+
+  insert into public.messes (name, creator_id)
+  values (trim(mess_name), auth.uid())
+  returning * into new_mess;
+
+  update public.profiles
+  set mess_id = new_mess.id, role = 'manager', updated_at = now()
+  where id = auth.uid();
+
+  -- Make the creator a linked roster member so manager dashboards, meal-off
+  -- requests, and future manager transfers can resolve their member identity.
+  insert into public.members (name, avatar, user_id, mess_id, profile_id, sort_order)
+  values (
+    creator_profile.full_name,
+    upper(substr(creator_profile.full_name, 1, 2)),
+    auth.uid(),
+    new_mess.id,
+    auth.uid(),
+    0
+  );
+
   return new_mess;
 end;
 $$;

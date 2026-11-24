@@ -175,13 +175,13 @@ function DepositForm({ memberId, memberName, onClose }: { memberId: string; memb
 function MemberCard({
   member, stats, deletingMemberId, onDeposit, onDelete, profileRole,
   onCoordinatorAction, canManageRoles = false, isLinked = false, dragHandleProps, isDragging = false,
-  depositDisabled = false,
+  depositDisabled = false, onClaim, claimDisabled = false,
 }: {
   member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null;
   onDeposit?: () => void; onDelete?: () => void;
   profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void;
   canManageRoles?: boolean; isLinked?: boolean; dragHandleProps?: any; isDragging?: boolean;
-  depositDisabled?: boolean;
+  depositDisabled?: boolean; onClaim?: () => void; claimDisabled?: boolean;
 }) {
   return (
     <Card className={`overflow-hidden transition-shadow ${isDragging ? 'shadow-xl ring-2 ring-primary/30' : ''}`}>
@@ -251,8 +251,13 @@ function MemberCard({
             </span>
           </div>
 
-          {(onDeposit || (canManageRoles && onCoordinatorAction && profileRole !== 'manager')) ? (
+          {(onDeposit || onClaim || (canManageRoles && onCoordinatorAction && profileRole !== 'manager')) ? (
             <div className="flex items-center gap-2 pt-1">
+              {onClaim ? (
+                <Button variant="outline" className="gap-1.5 px-2.5 sm:px-3" onClick={onClaim} disabled={claimDisabled}>
+                  <Link2 className="h-4 w-4 shrink-0" /><span>{claimDisabled ? 'Linking...' : "That's me"}</span>
+                </Button>
+              ) : null}
               {onDeposit ? (
                 depositDisabled ? (
                   <Tooltip>
@@ -286,18 +291,18 @@ function MemberCard({
 }
 
 function SortableMemberCard({
-  member, stats, deletingMemberId, onDeposit, onDelete, profileRole, onCoordinatorAction, canManageRoles, canManageMembers, isLinked, depositDisabled,
+  member, stats, deletingMemberId, onDeposit, onDelete, profileRole, onCoordinatorAction, canManageRoles, canManageMembers, isLinked, depositDisabled, onClaim, claimDisabled,
 }: {
   member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null;
   onDeposit?: () => void; onDelete?: () => void;
   profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void;
   canManageRoles?: boolean; canManageMembers?: boolean; isLinked?: boolean;
-  depositDisabled?: boolean;
+  depositDisabled?: boolean; onClaim?: () => void; claimDisabled?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: member.id, disabled: !canManageMembers });
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1 : undefined }} className={isDragging ? 'opacity-80' : undefined} {...attributes}>
-      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} depositDisabled={depositDisabled} dragHandleProps={canManageMembers ? { ref: setActivatorNodeRef, ...listeners } : undefined} />
+      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} depositDisabled={depositDisabled} onClaim={onClaim} claimDisabled={claimDisabled} dragHandleProps={canManageMembers ? { ref: setActivatorNodeRef, ...listeners } : undefined} />
     </div>
   );
 }
@@ -306,7 +311,7 @@ function SortableMemberCard({
 export function ManagerMembersView() {
   const { members, archivedMembers, getMemberStats } = useMealMembers();
   const { activeCycle } = useMealCycles();
-  const { removeMember, restoreMember, reorderMembers } = useMealActions();
+  const { removeMember, restoreMember, reorderMembers, retryLoadData } = useMealActions();
   const { profiles: profilesRevision } = useRealtimeEvents();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -316,6 +321,7 @@ export function ManagerMembersView() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [depositMemberId, setDepositMemberId] = useState<string | null>(null);
   const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
+  const [claimingMemberId, setClaimingMemberId] = useState<string | null>(null);
   const [deletedMembers, setDeletedMembers] = useState<DeletedMemberGhost[]>([]);
   const { user, canManageMembers, canManageRoles, canManageDeposits } = useAuth();
   const [profiles, setProfiles] = useState<Array<{ id: string; full_name: string; email: string; role: 'manager' | 'coordinator' | 'member' }>>([]);
@@ -362,6 +368,24 @@ export function ManagerMembersView() {
       setCountdownMemberIds((prev) => { const next = new Set(prev); next.delete(memberId); return next; });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not restore the member. Please try again.');
+    }
+  };
+
+  const handleClaimMember = async (memberId: string) => {
+    if (!user || !canManageRoles || claimingMemberId) return;
+    setClaimingMemberId(memberId);
+    try {
+      const { error } = await supabase.rpc('link_member_profile', {
+        member_id_input: memberId,
+        profile_id_input: user.id,
+      });
+      if (error) throw error;
+      retryLoadData();
+      toast.success('Member linked to your account');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not link this member to your account.');
+    } finally {
+      setClaimingMemberId(null);
     }
   };
 
@@ -727,7 +751,7 @@ export function ManagerMembersView() {
                   const stats = getMemberStats(item.member.id);
                   const linkedProfile = profiles.find((profile) => profile.id === item.member.profileId);
                   const coordinatorAction = canManageRoles && linkedProfile && linkedProfile.role !== 'manager' ? () => void toggleCoordinator(linkedProfile.id, linkedProfile.role === 'coordinator' ? 'member' : 'coordinator') : undefined;
-                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} />;
+                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} onClaim={canManageRoles && user && !item.member.profileId ? () => void handleClaimMember(item.member.id) : undefined} claimDisabled={claimingMemberId === item.member.id} />;
                 })}
               </div>
             </SortableContext>
