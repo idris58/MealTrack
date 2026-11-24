@@ -13,6 +13,8 @@ import {
   ArrowRight,
   CalendarCheck,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CircleDollarSign,
   CloudOff,
   Hourglass,
@@ -359,6 +361,7 @@ export function ManagerDashboard() {
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState<{ memberId?: string; amount?: number } | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'expenses'>('activity');
+  const [showAllAttention, setShowAllAttention] = useState(false);
   const firstName = (profile?.full_name ?? 'there').trim().split(' ')[0];
   const canPostNotice = profile?.role === 'manager' || profile?.role === 'coordinator';
 
@@ -652,8 +655,9 @@ export function ManagerDashboard() {
       {header}
 
       {/* Cash command center + attention */}
-      <div className="grid gap-5 lg:grid-cols-12 sm:gap-6">
-        <section className="relative isolate overflow-hidden rounded-3xl border border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 text-white shadow-xl shadow-emerald-950/10 lg:col-span-8" aria-labelledby="financial-health-title">
+      <div className="grid items-start gap-5 lg:grid-cols-12 sm:gap-6">
+        <div className="contents lg:grid lg:min-w-0 lg:content-start lg:gap-5 lg:col-span-8">
+        <section className="order-1 relative isolate overflow-hidden rounded-3xl border border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-950 text-white shadow-xl shadow-emerald-950/10 lg:order-none" aria-labelledby="financial-health-title">
           <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-emerald-300/10 blur-3xl" />
           <div aria-hidden className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-teal-300/[0.08] blur-3xl" />
           <div className="relative p-5 sm:p-7">
@@ -691,11 +695,18 @@ export function ManagerDashboard() {
           </div>
         </section>
 
+        <div className="order-3 grid grid-cols-2 gap-3 sm:gap-4 lg:order-none lg:grid-cols-4">
+          <Kpi label="Meal rate" value={money(stats.currentMealRate, 2)} sub="Per meal, this cycle" icon={Utensils} accent="bg-emerald-500/10 text-emerald-600" trend={rateTrend} />
+          <Kpi label="Meals served" value={formatMealCount(stats.totalMealsConsumed)} sub={`${formatMealCount(v.todayMeals)} today`} icon={CalendarCheck} accent="bg-sky-500/10 text-sky-600" />
+          <Kpi label="Total spending" value={money(v.totalSpent)} sub={`Today ${money(v.todaySpent)}`} icon={Receipt} accent="bg-violet-500/10 text-violet-600" />
+          <Kpi label="Total collected" value={money(stats.totalDeposits)} sub={`${members.length} active members`} icon={Wallet} accent="bg-amber-500/10 text-amber-600" />
+        </div>
+        </div>
         <Panel
           title="Needs attention"
           hint={attention.length ? `${attention.length} item${attention.length === 1 ? '' : 's'} to review` : 'Nothing urgent'}
           icon={AlertTriangle}
-          className="lg:col-span-4"
+          className="order-2 lg:col-span-4 lg:order-none"
         >
           {attention.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-xl bg-emerald-500/[0.07] px-4 py-10 text-center">
@@ -705,7 +716,7 @@ export function ManagerDashboard() {
             </div>
           ) : (
             <ul className="space-y-2.5">
-              {attention.map((a) => (
+              {(showAllAttention ? attention : attention.slice(0, 3)).map((a) => (
                 <li key={a.id} className="flex items-start gap-3 rounded-xl border p-3">
                   <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', toneClasses[a.tone])}><a.icon className="h-4 w-4" /></span>
                   <div className="min-w-0 flex-1">
@@ -723,15 +734,18 @@ export function ManagerDashboard() {
               ))}
             </ul>
           )}
+          {attention.length > 3 && (
+            <button
+              type="button"
+              aria-expanded={showAllAttention}
+              onClick={() => setShowAllAttention((expanded) => !expanded)}
+              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            >
+              {showAllAttention ? 'Show less' : `Show all ${attention.length}`}
+              {showAllAttention ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+          )}
         </Panel>
-      </div>
-
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 sm:gap-4">
-        <Kpi label="Meal rate" value={money(stats.currentMealRate, 2)} sub="Per meal, this cycle" icon={Utensils} accent="bg-emerald-500/10 text-emerald-600" trend={rateTrend} />
-        <Kpi label="Meals served" value={formatMealCount(stats.totalMealsConsumed)} sub={`${formatMealCount(v.todayMeals)} today`} icon={CalendarCheck} accent="bg-sky-500/10 text-sky-600" />
-        <Kpi label="Total spending" value={money(v.totalSpent)} sub={`Today ${money(v.todaySpent)}`} icon={Receipt} accent="bg-violet-500/10 text-violet-600" />
-        <Kpi label="Total collected" value={money(stats.totalDeposits)} sub={`${members.length} active members`} icon={Wallet} accent="bg-amber-500/10 text-amber-600" />
       </div>
 
       {/* Ledger + today */}
