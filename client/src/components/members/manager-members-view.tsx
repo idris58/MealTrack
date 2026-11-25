@@ -23,6 +23,7 @@ import {
 import {
   Check, ChevronDown, Clipboard, Clock3, Copy, GripVertical, Link2, Link2Off,
   Plus, RotateCcw, Send, ShieldCheck, Trash2, Wallet, Users, UserPlus,
+  Search, Grid2X2, List, Pencil,
 } from 'lucide-react';
 import {
   DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter,
@@ -173,12 +174,13 @@ function DepositForm({ memberId, memberName, onClose }: { memberId: string; memb
 
 // ── Member Card ───────────────────────────────────────────────────────────────
 function MemberCard({
-  member, stats, deletingMemberId, onDeposit, onDelete, profileRole,
+  member, stats, deletingMemberId, onDeposit, onDelete, onRename, profileRole,
   onCoordinatorAction, canManageRoles = false, isLinked = false, dragHandleProps, isDragging = false,
   depositDisabled = false, onClaim, claimDisabled = false,
 }: {
   member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null;
   onDeposit?: () => void; onDelete?: () => void;
+  onRename?: () => void;
   profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void;
   canManageRoles?: boolean; isLinked?: boolean; dragHandleProps?: any; isDragging?: boolean;
   depositDisabled?: boolean; onClaim?: () => void; claimDisabled?: boolean;
@@ -201,7 +203,10 @@ function MemberCard({
                 : <span title="Offline Member (Not Linked)" className="inline-flex shrink-0"><Link2Off className="h-3.5 w-3.5 text-gray-400" /></span>}
             </div>
           </div>
-          {onDelete ? (
+          {(onRename || onDelete) ? (
+            <div className="flex shrink-0 items-center gap-1">
+            {onRename ? <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRename} aria-label={`Rename ${member.name}`}><Pencil className="h-4 w-4" /></Button> : null}
+            {onDelete ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" disabled={deletingMemberId === member.id}>
@@ -221,6 +226,8 @@ function MemberCard({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -291,10 +298,11 @@ function MemberCard({
 }
 
 function SortableMemberCard({
-  member, stats, deletingMemberId, onDeposit, onDelete, profileRole, onCoordinatorAction, canManageRoles, canManageMembers, isLinked, depositDisabled, onClaim, claimDisabled,
+  member, stats, deletingMemberId, onDeposit, onDelete, onRename, profileRole, onCoordinatorAction, canManageRoles, canManageMembers, isLinked, depositDisabled, onClaim, claimDisabled,
 }: {
   member: Member; stats: MemberStatsSnapshot; deletingMemberId?: string | null;
   onDeposit?: () => void; onDelete?: () => void;
+  onRename?: () => void;
   profileRole?: 'manager' | 'coordinator' | 'member'; onCoordinatorAction?: () => void;
   canManageRoles?: boolean; canManageMembers?: boolean; isLinked?: boolean;
   depositDisabled?: boolean; onClaim?: () => void; claimDisabled?: boolean;
@@ -302,7 +310,7 @@ function SortableMemberCard({
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: member.id, disabled: !canManageMembers });
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 1 : undefined }} className={isDragging ? 'opacity-80' : undefined} {...attributes}>
-      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} depositDisabled={depositDisabled} onClaim={onClaim} claimDisabled={claimDisabled} dragHandleProps={canManageMembers ? { ref: setActivatorNodeRef, ...listeners } : undefined} />
+      <MemberCard member={member} stats={stats} deletingMemberId={deletingMemberId} onDeposit={onDeposit} onDelete={onDelete} onRename={onRename} profileRole={profileRole} onCoordinatorAction={onCoordinatorAction} canManageRoles={canManageRoles} isLinked={isLinked} isDragging={isDragging} depositDisabled={depositDisabled} onClaim={onClaim} claimDisabled={claimDisabled} dragHandleProps={canManageMembers ? { ref: setActivatorNodeRef, ...listeners } : undefined} />
     </div>
   );
 }
@@ -311,7 +319,7 @@ function SortableMemberCard({
 export function ManagerMembersView() {
   const { members, archivedMembers, getMemberStats } = useMealMembers();
   const { activeCycle } = useMealCycles();
-  const { removeMember, restoreMember, reorderMembers, retryLoadData } = useMealActions();
+  const { removeMember, restoreMember, reorderMembers, retryLoadData, updateMember } = useMealActions();
   const { profiles: profilesRevision } = useRealtimeEvents();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -339,6 +347,12 @@ export function ManagerMembersView() {
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberSort, setMemberSort] = useState<'custom' | 'name' | 'balance' | 'deposit' | 'meals'>('custom');
+  const [compactView, setCompactView] = useState(false);
+  const [renamingMember, setRenamingMember] = useState<Member | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
 
   const handleRemoveMember = async (memberId: string) => {
     if (deletingMemberId) return;
@@ -386,6 +400,20 @@ export function ManagerMembersView() {
       toast.error(error instanceof Error ? error.message : 'Could not link this member to your account.');
     } finally {
       setClaimingMemberId(null);
+    }
+  };
+
+  const saveMemberName = async () => {
+    if (!renamingMember || !renameValue.trim()) return;
+    setRenameSaving(true);
+    try {
+      await updateMember(renamingMember.id, { name: renameValue.trim() });
+      toast.success('Member renamed');
+      setRenamingMember(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not rename this member.');
+    } finally {
+      setRenameSaving(false);
     }
   };
 
@@ -505,6 +533,20 @@ export function ManagerMembersView() {
     return cards;
   }, [deletedMembers, members]);
   const managerAlreadyLinked = !!user && members.some((member) => member.profileId === user.id);
+  const normalizedSearch = memberSearch.trim().toLocaleLowerCase();
+  const visibleMembers = useMemo(() => {
+    const filtered = members.filter((member) => member.name.toLocaleLowerCase().includes(normalizedSearch));
+    if (memberSort === 'custom') return filtered;
+    return [...filtered].sort((a, b) => {
+      if (memberSort === 'name') return a.name.localeCompare(b.name);
+      const left = getMemberStats(a.id);
+      const right = getMemberStats(b.id);
+      if (memberSort === 'balance') return left.balance - right.balance;
+      if (memberSort === 'deposit') return b.deposit - a.deposit;
+      return right.mealsEaten - left.mealsEaten;
+    });
+  }, [getMemberStats, memberSort, members, normalizedSearch]);
+  const canReorderVisibleMembers = memberSort === 'custom' && !normalizedSearch;
   const visibleArchivedMembers = archivedMembers.filter((member) => !countdownMemberIds.has(member.id));
   const restoreArchivedMember = async (memberId: string) => {
     try {
@@ -730,6 +772,28 @@ export function ManagerMembersView() {
         </Dialog>
 
         {/* Member list / empty states */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative min-w-0 flex-1 sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Search members" className="pl-9" aria-label="Search members" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={memberSort} onValueChange={(value) => setMemberSort(value as typeof memberSort)}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="Sort members" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom">Roster order</SelectItem>
+                <SelectItem value="name">Name A–Z</SelectItem>
+                <SelectItem value="balance">Balance: owing first</SelectItem>
+                <SelectItem value="deposit">Highest deposit</SelectItem>
+                <SelectItem value="meals">Most meals</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex rounded-lg border p-0.5" aria-label="Member display style">
+              <Button type="button" size="icon" variant={compactView ? 'ghost' : 'secondary'} className="h-8 w-8" aria-label="Card view" aria-pressed={!compactView} onClick={() => setCompactView(false)}><Grid2X2 className="h-4 w-4" /></Button>
+              <Button type="button" size="icon" variant={compactView ? 'secondary' : 'ghost'} className="h-8 w-8" aria-label="Compact list view" aria-pressed={compactView} onClick={() => setCompactView(true)}><List className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        </div>
         {members.length === 0 ? (
           <Card className="border-dashed border-2 flex flex-col items-center justify-center p-8 text-center bg-card/50 backdrop-blur-sm min-h-[350px] animate-in fade-in-50 duration-300">
             <div className="rounded-full bg-gradient-to-br from-primary/10 to-primary/5 p-4 mb-4 ring-8 ring-primary/5 text-primary"><Users className="h-10 w-10 text-primary animate-pulse" /></div>
@@ -738,10 +802,41 @@ export function ManagerMembersView() {
             <Button className="gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform bg-primary hover:bg-primary/95 text-primary-foreground font-semibold" onClick={() => setIsAddOpen(true)}><Plus className="h-4 w-4" />Add Your First Member</Button>
           </Card>
         ) : (
+          compactView ? (
+            <div className="overflow-x-auto rounded-xl border bg-card">
+              <table className="w-full min-w-[650px] text-sm">
+                <thead className="bg-muted/60 text-left text-xs text-muted-foreground"><tr><th className="px-4 py-3 font-medium">Member</th><th className="px-4 py-3 text-right font-medium">Deposit</th><th className="px-4 py-3 text-right font-medium">Meals</th><th className="px-4 py-3 text-right font-medium">Balance</th><th className="px-4 py-3 text-right font-medium">Actions</th></tr></thead>
+                <tbody className="divide-y">
+                  {visibleMembers.map((member) => {
+                    const stats = getMemberStats(member.id);
+                    return <tr key={member.id}>
+                      <td className="px-4 py-3 font-medium">{member.name}{member.profileId ? <Link2 className="ml-2 inline h-3.5 w-3.5 text-emerald-500" /> : null}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">৳{member.deposit.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{formatMealCount(member.mealsEaten)}</td>
+                      <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', stats.balance >= 0 ? 'text-emerald-600' : 'text-red-600')}>{stats.balance >= 0 ? '+' : '−'}৳{Math.round(Math.abs(stats.balance))}</td>
+                      <td className="px-4 py-2"><div className="flex justify-end gap-1">
+                        {canManageMembers ? <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={`Rename ${member.name}`} onClick={() => { setRenamingMember(member); setRenameValue(member.name); }}><Pencil className="h-4 w-4" /></Button> : null}
+                        {canManageDeposits ? <Button size="sm" variant="outline" disabled={!activeCycle} onClick={() => setDepositMemberId(member.id)}>Deposit</Button> : null}
+                        {canManageMembers ? <AlertDialog>
+                          <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" aria-label={`Delete ${member.name}`}><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
+                          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this member?</AlertDialogTitle><AlertDialogDescription>{member.name} will be removed from the active roster. Existing history is preserved, and you can undo during the countdown.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => void handleRemoveMember(member.id)}>Delete member</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                        </AlertDialog> : null}
+                      </div></td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+              {deletedMembers.map(({ member, expiresAt }) => (
+                <UndoDeleteGhost key={`compact-deleted-${member.id}`} message={`Member '${member.name}' deleted.`} expiresAt={expiresAt} onUndo={() => void handleUndoMember(member.id)} onExpired={() => setDeletedMembers((current) => current.filter((entry) => entry.member.id !== member.id))} className="m-2">
+                  <div className="p-3 text-sm font-medium">{member.name}</div>
+                </UndoDeleteGhost>
+              ))}
+            </div>
+          ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={members.map((member) => member.id)} strategy={rectSortingStrategy}>
+            <SortableContext items={visibleMembers.map((member) => member.id)} strategy={rectSortingStrategy}>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {memberCards.map((item) => {
+                {canReorderVisibleMembers ? memberCards.map((item) => {
                   if (item.type === 'deleted') {
                     const { ghost } = item;
                     return <UndoDeleteGhost key={`deleted-${ghost.member.id}`} message={`Member '${ghost.member.name}' deleted.`} expiresAt={ghost.expiresAt} onUndo={() => void handleUndoMember(ghost.member.id)} onExpired={() => {
@@ -752,12 +847,26 @@ export function ManagerMembersView() {
                   const stats = getMemberStats(item.member.id);
                   const linkedProfile = profiles.find((profile) => profile.id === item.member.profileId);
                   const coordinatorAction = canManageRoles && linkedProfile && linkedProfile.role !== 'manager' ? () => void toggleCoordinator(linkedProfile.id, linkedProfile.role === 'coordinator' ? 'member' : 'coordinator') : undefined;
-                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers} isLinked={!!item.member.profileId} onClaim={canManageRoles && user && !managerAlreadyLinked && !item.member.profileId ? () => void handleClaimMember(item.member.id) : undefined} claimDisabled={claimingMemberId === item.member.id} />;
+                  return <SortableMemberCard key={item.member.id} member={item.member} stats={stats} onDeposit={canManageDeposits ? () => setDepositMemberId(item.member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => handleRemoveMember(item.member.id) : undefined} onRename={canManageMembers ? () => { setRenamingMember(item.member); setRenameValue(item.member.name); } : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} canManageMembers={canManageMembers && canReorderVisibleMembers} isLinked={!!item.member.profileId} onClaim={canManageRoles && user && !managerAlreadyLinked && !item.member.profileId ? () => void handleClaimMember(item.member.id) : undefined} claimDisabled={claimingMemberId === item.member.id} />;
+                }) : visibleMembers.map((member) => {
+                  const linkedProfile = profiles.find((profile) => profile.id === member.profileId);
+                  const coordinatorAction = canManageRoles && linkedProfile && linkedProfile.role !== 'manager' ? () => void toggleCoordinator(linkedProfile.id, linkedProfile.role === 'coordinator' ? 'member' : 'coordinator') : undefined;
+                  return <MemberCard key={member.id} member={member} stats={getMemberStats(member.id)} onDeposit={canManageDeposits ? () => setDepositMemberId(member.id) : undefined} depositDisabled={!activeCycle} onDelete={canManageMembers ? () => void handleRemoveMember(member.id) : undefined} onRename={canManageMembers ? () => { setRenamingMember(member); setRenameValue(member.name); } : undefined} profileRole={linkedProfile?.role} onCoordinatorAction={coordinatorAction} canManageRoles={canManageRoles} isLinked={!!member.profileId} onClaim={canManageRoles && user && !managerAlreadyLinked && !member.profileId ? () => void handleClaimMember(member.id) : undefined} claimDisabled={claimingMemberId === member.id} />;
                 })}
               </div>
             </SortableContext>
           </DndContext>
+          )
         )}
+
+        <Dialog open={!!renamingMember} onOpenChange={(open) => !open && setRenamingMember(null)}>
+          <DialogContent><DialogHeader><DialogTitle>Rename member</DialogTitle><DialogDescription>Update this name across the mess roster and future records.</DialogDescription></DialogHeader>
+            <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void saveMemberName(); }}>
+              <Input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} maxLength={80} aria-label="Member name" />
+              <Button type="submit" className="w-full" disabled={renameSaving || renameValue.trim().length < 2}>{renameSaving ? 'Saving...' : 'Save name'}</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={!!depositMemberId} onOpenChange={(open) => !open && setDepositMemberId(null)}>
           <DialogContent><DialogHeader><DialogTitle>Manage Deposit</DialogTitle><DialogDescription>Record a payment or adjustment to this member’s cycle balance.</DialogDescription></DialogHeader>
