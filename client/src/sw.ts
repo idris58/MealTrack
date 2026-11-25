@@ -73,17 +73,24 @@ self.addEventListener("push", (event) => {
     }
   }
   const title = typeof payload.title === "string" && payload.title ? payload.title : "MealTrack";
+  const badgeNavigator = self.navigator as WorkerNavigator & {
+    setAppBadge?: () => Promise<void>;
+  };
+  const badgePromise = badgeNavigator.setAppBadge?.().catch(() => undefined) ?? Promise.resolve();
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: typeof payload.body === "string" ? payload.body : undefined,
-      icon: typeof payload.icon === "string" ? payload.icon : "/icon-192.png",
-      badge: typeof payload.badge === "string" ? payload.badge : "/badge-96.png",
-      tag: typeof payload.tag === "string" ? payload.tag : undefined,
-      data: {
-        url: typeof payload.url === "string" ? payload.url : "/app",
-      },
-    }),
+    Promise.all([
+      self.registration.showNotification(title, {
+        body: typeof payload.body === "string" ? payload.body : undefined,
+        icon: typeof payload.icon === "string" ? payload.icon : "/icon-192.png",
+        badge: typeof payload.badge === "string" ? payload.badge : "/badge-96.png",
+        tag: typeof payload.tag === "string" ? payload.tag : undefined,
+        data: {
+          url: typeof payload.url === "string" ? payload.url : "/app",
+        },
+      }),
+      badgePromise,
+    ]).then(() => undefined),
   );
 });
 

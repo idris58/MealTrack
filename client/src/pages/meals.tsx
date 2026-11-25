@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMealCycles, useMealMembers, useMealRows } from '@/lib/meal-context';
 import { formatMealCount } from '@/lib/display-format';
 import { useAuth } from '@/lib/auth-context';
@@ -13,6 +13,7 @@ import { MealCountEditor } from '@/components/meal-count-editor';
 import { MealLogTable } from '@/components/meal-log-table';
 import { MealOffRequests } from '@/components/meal-off-requests';
 import { PageHeader } from '@/components/page-header';
+import { toast } from 'sonner';
 
 export default function Meals() {
   const { members } = useMealMembers();
@@ -22,6 +23,24 @@ export default function Meals() {
   const isMember = profile?.role === 'member';
   const [openMeal, setOpenMeal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('action') !== 'add') return;
+
+    url.searchParams.delete('action');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+
+    if (!canOperateMeals) {
+      toast.error('Your account cannot log meals.');
+      return;
+    }
+    if (!activeCycle || members.length === 0) {
+      toast.error('An active cycle with members is required to log meals.');
+      return;
+    }
+    setOpenMeal(true);
+  }, [activeCycle, canOperateMeals, members.length]);
 
   const today = startOfDay(new Date());
   const todayKey = format(today, 'yyyy-MM-dd');

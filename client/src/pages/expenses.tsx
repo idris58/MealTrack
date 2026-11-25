@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'wouter';
 import { useMealActions, useMealCycles, useMealRows, Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
@@ -14,6 +14,7 @@ import { UndoDeleteGhost } from '@/components/undo-delete-ghost';
 import { SyncBadge } from '@/components/sync-badge';
 import { ExpenseForm } from '@/components/expense-form';
 import { PageHeader } from '@/components/page-header';
+import { toast } from 'sonner';
 
 const DELETE_GRACE_MS = 10 * 1000;
 
@@ -73,6 +74,24 @@ export default function Expenses() {
   const [deletedExpenses, setDeletedExpenses] = useState<DeletedExpenseGhost[]>([]);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<TabFilter>('all');
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('action') !== 'add') return;
+
+    url.searchParams.delete('action');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+
+    if (!canManageExpenses) {
+      toast.error('Your account cannot add expenses.');
+      return;
+    }
+    if (!activeCycle) {
+      toast.error('Start a cycle before adding an expense.');
+      return;
+    }
+    setOpenExpense(true);
+  }, [activeCycle, canManageExpenses]);
 
   // Sort descending by date (latest first)
   const allExpenses = useMemo(

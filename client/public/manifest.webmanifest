@@ -42,7 +42,7 @@
       "name": "Log Today's Meals",
       "short_name": "Meals",
       "description": "Open the meal log for today",
-      "url": "/app/meals",
+      "url": "/app/meals?action=add",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -55,7 +55,7 @@
       "name": "Add Expense",
       "short_name": "Expense",
       "description": "Record a new meal or utility expense",
-      "url": "/app/expenses",
+      "url": "/app/expenses?action=add",
       "icons": [
         {
           "src": "/icon-192.png",

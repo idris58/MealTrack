@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useNotice } from '@/lib/notice-context';
 import { useMealOffRequests } from '@/lib/meal-context';
-import { updateAppBadge, clearAppBadge } from '@/lib/app-badge';
+import { clearAppBadge, updateAppBadge } from '@/lib/app-badge';
 
 /**
  * AppBadgeManager
@@ -25,11 +25,9 @@ export function AppBadgeManager() {
     const totalBadgeCount = pendingMealOffCount + unreadNoticeCount;
 
     updateAppBadge(totalBadgeCount);
-
-    return () => {
-      clearAppBadge();
-    };
   }, [pendingMealOffCount, notice, dismissed]);
+
+  useEffect(() => () => clearAppBadge(), []);
 
   return null;
 }

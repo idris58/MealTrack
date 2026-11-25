@@ -358,6 +358,20 @@ function AppShell() {
   }, [isInviteRoute, isSharedLandingRoute, isSharedRoute]);
 
   useEffect(() => {
+    if (isSharedLandingRoute || isSharedRoute || isInviteRoute) return;
+
+    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!manifestLink) return;
+
+    const manifestPath = profile?.role === "member"
+      ? "/member-manifest.webmanifest"
+      : "/manifest.webmanifest";
+    if (new URL(manifestLink.href).pathname !== manifestPath) {
+      manifestLink.href = manifestPath;
+    }
+  }, [isInviteRoute, isSharedLandingRoute, isSharedRoute, profile?.role]);
+
+  useEffect(() => {
     if (isSharedLandingRoute) {
       document.title = "Meal Code - MealTrack";
       return;
