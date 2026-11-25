@@ -29,6 +29,11 @@ create trigger audit_expenses_trigger
 after insert or update or delete on public.expenses
 for each row execute function public.audit_expenses();
 
+drop trigger if exists validate_expense_payer_member_trigger on public.expenses;
+create trigger validate_expense_payer_member_trigger
+before insert or update of paid_by_member_id, mess_id on public.expenses
+for each row execute function public.validate_expense_payer_member();
+
 drop trigger if exists audit_cycle_deposits_trigger on public.cycle_deposits;
 create trigger audit_cycle_deposits_trigger
 after insert or update or delete on public.cycle_deposits

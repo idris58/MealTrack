@@ -131,6 +131,7 @@ type ExpenseRow = {
   type: 'meal' | 'utility';
   date: string;
   paid_by: string;
+  paid_by_member_id?: string | null;
   updated_at: string;
 };
 
@@ -207,6 +208,7 @@ function mapExpenseRows(rows: ExpenseRow[]): Expense[] {
       type: expense.type,
       date: expense.date,
       paidBy: expense.paid_by,
+      paidByMemberId: expense.paid_by_member_id ?? null,
       updatedAt: expense.updated_at,
     }));
 }
@@ -234,7 +236,7 @@ function overlayQueuedOperations<TData extends Pick<MealDataSnapshot, 'deposits'
     if (operation.type === 'ADD_EXPENSE') {
       const item = payload as {
         recordId?: string; amount: number; description: string; type: string;
-        paidBy: string; date: string; cycleId: string;
+        paidBy: string; paidByMemberId?: string | null; date: string; cycleId: string;
       };
       const existingIndex = expenses.findIndex((expense) => expense.id === operation.id || expense.id === item.recordId);
       const optimisticExpense: Expense = {
@@ -245,13 +247,14 @@ function overlayQueuedOperations<TData extends Pick<MealDataSnapshot, 'deposits'
         type: normalizeExpenseType(item.type),
         date: item.date,
         paidBy: item.paidBy,
+        paidByMemberId: item.paidByMemberId ?? null,
       };
       if (existingIndex >= 0) expenses[existingIndex] = optimisticExpense;
       else expenses.unshift(optimisticExpense);
     } else if (operation.type === 'UPDATE_EXPENSE') {
       const item = payload as {
         id: string; amount: number; description: string; type: string;
-        paidBy: string; date: string; cycleId: string;
+        paidBy: string; paidByMemberId?: string | null; date: string; cycleId: string;
       };
       expenses = expenses.map((expense) => expense.id === item.id ? {
         ...expense,
@@ -259,6 +262,7 @@ function overlayQueuedOperations<TData extends Pick<MealDataSnapshot, 'deposits'
         description: item.description,
         type: normalizeExpenseType(item.type),
         paidBy: item.paidBy,
+        paidByMemberId: item.paidByMemberId ?? null,
         date: item.date,
       } : expense);
     } else if (operation.type === 'DELETE_EXPENSE') {
@@ -1230,7 +1234,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
     if (op.type === 'ADD_EXPENSE') {
       const p = op.payload as {
         amount: number; description: string; type: string;
-        recordId?: string; paidBy: string; date: string; userId: string; messId: string; cycleId: string;
+        recordId?: string; paidBy: string; paidByMemberId?: string | null; date: string; userId: string; messId: string; cycleId: string;
       };
       const expenseType = normalizeExpenseType(p.type);
       const { data, error } = await withRequestTimeout((signal) => supabase
@@ -1241,6 +1245,7 @@ export function MealProvider({ children }: { children: ReactNode }) {
           description: p.description,
           type: expenseType,
           paid_by: p.paidBy,
+          paid_by_member_id: p.paidByMemberId ?? null,
           date: p.date,
           user_id: userId,
           mess_id: messId,
@@ -1251,33 +1256,33 @@ export function MealProvider({ children }: { children: ReactNode }) {
         .single());
       if (error) throw error;
       setAllExpenses((prev) => [
-        { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by, updatedAt: data.updated_at },
+        { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by, paidByMemberId: data.paid_by_member_id, updatedAt: data.updated_at },
         ...prev.filter((e) => e.id !== op.id),
       ]);
       return;
     }
 
     if (op.type === 'UPDATE_EXPENSE') {
-      const p = op.payload as { id: string; amount: number; description: string; type: string; paidBy: string; date: string; cycleId: string; expected?: { amount: number; description: string; type: string; paidBy: string; date: string; updatedAt?: string } };
+      const p = op.payload as { id: string; amount: number; description: string; type: string; paidBy: string; paidByMemberId?: string | null; date: string; cycleId: string; expected?: { amount: number; description: string; type: string; paidBy: string; paidByMemberId?: string | null; date: string; updatedAt?: string } };
       const expenseType = normalizeExpenseType(p.type);
-      const { data: current, error: readError } = await withRequestTimeout((signal) => supabase.from('expenses').select('id,amount,description,type,paid_by,date,deleted_at,updated_at').eq('id', p.id).eq('mess_id', messId).abortSignal(signal).maybeSingle());
+      const { data: current, error: readError } = await withRequestTimeout((signal) => supabase.from('expenses').select('id,amount,description,type,paid_by,paid_by_member_id,date,deleted_at,updated_at').eq('id', p.id).eq('mess_id', messId).abortSignal(signal).maybeSingle());
       if (readError) throw readError;
       if (!current || current.deleted_at) throw new Error('The expense no longer exists. Review or discard this offline change.');
-      const alreadyApplied = Number(current.amount) === p.amount && current.description === p.description && current.type === expenseType && current.paid_by === p.paidBy && current.date === p.date;
+      const alreadyApplied = Number(current.amount) === p.amount && current.description === p.description && current.type === expenseType && current.paid_by === p.paidBy && current.paid_by_member_id === (p.paidByMemberId ?? null) && current.date === p.date;
       if (alreadyApplied) return;
-      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.date !== p.expected.date || (p.expected.updatedAt && current.updated_at !== p.expected.updatedAt))) {
+      if (p.expected && (Number(current.amount) !== p.expected.amount || current.description !== p.expected.description || current.type !== normalizeExpenseType(p.expected.type) || current.paid_by !== p.expected.paidBy || current.paid_by_member_id !== (p.expected.paidByMemberId ?? null) || current.date !== p.expected.date || (p.expected.updatedAt && current.updated_at !== p.expected.updatedAt))) {
         const conflict = new Error('This expense changed on another device. Review it before applying your offline edit.') as Error & { code?: string };
         conflict.code = 'OFFLINE_CONFLICT';
         throw conflict;
       }
-      const { data: updated, error } = await withRequestTimeout((signal) => supabase.from('expenses').update({ amount: p.amount, description: p.description, type: expenseType, paid_by: p.paidBy, date: p.date }).eq('id', p.id).eq('mess_id', messId).eq('updated_at', current.updated_at).abortSignal(signal).select('id, updated_at').maybeSingle());
+      const { data: updated, error } = await withRequestTimeout((signal) => supabase.from('expenses').update({ amount: p.amount, description: p.description, type: expenseType, paid_by: p.paidBy, paid_by_member_id: p.paidByMemberId ?? null, date: p.date }).eq('id', p.id).eq('mess_id', messId).eq('updated_at', current.updated_at).abortSignal(signal).select('id, updated_at').maybeSingle());
       if (error) throw error;
       if (!updated) {
         const conflict = new Error('This expense changed on another device. Review it before applying this offline edit.') as Error & { code?: string };
         conflict.code = 'OFFLINE_CONFLICT';
         throw conflict;
       }
-      setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: expenseType, paidBy: p.paidBy, date: p.date, updatedAt: updated.updated_at } : expense));
+      setAllExpenses((prev) => prev.map((expense) => expense.id === p.id ? { ...expense, amount: p.amount, description: p.description, type: expenseType, paidBy: p.paidBy, paidByMemberId: p.paidByMemberId ?? null, date: p.date, updatedAt: updated.updated_at } : expense));
       setPendingSyncIdsRef.current((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
       return;
     }

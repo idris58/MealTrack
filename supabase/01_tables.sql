@@ -82,15 +82,18 @@ create table if not exists public.expenses (
   description text not null,
   type text not null check (type in ('meal', 'utility')),
   paid_by text not null,
+  paid_by_member_id uuid references public.members(id) on delete set null,
   date date default current_date,
   created_at timestamptz default now(),
   user_id uuid references auth.users(id) on delete set null,
   cycle_id uuid references public.cycles(id) on delete cascade,
   mess_id uuid references public.messes(id) on delete set null,
-  profile_id uuid references public.profiles(id) on delete set null,
   deleted_at timestamptz,
   delete_expires_at timestamptz
 );
+
+alter table public.expenses add column if not exists paid_by_member_id uuid references public.members(id) on delete set null;
+alter table public.expenses drop column if exists profile_id;
 
 alter table public.expenses
   add column if not exists updated_at timestamptz not null default now();

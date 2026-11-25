@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'wouter';
-import { useMealActions, useMealCycles, useMealRows, Expense } from '@/lib/meal-context';
+import { useMealActions, useMealCycles, useMealMembers, useMealRows, Expense } from '@/lib/meal-context';
 import { useAuth } from '@/lib/auth-context';
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +26,7 @@ type DeletedExpenseGhost = {
   expiresAt: number;
 };
 
-function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void }) {
+function ExpenseRow({ expense, onEdit, payerName }: { expense: Expense; onEdit?: () => void; payerName?: string }) {
   return (
     <div className="flex items-center justify-between rounded-lg border bg-card p-3.5 transition-shadow hover:shadow-sm sm:p-4">
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
@@ -40,7 +41,7 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span>{format(parseISO(expense.date), 'MMM d, yyyy')}</span>
             <span>•</span>
-            <span>Paid by {expense.paidBy}</span>
+            <span className="max-w-48 truncate">Paid by {payerName ?? expense.paidBy}</span>
           </div>
         </div>
       </div>
@@ -61,10 +62,47 @@ function ExpenseRow({ expense, onEdit }: { expense: Expense; onEdit?: () => void
   );
 }
 
+const VIRTUAL_ROW_HEIGHT = 86;
+const VIRTUAL_THRESHOLD = 40;
+function VirtualExpenseRows({ rows, renderRow }: { rows: Array<{ key: string; render: () => ReactNode }>; renderRow: (item: { key: string; render: () => ReactNode }) => ReactNode }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [windowRange, setWindowRange] = useState({ start: 0, end: 30 });
+
+  useEffect(() => {
+    if (rows.length <= VIRTUAL_THRESHOLD) { setWindowRange({ start: 0, end: rows.length }); return; }
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const element = listRef.current;
+        if (!element) return;
+        const top = element.getBoundingClientRect().top + window.scrollY;
+        const firstVisible = Math.max(0, Math.floor((window.scrollY - top) / VIRTUAL_ROW_HEIGHT));
+        const start = Math.max(0, firstVisible - 8);
+        const count = Math.ceil(window.innerHeight / VIRTUAL_ROW_HEIGHT) + 16;
+        setWindowRange({ start, end: Math.min(rows.length, start + count) });
+      });
+    };
+    measure();
+    window.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', measure); window.removeEventListener('resize', measure); };
+  }, [rows.length]);
+
+  const start = rows.length <= VIRTUAL_THRESHOLD ? 0 : Math.min(rows.length, windowRange.start);
+  const end = rows.length <= VIRTUAL_THRESHOLD ? rows.length : Math.max(start, windowRange.end);
+  return <div ref={listRef} className="pb-4">
+    {start > 0 && <div aria-hidden style={{ height: start * VIRTUAL_ROW_HEIGHT }} />}
+    {rows.slice(start, end).map((row) => <div key={row.key} className="mb-2.5 h-[76px] overflow-hidden">{renderRow(row)}</div>)}
+    {end < rows.length && <div aria-hidden style={{ height: (rows.length - end) * VIRTUAL_ROW_HEIGHT }} />}
+  </div>;
+}
+
 type TabFilter = 'all' | 'meal' | 'utility';
 
 export default function Expenses() {
   const { expenses } = useMealRows();
+  const { members } = useMealMembers();
   const { activeCycle } = useMealCycles();
   const { restoreExpense } = useMealActions();
   const { canManageExpenses, profile } = useAuth();
@@ -117,10 +155,10 @@ export default function Expenses() {
     ]);
   };
 
-  const handleUndoExpense = async (id: string) => {
+  const handleUndoExpense = useCallback(async (id: string) => {
     setDeletedExpenses((prev) => prev.filter((entry) => entry.expense.id !== id));
     await restoreExpense(id);
-  };
+  }, [restoreExpense]);
 
   // Apply tab + search filter
   const filteredExpenses = useMemo(() => {
@@ -147,6 +185,15 @@ export default function Expenses() {
     }
     return result;
   }, [filteredExpenses, deletedExpenses, tab]);
+
+  const virtualRows = useMemo(() => rows.map((row) => ({
+    key: row.type === 'deleted' ? `deleted-${row.ghost.expense.id}` : row.expense.id,
+    render: () => row.type === 'deleted' ? (
+      <UndoDeleteGhost message={`Expense '${row.ghost.expense.description}' deleted.`} expiresAt={row.ghost.expiresAt} onUndo={() => void handleUndoExpense(row.ghost.expense.id)} onExpired={() => setDeletedExpenses((prev) => prev.filter((entry) => entry.expense.id !== row.ghost.expense.id))}>
+        <ExpenseRow expense={row.ghost.expense} payerName={row.ghost.expense.paidByMemberId ? members.find((member) => member.id === row.ghost.expense.paidByMemberId)?.name : undefined} />
+      </UndoDeleteGhost>
+    ) : <ExpenseRow expense={row.expense} payerName={row.expense.paidByMemberId ? members.find((member) => member.id === row.expense.paidByMemberId)?.name : undefined} onEdit={canManageExpenses ? () => setEditingExpense(row.expense) : undefined} />,
+  })), [canManageExpenses, handleUndoExpense, members, rows]);
 
   const tabLabels: Record<TabFilter, string> = { all: 'All', meal: 'Meals', utility: 'Utility' };
 
@@ -283,7 +330,7 @@ export default function Expenses() {
         <div
           className="flex-1 rounded-xl pr-0.5 min-h-[200px]"
         >
-          <div className="space-y-2.5 pb-4">
+          <div>
             {rows.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Search className="mb-3 h-8 w-8 text-muted-foreground/50" />
@@ -297,29 +344,7 @@ export default function Expenses() {
                 </button>
               </div>
             ) : (
-              rows.map((row) => {
-                if (row.type === 'deleted') {
-                  const { ghost } = row;
-                  return (
-                    <UndoDeleteGhost
-                      key={`deleted-${ghost.expense.id}`}
-                      message={`Expense '${ghost.expense.description}' deleted.`}
-                      expiresAt={ghost.expiresAt}
-                      onUndo={() => void handleUndoExpense(ghost.expense.id)}
-                      onExpired={() => setDeletedExpenses((prev) => prev.filter((e) => e.expense.id !== ghost.expense.id))}
-                    >
-                      <ExpenseRow expense={ghost.expense} />
-                    </UndoDeleteGhost>
-                  );
-                }
-                return (
-                  <ExpenseRow
-                    key={row.expense.id}
-                    expense={row.expense}
-                    onEdit={canManageExpenses ? () => setEditingExpense(row.expense) : undefined}
-                  />
-                );
-              })
+              <VirtualExpenseRows rows={virtualRows} renderRow={(item) => item.render()} />
             )}
           </div>
         </div>

@@ -22,6 +22,7 @@ export interface Expense {
   type: 'meal' | 'utility';
   date: string;
   paidBy: string;
+  paidByMemberId?: string | null;
   updatedAt?: string;
 }
 
@@ -166,8 +167,8 @@ export interface MealActionsContextType {
   removeMember: (id: string) => Promise<void>;
   restoreMember: (id: string) => Promise<void>;
   reorderMembers: (memberIds: string[]) => Promise<void>;
-  addExpense: (amount: number, description: string, type: 'meal' | 'utility', paidBy: string, cycleId?: string, expenseDate?: string) => Promise<void>;
-  updateExpense: (id: string, updates: { amount: number; description: string; type: 'meal' | 'utility'; paidBy: string; date?: string }) => Promise<void>;
+  addExpense: (amount: number, description: string, type: 'meal' | 'utility', paidBy: string, paidByMemberId?: string | null, cycleId?: string, expenseDate?: string) => Promise<void>;
+  updateExpense: (id: string, updates: { amount: number; description: string; type: 'meal' | 'utility'; paidBy: string; paidByMemberId?: string | null; date?: string }) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   restoreExpense: (id: string) => Promise<void>;
   addDeposit: (memberId: string, amount: number, cycleId?: string, note?: string, kind?: DepositKind) => Promise<void>;

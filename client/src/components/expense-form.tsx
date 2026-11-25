@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
-import { useMealActions, type Expense } from '@/lib/meal-context';
+import { useMealActions, useMealMembers, type Expense } from '@/lib/meal-context';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { runMutation } from '@/lib/run-mutation';
 import { normalizeBengaliDigits } from '@/lib/localized-number';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const expenseFields = z.object({
   amount: z.preprocess(
@@ -25,7 +26,12 @@ const expenseFields = z.object({
   ),
   description: z.string().min(2, 'Description is required'),
   type: z.enum(['meal', 'utility']),
-  paidBy: z.string().min(2, 'Shopper name is required'),
+  paidBy: z.string(),
+  paidByMemberId: z.string().nullable(),
+}).superRefine((values, ctx) => {
+  if (!values.paidByMemberId && values.paidBy.trim().length < 2) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['paidBy'], message: 'Enter the other payer’s name' });
+  }
 });
 
 type ExpenseFields = z.infer<typeof expenseFields>;
@@ -41,6 +47,7 @@ type ExpenseFormProps = {
 
 export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = false, onClose, onDeleted }: ExpenseFormProps) {
   const { addExpense, updateExpense, deleteExpense } = useMealActions();
+  const { members } = useMealMembers();
   const [date, setDate] = useState<Date>(expense ? parseISO(expense.date) : new Date());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -58,6 +65,7 @@ export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = fals
       description: expense?.description ?? '',
       type: expense?.type ?? 'meal',
       paidBy: expense?.paidBy ?? '',
+      paidByMemberId: expense?.paidByMemberId ?? null,
     },
   });
 
@@ -67,6 +75,7 @@ export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = fals
       description: expense?.description ?? '',
       type: expense?.type ?? 'meal',
       paidBy: expense?.paidBy ?? '',
+      paidByMemberId: expense?.paidByMemberId ?? null,
     });
     setDate(expense ? parseISO(expense.date) : new Date());
   }, [expense, form]);
@@ -80,7 +89,7 @@ export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = fals
         if (mode === 'edit' && expense) {
           await updateExpense(expense.id, { ...data, date: formattedDate });
         } else {
-          await addExpense(data.amount, data.description.trim(), data.type, data.paidBy.trim(), cycleId, formattedDate);
+          await addExpense(data.amount, data.description.trim(), data.type, data.paidBy.trim(), data.paidByMemberId, cycleId, formattedDate);
         }
         onClose();
       });
@@ -138,8 +147,16 @@ export function ExpenseForm({ mode, expense, cycleId, allowNegativeAmount = fals
           <FormItem><FormLabel>Amount</FormLabel><FormControl><Input type="text" inputMode="decimal" placeholder={allowNegativeAmount ? 'e.g. 300 or -300' : '100'} {...field} value={field.value ?? ''} /></FormControl>{allowNegativeAmount ? <p className="text-xs text-muted-foreground">Negative amounts are allowed for pending-cycle corrections.</p> : null}<FormMessage /></FormItem>
         )} />
 
-        <FormField control={form.control} name="paidBy" render={({ field }) => (
-          <FormItem><FormLabel>Who Shopped?</FormLabel><FormControl><Input placeholder="Shopper's Name" {...field} /></FormControl><FormMessage /></FormItem>
+        <FormField control={form.control} name="paidByMemberId" render={({ field }) => (
+          <FormItem><FormLabel>Who paid?</FormLabel><Select value={field.value ?? 'other'} onValueChange={(value) => {
+            if (value === 'other') { field.onChange(null); form.setValue('paidBy', '', { shouldValidate: true }); }
+            else { field.onChange(value); form.setValue('paidBy', members.find((member) => member.id === value)?.name ?? '', { shouldValidate: true }); }
+          }}><FormControl><SelectTrigger><SelectValue placeholder="Select a member or Other" /></SelectTrigger></FormControl><SelectContent>
+            {members.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent></Select>
+          {(!field.value || field.value === 'other') && <Input className="mt-2" placeholder="Other payer name" value={form.watch('paidBy')} onChange={(event) => form.setValue('paidBy', event.target.value, { shouldValidate: true })} />}
+          <FormMessage /></FormItem>
         )} />
 
         {mode === 'edit' && expense ? (

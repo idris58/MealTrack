@@ -744,7 +744,7 @@ declare
   v_changes jsonb := '[]'::jsonb;
 begin
   if v_actor is null then
-    v_actor := coalesce(NEW.profile_id, NEW.user_id, OLD.profile_id, OLD.user_id);
+    v_actor := coalesce(NEW.user_id, OLD.user_id);
   end if;
 
   v_mess_id := coalesce(NEW.mess_id, OLD.mess_id);
@@ -827,6 +827,20 @@ begin
   end if;
 
   return coalesce(NEW, OLD);
+end;
+$$;
+
+create or replace function public.validate_expense_payer_member()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.paid_by_member_id is not null and not exists (
+    select 1 from public.members m
+    where m.id = new.paid_by_member_id and m.mess_id = new.mess_id
+  ) then
+    raise exception 'Payer must be a member of the same mess';
+  end if;
+  return new;
 end;
 $$;
 
@@ -1469,7 +1483,7 @@ as $$
       select jsonb_agg(jsonb_build_object(
         'id', e.id, 'cycle_id', e.cycle_id, 'amount', e.amount,
         'description', e.description, 'type', e.type, 'date', e.date,
-        'paid_by', e.paid_by, 'updated_at', e.updated_at
+        'paid_by', e.paid_by, 'paid_by_member_id', e.paid_by_member_id, 'updated_at', e.updated_at
       ) order by e.date desc, e.id asc)
       from public.expenses e
       where e.mess_id = mess_id_input
@@ -1593,7 +1607,7 @@ as $$
       select jsonb_agg(jsonb_build_object(
         'id', e.id, 'cycle_id', e.cycle_id, 'amount', e.amount,
         'description', e.description, 'type', e.type, 'date', e.date,
-        'paid_by', e.paid_by, 'updated_at', e.updated_at
+        'paid_by', e.paid_by, 'paid_by_member_id', e.paid_by_member_id, 'updated_at', e.updated_at
       ) order by e.date desc, e.id asc)
       from public.expenses e
       where e.mess_id = (select mess_id from scope)
