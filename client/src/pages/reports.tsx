@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import {
   CalendarIcon,

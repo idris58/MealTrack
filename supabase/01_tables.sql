@@ -81,8 +81,8 @@ create table if not exists public.expenses (
   amount decimal(10, 2) not null,
   description text not null,
   type text not null check (type in ('meal', 'utility')),
-  paid_by text not null,
-  paid_by_member_id uuid references public.members(id) on delete set null,
+  shopped_by text not null,
+  shopped_by_member_id uuid references public.members(id) on delete set null,
   date date default current_date,
   created_at timestamptz default now(),
   user_id uuid references auth.users(id) on delete set null,
@@ -92,7 +92,22 @@ create table if not exists public.expenses (
   delete_expires_at timestamptz
 );
 
-alter table public.expenses add column if not exists paid_by_member_id uuid references public.members(id) on delete set null;
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'expenses' and column_name = 'paid_by')
+     and not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'expenses' and column_name = 'shopped_by') then
+    alter table public.expenses rename column paid_by to shopped_by;
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'expenses' and column_name = 'paid_by_member_id')
+     and not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'expenses' and column_name = 'shopped_by_member_id') then
+    alter table public.expenses rename column paid_by_member_id to shopped_by_member_id;
+  end if;
+  if to_regclass('public.expenses_paid_by_member_id_idx') is not null and to_regclass('public.expenses_shopped_by_member_id_idx') is null then
+    alter index public.expenses_paid_by_member_id_idx rename to expenses_shopped_by_member_id_idx;
+  end if;
+end $$;
+
+alter table public.expenses add column if not exists shopped_by_member_id uuid references public.members(id) on delete set null;
 alter table public.expenses drop column if exists profile_id;
 
 alter table public.expenses

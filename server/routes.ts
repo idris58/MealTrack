@@ -125,7 +125,7 @@ type ExpenseRow = {
   description: string;
   type: "meal" | "utility";
   date: string;
-  paid_by: string;
+  shopped_by: string;
 };
 
 type MealLogRow = {
@@ -223,7 +223,7 @@ function buildSharedPayload(
     description: expense.description,
     type: expense.type,
     date: expense.date,
-    paidBy: expense.paid_by,
+    shoppedBy: expense.shopped_by,
   }));
 
   const mealLogs = mealLogsData.map((log) => ({

@@ -570,7 +570,7 @@ export function MemberDashboard() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{e.description}</p>
-                    <p className="truncate text-xs text-muted-foreground">{format(parseISO(e.date), 'd MMM')} · Paid by {e.paidBy}</p>
+                    <p className="truncate text-xs text-muted-foreground">{format(parseISO(e.date), 'd MMM')} · Shopped by {e.shoppedBy}</p>
                   </div>
                   <span className="shrink-0 text-sm font-semibold tabular-nums">{money(e.amount, 0)}</span>
                 </li>

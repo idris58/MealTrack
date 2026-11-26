@@ -234,7 +234,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
         <div className="min-w-0">
           <p className="truncate font-medium">{expense.description}</p>
           <p className="text-xs text-muted-foreground">
-            {format(parseISO(expense.date), 'MMM d, yyyy')} • Paid by {expense.paidBy}
+            {format(parseISO(expense.date), 'MMM d, yyyy')} • Shopped by {expense.shoppedBy}
           </p>
         </div>
       </div>

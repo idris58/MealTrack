@@ -26,7 +26,7 @@ type DeletedExpenseGhost = {
   expiresAt: number;
 };
 
-function ExpenseRow({ expense, onEdit, payerName }: { expense: Expense; onEdit?: () => void; payerName?: string }) {
+function ExpenseRow({ expense, onEdit, shopperName }: { expense: Expense; onEdit?: () => void; shopperName?: string }) {
   return (
     <div className="flex items-center justify-between rounded-lg border bg-card p-3.5 transition-shadow hover:shadow-sm sm:p-4">
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
@@ -41,7 +41,7 @@ function ExpenseRow({ expense, onEdit, payerName }: { expense: Expense; onEdit?:
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span>{format(parseISO(expense.date), 'MMM d, yyyy')}</span>
             <span>•</span>
-            <span className="max-w-48 truncate">Paid by {payerName ?? expense.paidBy}</span>
+            <span className="max-w-48 truncate">Shopped by {shopperName ?? expense.shoppedBy}</span>
           </div>
         </div>
       </div>
@@ -165,7 +165,7 @@ export default function Expenses() {
     const q = search.trim().toLowerCase();
     return allExpenses.filter((e) => {
       const matchesTab = tab === 'all' || e.type === tab;
-      const matchesSearch = !q || e.description.toLowerCase().includes(q) || e.paidBy.toLowerCase().includes(q);
+      const matchesSearch = !q || e.description.toLowerCase().includes(q) || e.shoppedBy.toLowerCase().includes(q);
       return matchesTab && matchesSearch;
     });
   }, [allExpenses, tab, search]);
@@ -190,9 +190,9 @@ export default function Expenses() {
     key: row.type === 'deleted' ? `deleted-${row.ghost.expense.id}` : row.expense.id,
     render: () => row.type === 'deleted' ? (
       <UndoDeleteGhost message={`Expense '${row.ghost.expense.description}' deleted.`} expiresAt={row.ghost.expiresAt} onUndo={() => void handleUndoExpense(row.ghost.expense.id)} onExpired={() => setDeletedExpenses((prev) => prev.filter((entry) => entry.expense.id !== row.ghost.expense.id))}>
-        <ExpenseRow expense={row.ghost.expense} payerName={row.ghost.expense.paidByMemberId ? members.find((member) => member.id === row.ghost.expense.paidByMemberId)?.name : undefined} />
+        <ExpenseRow expense={row.ghost.expense} shopperName={row.ghost.expense.shoppedByMemberId ? members.find((member) => member.id === row.ghost.expense.shoppedByMemberId)?.name : undefined} />
       </UndoDeleteGhost>
-    ) : <ExpenseRow expense={row.expense} payerName={row.expense.paidByMemberId ? members.find((member) => member.id === row.expense.paidByMemberId)?.name : undefined} onEdit={canManageExpenses ? () => setEditingExpense(row.expense) : undefined} />,
+    ) : <ExpenseRow expense={row.expense} shopperName={row.expense.shoppedByMemberId ? members.find((member) => member.id === row.expense.shoppedByMemberId)?.name : undefined} onEdit={canManageExpenses ? () => setEditingExpense(row.expense) : undefined} />,
   })), [canManageExpenses, handleUndoExpense, members, rows]);
 
   const tabLabels: Record<TabFilter, string> = { all: 'All', meal: 'Meals', utility: 'Utility' };

@@ -81,7 +81,7 @@ create unique index if not exists cycles_one_pending_per_mess_idx on public.cycl
 create unique index if not exists cycles_mess_name_unique_idx on public.cycles(mess_id, lower(name)) where mess_id is not null;
 create index if not exists expenses_mess_id_idx on public.expenses(mess_id);
 drop index if exists public.expenses_profile_id_idx;
-create index if not exists expenses_paid_by_member_id_idx on public.expenses(paid_by_member_id);
+create index if not exists expenses_shopped_by_member_id_idx on public.expenses(shopped_by_member_id);
 create index if not exists expenses_mess_cycle_date_idx on public.expenses(mess_id, cycle_id, date);
 create index if not exists meal_logs_mess_id_idx on public.meal_logs(mess_id);
 create index if not exists meal_logs_profile_id_idx on public.meal_logs(profile_id);

@@ -758,7 +758,7 @@ begin
       jsonb_build_object('field', 'description', 'label', 'Description', 'value', NEW.description),
       jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', NEW.amount),
       jsonb_build_object('field', 'type', 'label', 'Type', 'value', NEW.type),
-      jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', NEW.paid_by),
+      jsonb_build_object('field', 'shopped_by', 'label', 'Shopped By', 'value', NEW.shopped_by),
       jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text)
     );
   elsif TG_OP = 'UPDATE' then
@@ -769,7 +769,7 @@ begin
         jsonb_build_object('field', 'description', 'label', 'Description', 'value', OLD.description),
         jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', OLD.amount),
         jsonb_build_object('field', 'type', 'label', 'Type', 'value', OLD.type),
-        jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', OLD.paid_by),
+        jsonb_build_object('field', 'shopped_by', 'label', 'Shopped By', 'value', OLD.shopped_by),
         jsonb_build_object('field', 'date', 'label', 'Date', 'value', OLD.date::text)
       );
     elsif OLD.deleted_at is not null and NEW.deleted_at is null then
@@ -779,7 +779,7 @@ begin
         jsonb_build_object('field', 'description', 'label', 'Description', 'value', NEW.description),
         jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', NEW.amount),
         jsonb_build_object('field', 'type', 'label', 'Type', 'value', NEW.type),
-        jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', NEW.paid_by),
+        jsonb_build_object('field', 'shopped_by', 'label', 'Shopped By', 'value', NEW.shopped_by),
         jsonb_build_object('field', 'date', 'label', 'Date', 'value', NEW.date::text)
       );
     else
@@ -792,8 +792,8 @@ begin
       if OLD.type <> NEW.type then
         v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'type', 'label', 'Type', 'from', OLD.type, 'to', NEW.type));
       end if;
-      if OLD.paid_by <> NEW.paid_by then
-        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'from', OLD.paid_by, 'to', NEW.paid_by));
+      if OLD.shopped_by <> NEW.shopped_by then
+        v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'shopped_by', 'label', 'Shopped By', 'from', OLD.shopped_by, 'to', NEW.shopped_by));
       end if;
       if OLD.date <> NEW.date then
         v_changes := v_changes || jsonb_build_array(jsonb_build_object('field', 'date', 'label', 'Date', 'from', OLD.date::text, 'to', NEW.date::text));
@@ -813,7 +813,7 @@ begin
       jsonb_build_object('field', 'description', 'label', 'Description', 'value', OLD.description),
       jsonb_build_object('field', 'amount', 'label', 'Amount', 'value', OLD.amount),
       jsonb_build_object('field', 'type', 'label', 'Type', 'value', OLD.type),
-      jsonb_build_object('field', 'paid_by', 'label', 'Paid By', 'value', OLD.paid_by),
+      jsonb_build_object('field', 'shopped_by', 'label', 'Shopped By', 'value', OLD.shopped_by),
       jsonb_build_object('field', 'date', 'label', 'Date', 'value', OLD.date::text)
     );
   end if;
@@ -830,13 +830,13 @@ begin
 end;
 $$;
 
-create or replace function public.validate_expense_payer_member()
+create or replace function public.validate_expense_shopper_member()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  if new.paid_by_member_id is not null and not exists (
+  if new.shopped_by_member_id is not null and not exists (
     select 1 from public.members m
-    where m.id = new.paid_by_member_id and m.mess_id = new.mess_id
+    where m.id = new.shopped_by_member_id and m.mess_id = new.mess_id
   ) then
     raise exception 'Payer must be a member of the same mess';
   end if;
@@ -1483,7 +1483,7 @@ as $$
       select jsonb_agg(jsonb_build_object(
         'id', e.id, 'cycle_id', e.cycle_id, 'amount', e.amount,
         'description', e.description, 'type', e.type, 'date', e.date,
-        'paid_by', e.paid_by, 'paid_by_member_id', e.paid_by_member_id, 'updated_at', e.updated_at
+        'shopped_by', e.shopped_by, 'shopped_by_member_id', e.shopped_by_member_id, 'updated_at', e.updated_at
       ) order by e.date desc, e.id asc)
       from public.expenses e
       where e.mess_id = mess_id_input
@@ -1607,7 +1607,7 @@ as $$
       select jsonb_agg(jsonb_build_object(
         'id', e.id, 'cycle_id', e.cycle_id, 'amount', e.amount,
         'description', e.description, 'type', e.type, 'date', e.date,
-        'paid_by', e.paid_by, 'paid_by_member_id', e.paid_by_member_id, 'updated_at', e.updated_at
+        'shopped_by', e.shopped_by, 'shopped_by_member_id', e.shopped_by_member_id, 'updated_at', e.updated_at
       ) order by e.date desc, e.id asc)
       from public.expenses e
       where e.mess_id = (select mess_id from scope)

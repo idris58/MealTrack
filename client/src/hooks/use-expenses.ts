@@ -8,7 +8,7 @@ import { isTransientRequestError, withRequestTimeout } from '@/lib/request-retry
 import type { Expense } from '@/lib/meal-types';
 
 const SOFT_DELETE_GRACE_MS = 10_000;
-type ExpenseUpdate = { amount: number; description: string; type: 'meal' | 'utility'; paidBy: string; paidByMemberId?: string | null; date?: string };
+type ExpenseUpdate = { amount: number; description: string; type: 'meal' | 'utility'; shoppedBy: string; shoppedByMemberId?: string | null; date?: string };
 type Options = {
   userId: string | null; messId: string | null; expenses: Expense[];
   setExpenses: Dispatch<SetStateAction<Expense[]>>;
@@ -24,7 +24,7 @@ export function useExpenses(options: Options) {
   const latest = useRef(options);
   latest.current = options;
 
-  const addExpense = useCallback(async (amount: number, description: string, type: 'meal' | 'utility', paidBy: string, paidByMemberId: string | null = null, cycleId?: string, expenseDate?: string) => {
+  const addExpense = useCallback(async (amount: number, description: string, type: 'meal' | 'utility', shoppedBy: string, shoppedByMemberId: string | null = null, cycleId?: string, expenseDate?: string) => {
     const { userId, messId, setExpenses, setPendingSyncIds, getCycleId, allowsNegativeAmount, broadcast } = latest.current;
     if (!userId || !messId) throw new Error('Sign in and join a mess before adding an expense.');
     if (amount === 0) throw new Error('Expense amount cannot be zero.');
@@ -37,9 +37,9 @@ export function useExpenses(options: Options) {
     const recordId = uuidv4();
     const queueExpense = async () => {
       const id = `offline-${uuidv4()}`;
-      setExpenses((previous) => [{ id, cycleId: targetCycleId, amount, description, type, date, paidBy }, ...previous]);
+      setExpenses((previous) => [{ id, cycleId: targetCycleId, amount, description, type, date, shoppedBy }, ...previous]);
       setPendingSyncIds((previous) => new Set(previous).add(id));
-      await enqueue({ id, type: 'ADD_EXPENSE', payload: { recordId, amount, description, type, paidBy, paidByMemberId, date, userId, messId, cycleId: targetCycleId }, createdAt: Date.now() });
+      await enqueue({ id, type: 'ADD_EXPENSE', payload: { recordId, amount, description, type, shoppedBy, shoppedByMemberId, date, userId, messId, cycleId: targetCycleId }, createdAt: Date.now() });
     };
     if (!navigator.onLine) {
       await queueExpense();
@@ -48,7 +48,7 @@ export function useExpenses(options: Options) {
     let data;
     try {
       const result = await withRequestTimeout((signal) => supabase.from('expenses').upsert([{
-        id: recordId, amount, description, type, paid_by: paidBy, paid_by_member_id: paidByMemberId, user_id: userId, mess_id: messId, cycle_id: targetCycleId, ...(expenseDate ? { date } : {}),
+        id: recordId, amount, description, type, shopped_by: shoppedBy, shopped_by_member_id: shoppedByMemberId, user_id: userId, mess_id: messId, cycle_id: targetCycleId, ...(expenseDate ? { date } : {}),
       }], { onConflict: 'id' }).abortSignal(signal).select().single());
       if (result.error) {
         if (isTransientRequestError(result.error)) {
@@ -63,7 +63,7 @@ export function useExpenses(options: Options) {
       await queueExpense();
       return;
     }
-    const next = { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by, paidByMemberId: data.paid_by_member_id, updatedAt: data.updated_at } as Expense;
+    const next = { id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, shoppedBy: data.shopped_by, shoppedByMemberId: data.shopped_by_member_id, updatedAt: data.updated_at } as Expense;
     setExpenses((previous) => [next, ...previous]);
     broadcast();
   }, []);
@@ -77,8 +77,8 @@ export function useExpenses(options: Options) {
       existing.description !== updates.description ||
       existing.amount !== updates.amount ||
       existing.type !== updates.type ||
-      existing.paidBy !== updates.paidBy ||
-      existing.paidByMemberId !== updates.paidByMemberId ||
+      existing.shoppedBy !== updates.shoppedBy ||
+      existing.shoppedByMemberId !== updates.shoppedByMemberId ||
       (updates.date !== undefined && dateOnly(existing.date) !== dateOnly(updates.date));
     if (!hasChange) return;
     if (id.startsWith('offline-')) {
@@ -93,8 +93,8 @@ export function useExpenses(options: Options) {
       amount: existing.amount,
       description: existing.description,
       type: existing.type,
-      paidBy: existing.paidBy,
-      paidByMemberId: existing.paidByMemberId ?? null,
+      shoppedBy: existing.shoppedBy,
+      shoppedByMemberId: existing.shoppedByMemberId ?? null,
       date: existing.date,
       updatedAt: existing.updatedAt,
     };
@@ -127,7 +127,7 @@ export function useExpenses(options: Options) {
     try {
       if (!expectedUpdatedAt) {
         const versionResult = await withRequestTimeout((signal) => supabase.from('expenses')
-          .select('updated_at, amount, description, type, paid_by, paid_by_member_id, date')
+          .select('updated_at, amount, description, type, shopped_by, shopped_by_member_id, date')
           .eq('id', id).eq('mess_id', messId).abortSignal(signal).maybeSingle());
         if (versionResult.error) {
           if (isTransientRequestError(versionResult.error)) {
@@ -138,7 +138,7 @@ export function useExpenses(options: Options) {
         }
         if (!versionResult.data) throw requestError('This expense no longer exists.');
         const current = versionResult.data;
-        if (Number(current.amount) !== existing.amount || current.description !== existing.description || current.type !== existing.type || current.paid_by !== existing.paidBy || current.paid_by_member_id !== (existing.paidByMemberId ?? null) || dateOnly(current.date) !== dateOnly(existing.date)) {
+        if (Number(current.amount) !== existing.amount || current.description !== existing.description || current.type !== existing.type || current.shopped_by !== existing.shoppedBy || current.shopped_by_member_id !== (existing.shoppedByMemberId ?? null) || dateOnly(current.date) !== dateOnly(existing.date)) {
           const conflict = requestError('This expense changed on another device. Reload it before editing again.');
           conflict.code = 'OFFLINE_CONFLICT';
           throw conflict;
@@ -147,7 +147,7 @@ export function useExpenses(options: Options) {
         expected.updatedAt = expectedUpdatedAt;
       }
       const result = await withRequestTimeout((signal) => supabase.from('expenses')
-        .update({ amount: updates.amount, description: updates.description, type: updates.type, paid_by: updates.paidBy, paid_by_member_id: updates.paidByMemberId ?? null, ...(updates.date ? { date: updates.date } : {}) })
+        .update({ amount: updates.amount, description: updates.description, type: updates.type, shopped_by: updates.shoppedBy, shopped_by_member_id: updates.shoppedByMemberId ?? null, ...(updates.date ? { date: updates.date } : {}) })
         .eq('id', id).eq('mess_id', messId).eq('updated_at', expectedUpdatedAt)
         .abortSignal(signal).select('id, updated_at').maybeSingle());
       if (result.error) {
@@ -189,7 +189,7 @@ export function useExpenses(options: Options) {
       amount: existing.amount,
       description: existing.description,
       type: existing.type,
-      paidBy: existing.paidBy,
+      shoppedBy: existing.shoppedBy,
       date: existing.date,
       updatedAt: existing.updatedAt,
     };
@@ -223,7 +223,7 @@ export function useExpenses(options: Options) {
       let expectedUpdatedAt = existing.updatedAt;
       if (!expectedUpdatedAt) {
         const versionResult = await withRequestTimeout((signal) => supabase.from('expenses')
-          .select('updated_at, amount, description, type, paid_by, paid_by_member_id, date')
+          .select('updated_at, amount, description, type, shopped_by, shopped_by_member_id, date')
           .eq('id', id).eq('mess_id', messId).abortSignal(signal).maybeSingle());
         if (versionResult.error) {
           if (isTransientRequestError(versionResult.error)) {
@@ -234,7 +234,7 @@ export function useExpenses(options: Options) {
         }
         if (!versionResult.data) throw new Error('This expense no longer exists.');
         const current = versionResult.data;
-        if (Number(current.amount) !== existing.amount || current.description !== existing.description || current.type !== existing.type || current.paid_by !== existing.paidBy || current.paid_by_member_id !== (existing.paidByMemberId ?? null) || dateOnly(current.date) !== dateOnly(existing.date)) {
+        if (Number(current.amount) !== existing.amount || current.description !== existing.description || current.type !== existing.type || current.shopped_by !== existing.shoppedBy || current.shopped_by_member_id !== (existing.shoppedByMemberId ?? null) || dateOnly(current.date) !== dateOnly(existing.date)) {
           const conflict = requestError('This expense changed on another device. Reload it before deleting it.');
           conflict.code = 'OFFLINE_CONFLICT';
           throw conflict;
@@ -270,9 +270,9 @@ export function useExpenses(options: Options) {
   const restoreExpense = useCallback(async (id: string) => {
     const { userId, messId, setExpenses, broadcast } = latest.current;
     if (!userId || !messId) return;
-    const { data, error } = await withRequestTimeout((signal) => supabase.from('expenses').update({ deleted_at: null, delete_expires_at: null }).eq('id', id).eq('mess_id', messId).not('deleted_at', 'is', null).abortSignal(signal).select('id, cycle_id, amount, description, type, date, paid_by, paid_by_member_id, updated_at').maybeSingle());
+    const { data, error } = await withRequestTimeout((signal) => supabase.from('expenses').update({ deleted_at: null, delete_expires_at: null }).eq('id', id).eq('mess_id', messId).not('deleted_at', 'is', null).abortSignal(signal).select('id, cycle_id, amount, description, type, date, shopped_by, shopped_by_member_id, updated_at').maybeSingle());
     if (error) throw new Error('Unable to restore expense. Please try again.');
-    if (data?.cycle_id) setExpenses((previous) => previous.some((expense) => expense.id === data.id) ? previous : [{ id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, paidBy: data.paid_by, paidByMemberId: data.paid_by_member_id, updatedAt: data.updated_at }, ...previous]);
+    if (data?.cycle_id) setExpenses((previous) => previous.some((expense) => expense.id === data.id) ? previous : [{ id: data.id, cycleId: data.cycle_id, amount: Number(data.amount), description: data.description, type: data.type, date: data.date, shoppedBy: data.shopped_by, shoppedByMemberId: data.shopped_by_member_id, updatedAt: data.updated_at }, ...previous]);
     broadcast();
   }, []);
 
