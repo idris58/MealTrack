@@ -242,7 +242,7 @@ function CycleManagementCard() {
               {[
                 { icon: Users, value: members.length, label: 'Members' },
                 { icon: Utensils, value: formatMealCount(stats.totalMealsConsumed), label: 'Meals' },
-                { icon: ShoppingBag, value: formatCurrency(stats.totalMealExpenses + stats.totalFixedExpenses), label: 'Expenses' },
+                { icon: ShoppingBag, value: formatCurrency(stats.totalMealExpenses + stats.totalUtilityExpenses), label: 'Expenses' },
                 { icon: Wallet, value: formatCurrency(stats.remainingCash), label: 'Cash' },
               ].map(({ icon: Icon, value, label }) => (
                 <div key={label} className="flex flex-col items-center gap-0.5 bg-card px-2 py-2.5 text-center">
@@ -320,7 +320,7 @@ function CycleManagementCard() {
                     {[
                       { label: 'Members', value: members.length },
                       { label: 'Total Meals', value: formatMealCount(stats.totalMealsConsumed) },
-                      { label: 'Total Expenses', value: formatCurrency(stats.totalMealExpenses + stats.totalFixedExpenses) },
+                      { label: 'Total Expenses', value: formatCurrency(stats.totalMealExpenses + stats.totalUtilityExpenses) },
                       { label: 'Remaining Cash', value: formatCurrency(stats.remainingCash) },
                     ].map(({ label, value }) => (
                       <div key={label} className="rounded-lg bg-card p-2.5 border">

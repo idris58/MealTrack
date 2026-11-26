@@ -43,7 +43,7 @@ type SharedMember = {
   avatar: string;
   mealsEaten: number;
   mealCost: number;
-  fixedCost: number;
+  utilityCost: number;
   totalCost: number;
   balance: number;
 };
@@ -74,10 +74,10 @@ type SharedPayload = {
   stats: {
     totalDeposits: number;
     totalMealExpenses: number;
-    totalFixedExpenses: number;
+    totalUtilityExpenses: number;
     totalMealsConsumed: number;
     currentMealRate: number;
-    fixedCostPerMember: number;
+    utilityCostPerMember: number;
     remainingCash: number;
   };
   members: SharedMember[];
@@ -818,7 +818,7 @@ export default function SharedPage({ token }: { token: string }) {
                 {formatCurrency(data.stats.currentMealRate)}
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Utility cost/person: {formatCurrency(data.stats.fixedCostPerMember)}
+                Utility cost/person: {formatCurrency(data.stats.utilityCostPerMember)}
               </p>
             </CardContent>
           </Card>
@@ -843,7 +843,7 @@ export default function SharedPage({ token }: { token: string }) {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Utility Cost</span>
                 <span className="font-medium">
-                  {formatCurrency(data.stats.totalFixedExpenses)}
+                  {formatCurrency(data.stats.totalUtilityExpenses)}
                 </span>
               </div>
             </CardContent>
@@ -926,7 +926,7 @@ export default function SharedPage({ token }: { token: string }) {
                     </div>
                     <div className="rounded-lg bg-secondary/30 px-3 py-2">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Deposit - Utility</p>
-                      <p className="font-medium">{formatCurrency(member.deposit - member.fixedCost)}</p>
+                      <p className="font-medium">{formatCurrency(member.deposit - member.utilityCost)}</p>
                     </div>
                     <div className="rounded-lg bg-secondary/30 px-3 py-2">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Meal Cost</p>
@@ -973,7 +973,7 @@ export default function SharedPage({ token }: { token: string }) {
                         {formatCurrency(member.deposit)}
                       </td>
                       <td className="p-4 text-right font-medium">
-                        {formatCurrency(member.deposit - member.fixedCost)}
+                        {formatCurrency(member.deposit - member.utilityCost)}
                       </td>
                       <td className="p-4 text-right font-medium">
                         {formatCurrency(member.mealCost)}

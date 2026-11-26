@@ -85,8 +85,8 @@ async function copyText(text: string, success: string) {
 // Funds bar: what your money was spent on, and what is left
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FundsBar({ deposited, mealCost, fixedCost }: { deposited: number; mealCost: number; fixedCost: number }) {
-  const cost = mealCost + fixedCost;
+function FundsBar({ deposited, mealCost, utilityCost }: { deposited: number; mealCost: number; utilityCost: number }) {
+  const cost = mealCost + utilityCost;
   const total = Math.max(deposited, cost, 1);
   const pct = (v: number) => `${(Math.max(0, v) / total) * 100}%`;
   const left = Math.max(0, deposited - cost);
@@ -97,7 +97,7 @@ function FundsBar({ deposited, mealCost, fixedCost }: { deposited: number; mealC
       <div className="relative h-3 w-full overflow-hidden rounded-full bg-white/10" role="img" aria-label="How your deposits are used">
         <div className="flex h-full">
           <div className="h-full bg-emerald-400" style={{ width: pct(mealCost) }} />
-          <div className="h-full bg-violet-400" style={{ width: pct(fixedCost) }} />
+          <div className="h-full bg-violet-400" style={{ width: pct(utilityCost) }} />
           <div className="h-full bg-white/25" style={{ width: pct(left) }} />
         </div>
         {due > 0 && (
@@ -106,7 +106,7 @@ function FundsBar({ deposited, mealCost, fixedCost }: { deposited: number; mealC
       </div>
       <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-white/70">
         <li className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-400" />Meals {money(mealCost, 0)}</li>
-        <li className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-violet-400" />Utility share {money(fixedCost, 0)}</li>
+        <li className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-violet-400" />Utility share {money(utilityCost, 0)}</li>
         {due > 0 ? (
           <li className="flex items-center gap-1.5 text-rose-300"><i className="h-2 w-2 rounded-full bg-rose-400" />Not yet covered {money(due, 0)}</li>
         ) : (
@@ -262,7 +262,7 @@ export function MemberDepositsView() {
     const rate = stats.currentMealRate;
     const cycleMemberStats = getMemberStats(me.id);
     const mealCost = cycleMemberStats.mealCost;
-    const fixedCost = cycleMemberStats.fixedCost;
+    const utilityCost = cycleMemberStats.utilityCost;
     const cost = cycleMemberStats.totalCost;
     const balance = cycleMemberStats.balance;
     const burn = mealCost / elapsed;
@@ -283,11 +283,11 @@ export function MemberDepositsView() {
       const k = dayKey(day);
       cm += mealsByDay.get(k) ?? 0;
       cd += paidByDay.get(k) ?? 0;
-      const dayCost = computeMemberCosts(cm, rate, fixedCost).totalCost;
+      const dayCost = computeMemberCosts(cm, rate, utilityCost).totalCost;
       return { label: format(day, 'd MMM'), value: cd - dayCost };
     });
 
-    return { mine, running, net, paidIn, carriedIn, takenOut, payments, lastPayment, rate, mealCost, fixedCost, cost, balance, burn, runway, series, elapsed };
+    return { mine, running, net, paidIn, carriedIn, takenOut, payments, lastPayment, rate, mealCost, utilityCost, cost, balance, burn, runway, series, elapsed };
   }, [me, activeCycle, deposits, mealLogs, stats, getMemberStats]);
 
   const shown = useCountUp(v?.balance ?? 0);
@@ -327,7 +327,7 @@ export function MemberDepositsView() {
       '',
       `Deposited: ${money(v.net)}`,
       `Meals: ${money(v.mealCost)}`,
-      `Utility share: ${money(v.fixedCost)}`,
+      `Utility share: ${money(v.utilityCost)}`,
       `Balance: ${signed(v.balance)} (${v.balance >= 0 ? 'in credit' : 'due'})`,
       '',
       'Transactions',
@@ -464,7 +464,7 @@ export function MemberDepositsView() {
                   : `At your current pace this covers about ${v.runway} more day${v.runway === 1 ? '' : 's'}.`}
             </p>
 
-            <div className="mt-6"><FundsBar deposited={v.net} mealCost={v.mealCost} fixedCost={v.fixedCost} /></div>
+            <div className="mt-6"><FundsBar deposited={v.net} mealCost={v.mealCost} utilityCost={v.utilityCost} /></div>
           </div>
 
           <dl className="grid min-w-0 grid-cols-2 divide-x divide-y divide-white/10 border-t border-white/10 sm:grid-cols-4 sm:divide-y-0">
@@ -535,7 +535,7 @@ export function MemberDepositsView() {
                 <dt className="flex items-center gap-2 text-muted-foreground"><ShoppingBag className="h-4 w-4 text-violet-500" />
                   <span>Utility share<span className="block text-xs">Bills split equally</span></span>
                 </dt>
-                <dd className="font-medium tabular-nums">{money(v.fixedCost)}</dd>
+                <dd className="font-medium tabular-nums">{money(v.utilityCost)}</dd>
               </div>
               <div className="flex items-center justify-between border-t pt-3">
                 <dt className="font-medium">Total charged</dt>

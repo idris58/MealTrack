@@ -147,7 +147,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
   const remainingBalance =
     details.stats.totalDeposits -
     details.stats.totalMealExpenses -
-    details.stats.totalFixedExpenses;
+    details.stats.totalUtilityExpenses;
   const {
     allocatedBalances,
     managerShouldGive,
@@ -289,7 +289,7 @@ function PendingCycleCard({ details }: { details: CycleDetails }) {
         <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-5">
           <StatCard title="Total Deposits" value={formatCurrency(details.stats.totalDeposits)} icon={Wallet} iconClass="text-emerald-600" iconBgClass="bg-emerald-500/10" />
           <StatCard title="Meal Expense" value={formatCurrency(details.stats.totalMealExpenses)} icon={ShoppingBag} iconClass="text-indigo-600" iconBgClass="bg-indigo-500/10" />
-          <StatCard title="Utility Expense" value={formatCurrency(details.stats.totalFixedExpenses)} icon={Zap} iconClass="text-amber-600" iconBgClass="bg-amber-500/10" />
+          <StatCard title="Utility Expense" value={formatCurrency(details.stats.totalUtilityExpenses)} icon={Zap} iconClass="text-amber-600" iconBgClass="bg-amber-500/10" />
           <StatCard
             title="Remaining Balance"
             value={`${remainingBalance >= 0 ? '' : '-'}${formatCurrency(Math.abs(remainingBalance))}`}
@@ -774,7 +774,7 @@ function ClosedCycleCard({
               />
               <StatCard
                 title="Utility Expense"
-                value={formatCurrency(details.stats.totalFixedExpenses)}
+                value={formatCurrency(details.stats.totalUtilityExpenses)}
                 icon={Zap}
                 iconClass="text-amber-600"
                 iconBgClass="bg-amber-500/10"

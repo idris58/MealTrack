@@ -117,13 +117,13 @@ export interface CycleDetails {
   stats: {
     totalDeposits: number;
     totalMealExpenses: number;
-    totalFixedExpenses: number;
+    totalUtilityExpenses: number;
     totalMealsConsumed: number;
     currentMealRate: number;
-    fixedCostPerMember: number;
+    utilityCostPerMember: number;
     remainingCash: number;
   };
-  members: (Member & { mealCost: number; fixedCost: number; totalCost: number; balance: number })[];
+  members: (Member & { mealCost: number; utilityCost: number; totalCost: number; balance: number })[];
   expenses: Expense[];
   mealLogs: MealLog[];
   deposits: CycleDeposit[];
@@ -131,7 +131,7 @@ export interface CycleDetails {
 
 export type MemberStats = Pick<
   CycleDetails['members'][number],
-  'mealCost' | 'fixedCost' | 'totalCost' | 'balance' | 'mealsEaten'
+  'mealCost' | 'utilityCost' | 'totalCost' | 'balance' | 'mealsEaten'
 >;
 
 export interface MealDataState {

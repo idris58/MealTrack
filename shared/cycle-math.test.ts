@@ -18,8 +18,8 @@ describe("cycle math", () => {
     });
 
     expect(members.map((member) => member.id)).toEqual(["active-1", "active-2", "archived"]);
-    expect(result.stats.fixedCostPerMember).toBeCloseTo(40 / 3);
-    expect(result.members.find((member) => member.id === "archived")?.fixedCost).toBeCloseTo(40 / 3);
+    expect(result.stats.utilityCostPerMember).toBeCloseTo(40 / 3);
+    expect(result.members.find((member) => member.id === "archived")?.utilityCost).toBeCloseTo(40 / 3);
   });
 
   it("preserves roster order and shares one meal rate and fixed cost calculation", () => {
@@ -44,7 +44,7 @@ describe("cycle math", () => {
 
     expect(result.members.map((member) => member.id)).toEqual(["second", "first"]);
     expect(result.stats.currentMealRate).toBe(10);
-    expect(result.stats.fixedCostPerMember).toBe(5);
+    expect(result.stats.utilityCostPerMember).toBe(5);
     expect(result.members.map((member) => member.balance)).toEqual([5, 5]);
     expect(result.stats.remainingCash).toBe(10);
   });
@@ -62,10 +62,10 @@ describe("cycle math", () => {
       cycleEndedAt: "2026-01-11T00:00:00.000Z",
     });
 
-    const allocatedUtility = result.members.reduce((sum, member) => sum + member.fixedCost, 0);
-    expect(result.members.map((member) => member.fixedCost)).toEqual([75, 25]);
-    expect(allocatedUtility).toBeCloseTo(result.stats.totalFixedExpenses);
-    expect(result.stats.fixedCostPerMember).toBe(50);
+    const allocatedUtility = result.members.reduce((sum, member) => sum + member.utilityCost, 0);
+    expect(result.members.map((member) => member.utilityCost)).toEqual([75, 25]);
+    expect(allocatedUtility).toBeCloseTo(result.stats.totalUtilityExpenses);
+    expect(result.stats.utilityCostPerMember).toBe(50);
   });
 
   it("starts a restored member's utility proration at their rejoin date", () => {
@@ -91,8 +91,8 @@ describe("cycle math", () => {
       cycleEndedAt: "2026-01-11T00:00:00.000Z",
     });
 
-    expect(result.members.map((member) => member.fixedCost)).toEqual([25, 75]);
-    expect(result.members.reduce((sum, member) => sum + member.fixedCost, 0)).toBe(100);
+    expect(result.members.map((member) => member.utilityCost)).toEqual([25, 75]);
+    expect(result.members.reduce((sum, member) => sum + member.utilityCost, 0)).toBe(100);
   });
 
   it("ignores deposits and meal logs for members outside the cycle roster", () => {

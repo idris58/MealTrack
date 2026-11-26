@@ -1476,10 +1476,10 @@ export function MealProvider({ children }: { children: ReactNode }) {
       activeDetails?.stats ?? {
         totalDeposits: 0,
         totalMealExpenses: 0,
-        totalFixedExpenses: 0,
+        totalUtilityExpenses: 0,
         totalMealsConsumed: 0,
         currentMealRate: 0,
-        fixedCostPerMember: 0,
+        utilityCostPerMember: 0,
         remainingCash: 0,
       },
     [activeDetails],
@@ -1488,19 +1488,19 @@ export function MealProvider({ children }: { children: ReactNode }) {
   const getMemberStats = useCallback((memberId: string, cycleId?: string) => {
     const targetCycleId = getRequiredCycleId(cycleId);
     if (!targetCycleId) {
-      return { mealCost: 0, fixedCost: 0, totalCost: 0, balance: 0, mealsEaten: 0 };
+      return { mealCost: 0, utilityCost: 0, totalCost: 0, balance: 0, mealsEaten: 0 };
     }
 
     const details = computedCycleDetails.getCycleDetails(targetCycleId);
     const member = details?.members.find((entry) => entry.id === memberId);
 
     if (!member) {
-      return { mealCost: 0, fixedCost: 0, totalCost: 0, balance: 0, mealsEaten: 0 };
+      return { mealCost: 0, utilityCost: 0, totalCost: 0, balance: 0, mealsEaten: 0 };
     }
 
     return {
       mealCost: member.mealCost,
-      fixedCost: member.fixedCost,
+      utilityCost: member.utilityCost,
       totalCost: member.totalCost,
       balance: member.balance,
       mealsEaten: member.mealsEaten,

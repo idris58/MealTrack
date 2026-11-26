@@ -398,7 +398,7 @@ export function ManagerDashboard() {
       rate.push(cumMeals > 0 ? cumMealExp / cumMeals : null);
     }
 
-    const totalSpent = stats.totalMealExpenses + stats.totalFixedExpenses;
+    const totalSpent = stats.totalMealExpenses + stats.totalUtilityExpenses;
     const burn = totalSpent / elapsed;
     const runway = stats.remainingCash > 0 && burn > 0 ? Math.floor(stats.remainingCash / burn) : null;
     const usedPct = stats.totalDeposits > 0 ? Math.min(100, (totalSpent / stats.totalDeposits) * 100) : totalSpent > 0 ? 100 : 0;
@@ -683,8 +683,8 @@ export function ManagerDashboard() {
             <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {[
                 { label: 'Meal costs', value: money(stats.totalMealExpenses) },
-                { label: 'Utility costs', value: money(stats.totalFixedExpenses) },
-                { label: 'Utility/member', value: money(stats.fixedCostPerMember) },
+                { label: 'Utility costs', value: money(stats.totalUtilityExpenses) },
+                { label: 'Utility/member', value: money(stats.utilityCostPerMember) },
               ].map((item, index) => (
                 <div key={item.label} className={cn('min-w-0 rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2.5 shadow-sm backdrop-blur-sm', index === 2 && 'hidden sm:block')}>
                   <p className="text-xs text-emerald-100/65">{item.label}</p>

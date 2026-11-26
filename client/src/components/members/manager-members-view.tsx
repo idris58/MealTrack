@@ -57,7 +57,7 @@ const DELETE_GRACE_MS = 10 * 1000;
 const memberSchema = z.object({ name: z.string().min(2, 'Name is required') });
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type MemberStatsSnapshot = { mealCost: number; fixedCost: number; totalCost: number; balance: number; mealsEaten: number };
+type MemberStatsSnapshot = { mealCost: number; utilityCost: number; totalCost: number; balance: number; mealsEaten: number };
 type DeletedMemberGhost = { member: Member; stats: MemberStatsSnapshot; index: number; expiresAt: number };
 type MemberInvite = {
   id: string; target_member_id: string | null; target_member_name: string | null;
@@ -249,7 +249,7 @@ function MemberCard({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Utility Share</span>
-            <span className="font-medium">৳{stats.fixedCost.toFixed(2)}</span>
+            <span className="font-medium">৳{stats.utilityCost.toFixed(2)}</span>
           </div>
           <div className="flex items-center justify-between border-t pt-3">
             <span className="font-medium">Net Balance</span>

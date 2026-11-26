@@ -187,9 +187,9 @@ function FundsRing({ pct, tone }: { pct: number; tone: 'good' | 'warn' | 'bad' }
   );
 }
 
-// Donut for the meal/fixed split.
-function SplitDonut({ meal, fixed }: { meal: number; fixed: number }) {
-  const total = meal + fixed;
+// Donut for the meal/utility split.
+function SplitDonut({ meal, utility }: { meal: number; utility: number }) {
+  const total = meal + utility;
   const size = 112;
   const stroke = 14;
   const r = (size - stroke) / 2;
@@ -247,7 +247,7 @@ export function MemberDashboard() {
     const deposited = mine.reduce((s, d) => s + d.amount, 0);
     const cycleMemberStats = getMemberStats(me.id);
     const mealCost = cycleMemberStats.mealCost;
-    const fixedCost = cycleMemberStats.fixedCost;
+    const utilityCost = cycleMemberStats.utilityCost;
     const cost = cycleMemberStats.totalCost;
     const balance = cycleMemberStats.balance;
     const usedPct = deposited > 0 ? (cost / deposited) * 100 : cost > 0 ? 100 : 0;
@@ -293,7 +293,7 @@ export function MemberDashboard() {
     const rank = 1 + Array.from(perMember.values()).filter((v) => v > me.mealsEaten).length;
 
     return {
-      today, mine, deposited, mealCost, fixedCost, cost, balance, usedPct,
+      today, mine, deposited, mealCost, utilityCost, cost, balance, usedPct,
       todayMeals: countOn(today), dailyMealCost, runwayDays, week, weekTotal, cells, streak,
       avgMeals, share, rank,
     };
@@ -388,7 +388,7 @@ export function MemberDashboard() {
   const insights: Array<{ icon: LucideIcon; text: string }> = [
     { icon: Flame, text: view.streak > 1 ? `${view.streak}-day meal streak.` : view.streak === 1 ? 'You ate in the mess today.' : 'No meals logged recently.' },
     { icon: TrendingUp, text: view.avgMeals > 0 ? `${Math.abs(vsAvg)}% ${vsAvg >= 0 ? 'above' : 'below'} the mess average of ${formatMealCount(view.avgMeals)} meals.` : 'The mess average will show once meals are logged.' },
-    { icon: Receipt, text: `You pay ${money(view.dailyMealCost)} a day on meals, plus a ${money(view.fixedCost, 0)} utility share.` },
+    { icon: Receipt, text: `You pay ${money(view.dailyMealCost)} a day on meals, plus a ${money(view.utilityCost, 0)} utility share.` },
   ];
 
   return (
@@ -422,7 +422,7 @@ export function MemberDashboard() {
             <dl className="space-y-2 text-sm">
               <div><dt className="text-xs text-white/65">Deposited</dt><dd className="font-semibold tabular-nums">{money(view.deposited)}</dd></div>
               <div><dt className="text-xs text-white/65">Meals</dt><dd className="font-semibold tabular-nums">{money(view.mealCost)}</dd></div>
-              <div><dt className="text-xs text-white/65">Utility share</dt><dd className="font-semibold tabular-nums">{money(view.fixedCost)}</dd></div>
+              <div><dt className="text-xs text-white/65">Utility share</dt><dd className="font-semibold tabular-nums">{money(view.utilityCost)}</dd></div>
             </dl>
           </div>
         </div>
@@ -506,10 +506,10 @@ export function MemberDashboard() {
         {/* ── Where it goes ─────────────────────────────────────────────── */}
         <Panel title="Where your money goes" hint="And how you compare" icon={ShoppingBag} className="lg:col-span-2">
           <div className="flex items-center gap-4">
-            <SplitDonut meal={view.mealCost} fixed={view.fixedCost} />
+            <SplitDonut meal={view.mealCost} utility={view.utilityCost} />
             <ul className="min-w-0 flex-1 space-y-2.5 text-sm">
               <li className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Meals</span><b className="tabular-nums">{money(view.mealCost, 0)}</b></li>
-              <li className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full bg-violet-500" />Utility share</span><b className="tabular-nums">{money(view.fixedCost, 0)}</b></li>
+              <li className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full bg-violet-500" />Utility share</span><b className="tabular-nums">{money(view.utilityCost, 0)}</b></li>
             </ul>
           </div>
           <ul className="mt-5 space-y-3 border-t pt-4">

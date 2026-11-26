@@ -17,7 +17,7 @@ export type CycleMathMemberResult<TMember extends CycleMathMember> = TMember & {
   deposit: number;
   mealsEaten: number;
   mealCost: number;
-  fixedCost: number;
+  utilityCost: number;
   totalCost: number;
   balance: number;
 };
@@ -26,27 +26,27 @@ export interface CycleMathResult<TMember extends CycleMathMember> {
   stats: {
     totalDeposits: number;
     totalMealExpenses: number;
-    totalFixedExpenses: number;
+    totalUtilityExpenses: number;
     totalMealsConsumed: number;
     currentMealRate: number;
-    fixedCostPerMember: number;
+    utilityCostPerMember: number;
     remainingCash: number;
   };
   members: Array<CycleMathMemberResult<TMember>>;
 }
 
-export function computeMemberCosts(mealsEaten: number, mealRate: number, fixedCost: number) {
+export function computeMemberCosts(mealsEaten: number, mealRate: number, utilityCost: number) {
   const mealCost = mealsEaten * mealRate;
-  return { mealCost, fixedCost, totalCost: mealCost + fixedCost };
+  return { mealCost, utilityCost, totalCost: mealCost + utilityCost };
 }
 
-function prorateFixedCosts<TMember extends CycleMathMember>(
+function prorateUtilityCosts<TMember extends CycleMathMember>(
   members: TMember[],
-  totalFixedExpenses: number,
+  totalUtilityExpenses: number,
   cycleStartedAt?: string | null,
   cycleEndedAt?: string | null,
 ) {
-  const equalShare = members.length > 0 ? totalFixedExpenses / members.length : 0;
+  const equalShare = members.length > 0 ? totalUtilityExpenses / members.length : 0;
   const cycleStart = cycleStartedAt ? new Date(cycleStartedAt).getTime() : Number.NaN;
   const cycleEnd = cycleEndedAt ? new Date(cycleEndedAt).getTime() : Number.NaN;
   if (!Number.isFinite(cycleStart) || !Number.isFinite(cycleEnd) || cycleEnd <= cycleStart) {
@@ -78,10 +78,10 @@ function prorateFixedCosts<TMember extends CycleMathMember>(
     const midpoint = start + duration / 2;
     const activeMembers = intervals.filter((interval) => interval.start <= midpoint && midpoint < interval.end);
     if (activeMembers.length === 0) {
-      unallocatedTotal += totalFixedExpenses * duration / cycleDuration;
+      unallocatedTotal += totalUtilityExpenses * duration / cycleDuration;
       continue;
     }
-    const intervalCost = totalFixedExpenses * duration / cycleDuration / activeMembers.length;
+    const intervalCost = totalUtilityExpenses * duration / cycleDuration / activeMembers.length;
     for (const member of activeMembers) {
       perMember.set(member.id, (perMember.get(member.id) ?? 0) + intervalCost);
     }
@@ -153,27 +153,27 @@ export function computeCycleMath<TMember extends CycleMathMember>({
   const totalMealExpenses = expenses
     .filter((expense) => expense.type === "meal")
     .reduce((sum, expense) => sum + expense.amount, 0);
-  const totalFixedExpenses = expenses
+  const totalUtilityExpenses = expenses
     .filter((expense) => expense.type === "utility")
     .reduce((sum, expense) => sum + expense.amount, 0);
   const totalMealsConsumed = cycleMealLogs.reduce((sum, log) => sum + log.count, 0);
   const totalDeposits = cycleDeposits.reduce((sum, deposit) => sum + deposit.amount, 0);
   const currentMealRate = totalMealsConsumed > 0 ? totalMealExpenses / totalMealsConsumed : 0;
-  const fixedCostAllocation = prorateFixedCosts(members, totalFixedExpenses, cycleStartedAt, cycleEndedAt);
-  const fixedCostPerMember = fixedCostAllocation.average;
-  const remainingCash = totalDeposits - totalMealExpenses - totalFixedExpenses;
+  const utilityCostAllocation = prorateUtilityCosts(members, totalUtilityExpenses, cycleStartedAt, cycleEndedAt);
+  const utilityCostPerMember = utilityCostAllocation.average;
+  const remainingCash = totalDeposits - totalMealExpenses - totalUtilityExpenses;
 
   const rawMembers = members.map((member) => {
     const deposit = depositByMember.get(member.id) ?? 0;
     const mealsEaten = mealsByMember.get(member.id) ?? 0;
-    const fixedCost = fixedCostAllocation.perMember.get(member.id) ?? 0;
-    const { mealCost, totalCost } = computeMemberCosts(mealsEaten, currentMealRate, fixedCost);
+    const utilityCost = utilityCostAllocation.perMember.get(member.id) ?? 0;
+    const { mealCost, totalCost } = computeMemberCosts(mealsEaten, currentMealRate, utilityCost);
     return {
       ...member,
       deposit,
       mealsEaten,
       mealCost,
-      fixedCost,
+      utilityCost,
       totalCost,
       balance: deposit - totalCost,
     };
@@ -216,10 +216,10 @@ export function computeCycleMath<TMember extends CycleMathMember>({
     stats: {
       totalDeposits,
       totalMealExpenses,
-      totalFixedExpenses,
+      totalUtilityExpenses,
       totalMealsConsumed,
       currentMealRate,
-      fixedCostPerMember,
+      utilityCostPerMember,
       remainingCash,
     },
     members: calculatedMembers,

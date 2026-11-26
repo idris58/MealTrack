@@ -175,8 +175,8 @@ export default function ReportsPage() {
       cycleStartedAt: from.toISOString(),
       cycleEndedAt: endOfDay(to).toISOString(),
     });
-    const { totalMealExpenses, totalFixedExpenses, totalMealsConsumed: totalMeals, currentMealRate: rate, totalDeposits } = math.stats;
-    const totalExpenses = totalMealExpenses + totalFixedExpenses;
+    const { totalMealExpenses, totalUtilityExpenses, totalMealsConsumed: totalMeals, currentMealRate: rate, totalDeposits } = math.stats;
+    const totalExpenses = totalMealExpenses + totalUtilityExpenses;
     const rows: ReportMember[] = math.members.map((member) => ({
       id: member.id,
       name: member.name,
@@ -188,7 +188,7 @@ export default function ReportsPage() {
     const totalBill = rows.reduce((sum, row) => sum + row.bill, 0);
     const mealPct = totalExpenses > 0 ? Math.round((totalMealExpenses / totalExpenses) * 100) : 0;
     return {
-      rows, totalExpenses, totalMealExpenses, totalFixedExpenses, totalMeals, rate,
+      rows, totalExpenses, totalMealExpenses, totalUtilityExpenses, totalMeals, rate,
       totalDeposits, totalBill, mealPct,
       remainingCash: math.stats.remainingCash,
     };
@@ -330,7 +330,7 @@ export default function ReportsPage() {
     doc.setTextColor(...emeraldRgb);
     doc.text(`Meal · ${pdfCurrency(report.totalMealExpenses)} (${report.mealPct}%)`, margin, compBarY + 24);
     doc.setTextColor(...sandRgb);
-    doc.text(`Utility · ${pdfCurrency(report.totalFixedExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
+    doc.text(`Utility · ${pdfCurrency(report.totalUtilityExpenses)} (${100 - report.mealPct}%)`, pageWidth - margin, compBarY + 24, { align: 'right' });
 
     autoTable(doc, {
       startY: compBarY + 40,
@@ -451,7 +451,7 @@ export default function ReportsPage() {
     const metricRows = [
       ['Total Expenses (Tk)', report.totalExpenses],
       ['  Meal Expenses (Tk)', report.totalMealExpenses],
-      ['  Utility Expenses (Tk)', report.totalFixedExpenses],
+      ['  Utility Expenses (Tk)', report.totalUtilityExpenses],
       ['Total Meals', report.totalMeals],
       ['Meal Rate (Tk)', Number(report.rate.toFixed(4))],
       ['Total Deposits (Tk)', report.totalDeposits],
@@ -748,7 +748,7 @@ export default function ReportsPage() {
                   <Utensils className="h-3 w-3" /> Meal · {currency(report.totalMealExpenses)} ({report.mealPct}%)
                 </span>
                 <span className="flex items-center gap-1.5 font-medium" style={{ color: '#8A6D34' }}>
-                  <ShoppingBag className="h-3 w-3" /> Utility · {currency(report.totalFixedExpenses)} ({100 - report.mealPct}%)
+                  <ShoppingBag className="h-3 w-3" /> Utility · {currency(report.totalUtilityExpenses)} ({100 - report.mealPct}%)
                 </span>
               </div>
             </div>
