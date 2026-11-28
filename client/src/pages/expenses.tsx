@@ -64,12 +64,22 @@ function ExpenseRow({ expense, onEdit, shopperName }: { expense: Expense; onEdit
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_THRESHOLD = 40;
-function VirtualExpenseRows({ rows, renderRow }: { rows: Array<{ key: string; render: () => ReactNode }>; renderRow: (item: { key: string; render: () => ReactNode }) => ReactNode }) {
+function VirtualExpenseRows({ rows, renderRow }: { rows: Array<{ key: string; render: () => ReactNode; isGhost?: boolean }>; renderRow: (item: { key: string; render: () => ReactNode; isGhost?: boolean }) => ReactNode }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [windowRange, setWindowRange] = useState({ start: 0, end: 30 });
+  const [wideViewport, setWideViewport] = useState(false);
+  const shouldVirtualize = rows.length > VIRTUAL_THRESHOLD && wideViewport && !rows.some((row) => row.isGhost);
 
   useEffect(() => {
-    if (rows.length <= VIRTUAL_THRESHOLD) { setWindowRange({ start: 0, end: rows.length }); return; }
+    const media = window.matchMedia('(min-width: 1024px)');
+    const updateViewport = () => setWideViewport(media.matches);
+    updateViewport();
+    media.addEventListener('change', updateViewport);
+    return () => media.removeEventListener('change', updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!shouldVirtualize) { setWindowRange({ start: 0, end: rows.length }); return; }
     let frame = 0;
     const measure = () => {
       cancelAnimationFrame(frame);
@@ -87,14 +97,14 @@ function VirtualExpenseRows({ rows, renderRow }: { rows: Array<{ key: string; re
     window.addEventListener('scroll', measure, { passive: true });
     window.addEventListener('resize', measure);
     return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', measure); window.removeEventListener('resize', measure); };
-  }, [rows.length]);
+  }, [rows.length, shouldVirtualize]);
 
-  const start = rows.length <= VIRTUAL_THRESHOLD ? 0 : Math.min(rows.length, windowRange.start);
-  const end = rows.length <= VIRTUAL_THRESHOLD ? rows.length : Math.max(start, windowRange.end);
+  const start = shouldVirtualize ? Math.min(rows.length, windowRange.start) : 0;
+  const end = shouldVirtualize ? Math.max(start, windowRange.end) : rows.length;
   return <div ref={listRef} className="pb-4">
-    {start > 0 && <div aria-hidden style={{ height: start * VIRTUAL_ROW_HEIGHT }} />}
-    {rows.slice(start, end).map((row) => <div key={row.key} className="mb-2.5 h-[76px] overflow-hidden">{renderRow(row)}</div>)}
-    {end < rows.length && <div aria-hidden style={{ height: (rows.length - end) * VIRTUAL_ROW_HEIGHT }} />}
+    {shouldVirtualize && start > 0 && <div aria-hidden style={{ height: start * VIRTUAL_ROW_HEIGHT }} />}
+    {rows.slice(start, end).map((row) => <div key={row.key} className={cn('mb-2.5', shouldVirtualize && 'h-[76px] overflow-hidden')}>{renderRow(row)}</div>)}
+    {shouldVirtualize && end < rows.length && <div aria-hidden style={{ height: (rows.length - end) * VIRTUAL_ROW_HEIGHT }} />}
   </div>;
 }
 
@@ -188,6 +198,7 @@ export default function Expenses() {
 
   const virtualRows = useMemo(() => rows.map((row) => ({
     key: row.type === 'deleted' ? `deleted-${row.ghost.expense.id}` : row.expense.id,
+    isGhost: row.type === 'deleted',
     render: () => row.type === 'deleted' ? (
       <UndoDeleteGhost message={`Expense '${row.ghost.expense.description}' deleted.`} expiresAt={row.ghost.expiresAt} onUndo={() => void handleUndoExpense(row.ghost.expense.id)} onExpired={() => setDeletedExpenses((prev) => prev.filter((entry) => entry.expense.id !== row.ghost.expense.id))}>
         <ExpenseRow expense={row.ghost.expense} shopperName={row.ghost.expense.shoppedByMemberId ? members.find((member) => member.id === row.ghost.expense.shoppedByMemberId)?.name : undefined} />
