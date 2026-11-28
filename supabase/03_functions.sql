@@ -373,7 +373,8 @@ begin
       raise exception 'Carry-forward member or amount is invalid';
     end;
 
-    if carry_amount <= 0 then raise exception 'Carry-forward amounts must be greater than zero'; end if;
+    -- Positive values are member credits; negative values are opening dues.
+    if carry_amount = 0 then raise exception 'Carry-forward amounts cannot be zero'; end if;
     if carry_member_id = any(processed_members) then raise exception 'A member can only have one carry-forward'; end if;
     processed_members := array_append(processed_members, carry_member_id);
 
@@ -385,6 +386,7 @@ begin
     select coalesce(sum(amount), 0) into previous_balance
     from public.cycle_deposits
     where mess_id = current_mess and cycle_id = pending_cycle.id and member_id = carry_member_id;
+    -- Reverse the signed balance in the pending cycle, then preserve its sign in the new cycle.
     insert into public.cycle_deposits (user_id, mess_id, cycle_id, member_id, amount, kind, note)
     values (auth.uid(), current_mess, pending_cycle.id, carry_member_id, -carry_amount, 'carry_forward',
       'Carry-forward correction — balance moved to next cycle')

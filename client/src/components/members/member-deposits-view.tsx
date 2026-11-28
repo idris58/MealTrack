@@ -254,8 +254,8 @@ export function MemberDepositsView() {
 
     const net = acc;
     const paidIn = mine.filter((d) => getDepositDisplayKind(d) === 'deposit' && d.amount > 0).reduce((s, d) => s + d.amount, 0);
-    const carriedIn = mine.filter((d) => getDepositDisplayKind(d) === 'carry' && d.amount > 0).reduce((s, d) => s + d.amount, 0);
-    const takenOut = mine.filter((d) => d.amount < 0).reduce((s, d) => s + Math.abs(d.amount), 0);
+    const carriedBalance = mine.filter((d) => getDepositDisplayKind(d) === 'carry').reduce((s, d) => s + d.amount, 0);
+    const takenOut = mine.filter((d) => d.amount < 0 && getDepositDisplayKind(d) !== 'carry').reduce((s, d) => s + Math.abs(d.amount), 0);
     const payments = mine.filter((d) => d.amount > 0).length;
     const lastPayment = [...chrono].reverse().find((d) => d.amount > 0) ?? null;
 
@@ -287,7 +287,7 @@ export function MemberDepositsView() {
       return { label: format(day, 'd MMM'), value: cd - dayCost };
     });
 
-    return { mine, running, net, paidIn, carriedIn, takenOut, payments, lastPayment, rate, mealCost, utilityCost, cost, balance, burn, runway, series, elapsed };
+    return { mine, running, net, paidIn, carriedBalance, takenOut, payments, lastPayment, rate, mealCost, utilityCost, cost, balance, burn, runway, series, elapsed };
   }, [me, activeCycle, deposits, mealLogs, stats, getMemberStats]);
 
   const shown = useCountUp(v?.balance ?? 0);
@@ -470,7 +470,7 @@ export function MemberDepositsView() {
           <dl className="grid min-w-0 grid-cols-2 divide-x divide-y divide-white/10 border-t border-white/10 sm:grid-cols-4 sm:divide-y-0">
             {[
               { label: 'Total deposited', value: money(v.paidIn, 0), sub: `${v.payments} payment${v.payments === 1 ? '' : 's'}` },
-              { label: 'Previous balance', value: money(v.carriedIn, 0), sub: 'From last cycle' },
+              { label: 'Previous balance', value: signed(v.carriedBalance), sub: 'From last cycle' },
               { label: 'Refunded or deducted', value: money(v.takenOut, 0), sub: 'Taken out' },
               { label: 'Last payment', value: v.lastPayment ? format(safeParse(v.lastPayment.createdAt), 'd MMM') : 'None', sub: v.lastPayment ? money(v.lastPayment.amount, 0) : 'No payments yet' },
             ].map((s) => (

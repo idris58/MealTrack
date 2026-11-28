@@ -148,12 +148,12 @@ function CycleManagementCard() {
     if (pendingCycle) {
       void loadCycleDetails(pendingCycle.id);
     }
-    // Default all eligible members to checked
+    // Default every member with a credit or due to checked
     const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
     const defaults: Record<string, boolean> = {};
     if (pendingDetails) {
       for (const m of pendingDetails.members) {
-        if (m.balance > 0) defaults[m.id] = true;
+        if (m.balance !== 0) defaults[m.id] = true;
       }
     }
     setCarryForwards(defaults);
@@ -168,11 +168,11 @@ function CycleManagementCard() {
     if (!cycleName.trim()) { setStartError('Cycle name is required.'); return; }
     setIsStarting(true); setStartError(null);
     try {
-      // Build the carry-forward list from selected members with a positive balance only when online
+      // Carry selected credits and dues with their original signs.
       const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
       const selectedCarryForwards = isOnline && pendingDetails
         ? pendingDetails.members
-          .filter((m) => m.balance > 0 && carryForwards[m.id] !== false)
+          .filter((m) => m.balance !== 0 && carryForwards[m.id] !== false)
           .map((m) => ({ memberId: m.id, amount: Math.round(m.balance * 100) / 100 }))
         : [];
       await startNewCycle(cycleName.trim(), startDate.toISOString(), selectedCarryForwards.length > 0 ? selectedCarryForwards : undefined);
@@ -394,13 +394,14 @@ function CycleManagementCard() {
             {/* ── Carry-Forward Section (only when pending cycle has eligible members) ── */}
             {(() => {
               const pendingDetails = pendingCycle ? getCycleDetails(pendingCycle.id) : null;
-              const eligibleMembers = pendingDetails?.members.filter((m) => m.balance > 0) ?? [];
+              const eligibleMembers = pendingDetails?.members.filter((m) => m.balance !== 0) ?? [];
               if (eligibleMembers.length === 0) return null;
 
               const totalEligible = eligibleMembers.length;
               const selectedMembers = eligibleMembers.filter((m) => carryForwards[m.id] !== false);
               const selectedCount = selectedMembers.length;
-              const selectedTotal = selectedMembers.reduce((sum, m) => sum + m.balance, 0);
+              const selectedCredits = selectedMembers.reduce((sum, m) => sum + Math.max(0, m.balance), 0);
+              const selectedDues = selectedMembers.reduce((sum, m) => sum + Math.max(0, -m.balance), 0);
 
               const masterChecked: boolean | 'indeterminate' =
                 selectedCount === 0
@@ -429,7 +430,7 @@ function CycleManagementCard() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Transfer refundable member balances from <strong>{pendingCycle?.name}</strong> as opening deposits for the new cycle.
+                    Carry member credits and dues from <strong>{pendingCycle?.name}</strong> into the new cycle as opening balances.
                   </p>
 
                   {!isOnline && (
@@ -479,9 +480,10 @@ function CycleManagementCard() {
                         <span className="text-muted-foreground">
                           <strong className="text-foreground">{selectedCount}</strong> of {totalEligible} selected
                         </span>
-                        {selectedTotal > 0 && isOnline && (
-                          <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                            +{formatCurrency(selectedTotal)}
+                        {(selectedCredits > 0 || selectedDues > 0) && isOnline && (
+                          <span className="flex flex-wrap justify-end gap-x-2 rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold">
+                            {selectedCredits > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{formatCurrency(selectedCredits)}</span>}
+                            {selectedDues > 0 && <span className="text-rose-600 dark:text-rose-400">−{formatCurrency(selectedDues)}</span>}
                           </span>
                         )}
                       </div>
@@ -518,9 +520,9 @@ function CycleManagementCard() {
                                   <span className="flex-1 text-sm font-medium truncate">{m.name}</span>
                                   <span className={cn(
                                     "shrink-0 text-sm font-bold",
-                                    checked ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                                    !checked ? "text-muted-foreground" : m.balance > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                                   )}>
-                                    +{formatCurrency(m.balance)}
+                                    {m.balance > 0 ? '+' : '−'}{formatCurrency(Math.abs(m.balance))}
                                   </span>
                                 </label>
                               </TooltipTrigger>
@@ -537,7 +539,7 @@ function CycleManagementCard() {
                   </div>
 
                   <p className="text-xs text-muted-foreground">
-                    Unchecked members keep their surplus in the pending cycle and must be settled manually.
+                    Unchecked members keep their balance in the pending cycle and must be settled manually.
                   </p>
                 </div>
               );
