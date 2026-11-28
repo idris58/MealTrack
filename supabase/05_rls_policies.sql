@@ -127,7 +127,7 @@ do $$
 declare table_name text;
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    foreach table_name in array array['members', 'cycles', 'cycle_deposits', 'expenses', 'meal_logs'] loop
+    foreach table_name in array array['profiles', 'members', 'cycles', 'cycle_deposits', 'expenses', 'meal_logs'] loop
       if not exists (
         select 1 from pg_publication_tables
         where pubname = 'supabase_realtime'

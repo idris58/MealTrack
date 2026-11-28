@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -64,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<AuthContextValue["profile"]>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const profileUserId = session?.user?.id;
 
   useEffect(() => {
     let active = true;
@@ -120,31 +122,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const fetchProfile = async () => {
-    if (!session?.user) return;
+  const fetchProfile = useCallback(async () => {
+    if (!profileUserId) return;
     setProfileLoading(true);
     setProfileError(null);
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, email, role, mess_id, picture_url, notification_preferences, reminder_time")
-      .eq("id", session.user.id)
+      .eq("id", profileUserId)
       .maybeSingle();
     if (error) {
       console.error("Error loading profile:", error);
       setProfileError("We couldn't load your profile. Check your connection and try again.");
     } else if (!data) {
       setProfileError("Your profile could not be found. Try again or sign out and sign in again.");
+      setProfile(null);
     }
     if (data) {
       setProfile(data as AuthContextValue["profile"]);
       try {
-        localStorage.setItem(`mealtrack-profile-${session.user.id}`, JSON.stringify(data));
+        localStorage.setItem(`mealtrack-profile-${profileUserId}`, JSON.stringify(data));
       } catch {
         /* ignore */
       }
     }
     setProfileLoading(false);
-  };
+  }, [profileUserId]);
 
   useEffect(() => {
     let active = true;
@@ -202,6 +205,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!profileUserId) return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void fetchProfile();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    const profileChannel = supabase
+      .channel(`profile-state:${profileUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${profileUserId}` },
+        () => void fetchProfile(),
+      )
+      .subscribe();
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      void supabase.removeChannel(profileChannel);
+    };
+  }, [profileUserId, fetchProfile]);
 
   const isManager = profile?.role === "manager";
   const canOperate = isManager || profile?.role === "coordinator";

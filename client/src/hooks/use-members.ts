@@ -105,20 +105,22 @@ export function useMembers(options: Options) {
   const restoreMember = useCallback(async (id: string) => {
     const { userId, messId, setMembers, setArchivedMembers, reload, broadcast } = latest.current;
     if (!userId || !messId) return;
-    const { data, error } = await supabase.from('members')
-      .update({ deleted_at: null, delete_expires_at: null })
-      .eq('id', id).eq('mess_id', messId).not('deleted_at', 'is', null)
-      .select('id, name, avatar, created_at, joined_at').maybeSingle();
-    if (error) throw new Error('Unable to restore member. Please try again.');
-    if (data) {
-      setArchivedMembers((previous) => previous.filter((member) => member.id !== data.id));
-      setMembers((previous) => previous.some((member) => member.id === data.id) ? previous : [...previous, {
-        id: data.id, name: data.name, deposit: 0, mealsEaten: 0,
-        avatar: avatarFor(data.name, data.avatar),
-        createdAt: data.created_at ?? null,
-        joinedAt: data.joined_at ?? data.created_at ?? null,
-      }]);
-    }
+    const { data, error } = await supabase.rpc('restore_mess_member', { member_id_input: id });
+    if (error || !data) throw new Error(error?.message || 'Unable to restore member. Please try again.');
+    const restoredMember: Member = {
+      id: data.id,
+      name: data.name,
+      deposit: 0,
+      mealsEaten: 0,
+      avatar: avatarFor(data.name, data.avatar),
+      profileId: data.profile_id ?? null,
+      createdAt: data.created_at ?? null,
+      joinedAt: data.joined_at ?? data.created_at ?? null,
+    };
+    setArchivedMembers((previous) => previous.filter((member) => member.id !== data.id));
+    setMembers((previous) => previous.some((member) => member.id === data.id)
+      ? previous.map((member) => member.id === data.id ? { ...member, ...restoredMember } : member)
+      : [...previous, restoredMember]);
     reload();
     broadcast();
   }, []);

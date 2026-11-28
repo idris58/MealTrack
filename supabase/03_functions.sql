@@ -554,7 +554,54 @@ begin
 end;
 $$;
 
--- ── leave_mess ─────────────────────────────────────────────────────────────────
+-- Restore a removed member and reattach its retained profile link atomically.
+create or replace function public.restore_mess_member(member_id_input uuid)
+returns public.members language plpgsql security definer set search_path = public
+as $$
+declare
+  current_mess uuid := public.current_mess_id();
+  target_member public.members;
+  linked_profile_mess uuid;
+begin
+  if auth.uid() is null then raise exception 'Authentication is required'; end if;
+  if current_mess is null or not public.has_mess_role(array['manager']) then
+    raise exception 'Only a mess manager can restore members';
+  end if;
+
+  select * into target_member
+  from public.members
+  where id = member_id_input and mess_id = current_mess
+  for update;
+  if not found then raise exception 'Member was not found in your mess'; end if;
+  if target_member.deleted_at is null then return target_member; end if;
+  if target_member.delete_expires_at is not null and target_member.delete_expires_at <= now() then
+    raise exception 'The restore period for this member has expired';
+  end if;
+
+  if target_member.profile_id is not null then
+    select mess_id into linked_profile_mess
+    from public.profiles
+    where id = target_member.profile_id
+    for update;
+    if not found then raise exception 'The linked user profile could not be found'; end if;
+    if linked_profile_mess is not null and linked_profile_mess <> current_mess then
+      raise exception 'This user has already joined another mess';
+    end if;
+
+    update public.profiles
+    set mess_id = current_mess, role = 'member', updated_at = now()
+    where id = target_member.profile_id;
+  end if;
+
+  update public.members
+  set deleted_at = null, delete_expires_at = null
+  where id = member_id_input and mess_id = current_mess
+  returning * into target_member;
+
+  return target_member;
+end;
+$$;
+
 -- Allows a non-manager member to voluntarily leave the mess.
 -- Soft-deletes their member row and clears their profile's mess_id.
 create or replace function public.leave_mess()
@@ -1098,8 +1145,8 @@ revoke all on function public.start_new_cycle(text, timestamptz, uuid, jsonb), p
 grant execute on function public.start_new_cycle(text, timestamptz, uuid, jsonb), public.post_notice(text, timestamptz, text), public.mark_cycle_closed(uuid) to authenticated;
 revoke all on function public.reorder_mess_members(uuid[]) from public;
 grant execute on function public.reorder_mess_members(uuid[]) to authenticated;
-revoke all on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() from public;
-grant execute on function public.remove_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() to authenticated;
+revoke all on function public.remove_mess_member(uuid), public.restore_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() from public;
+grant execute on function public.remove_mess_member(uuid), public.restore_mess_member(uuid), public.leave_mess(), public.transfer_manager(uuid), public.delete_user_account() to authenticated;
 
 -- Freeze balances for pending cycles created before settlement snapshots existed.
 with eligible_cycles as (
